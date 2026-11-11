@@ -27,6 +27,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
 	procrun "github.com/gsperry/agent-desk/internal/run"
+	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
 	"github.com/gsperry/agent-desk/web"
@@ -79,6 +80,7 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
+	searcher := &search.Searcher{Sessions: poller, Locator: transcripts.Locator}
 	l, err := listen(o.port)
 	if err != nil {
 		return err
@@ -96,6 +98,7 @@ func run(o options) error {
 		Sender:      &send.Sender{Sessions: poller, Pane: client},
 		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures)},
 		Opener:      opener(o.fixtures, poller),
+		Searcher:    searcher,
 	})
 	if err != nil {
 		return err
