@@ -23,10 +23,7 @@ html {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(ellipse 80% 50% at 70% -10%, rgb(120 166 220 / 13%), transparent 70%),
-    radial-gradient(circle at 1px 1px, rgb(255 255 255 / 4.5%) 1px, transparent 0) 0 0 / 22px 22px,
-    var(--bg);
+  background: linear-gradient(180deg, #111720 0, var(--bg) 640px) no-repeat, var(--bg);
   color: var(--text);
   font: 17px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
@@ -131,12 +128,21 @@ main {
   border-top: 1px solid var(--border);
 }
 
+.tagline {
+  display: inline-block;
+  margin: 0 0 1.2rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
 .eyebrow {
-  margin: 0 0 0.8rem;
-  color: var(--muted);
-  font: 0.78rem var(--mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  margin: 0 0 0.6rem;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 h1,
@@ -148,14 +154,10 @@ h3 {
 
 h1 {
   margin: 0 0 1.4rem;
-  font-size: clamp(2.4rem, 4.4vw, 3.7rem);
+  font-size: clamp(2.4rem, 5vw, 4rem);
   font-weight: 750;
 }
 
-h1 em {
-  font-style: normal;
-  color: var(--accent);
-}
 
 h2 {
   max-width: 42rem;
@@ -177,11 +179,30 @@ h3 {
 /* Hero */
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
-  gap: 3rem;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 4.5rem 0 5rem;
+  gap: 3rem;
+  padding: 5rem 0;
+  text-align: center;
+}
+
+.hero-text {
+  max-width: 44rem;
+}
+
+.hero .cta {
+  justify-content: center;
+}
+
+.hero .command {
+  max-width: 34rem;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.hero-shot {
+  width: 100%;
 }
 
 .lede {
@@ -277,16 +298,8 @@ h3 {
 .shot figcaption {
   padding: 0.55rem 0.9rem;
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font: 0.74rem var(--mono);
-  letter-spacing: 0.04em;
-}
-
-.fig {
-  margin-right: 0.5rem;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  color: var(--dim);
+  font-size: 0.85rem;
 }
 
 .shot img {
@@ -443,7 +456,6 @@ h3 {
 /* Narrow screens */
 
 @media (max-width: 900px) {
-  .hero,
   .feature,
   .install {
     grid-template-columns: 1fr;
