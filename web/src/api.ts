@@ -1,7 +1,7 @@
 export const wsProtocol = 'agentdesk.v1'
 const tokenProtocolPrefix = 'agentdesk.token.'
 
-export type ServerMessage = { type: 'hello'; version: string } | { type: string; [key: string]: unknown }
+import type { ServerMessage } from './types'
 
 export type ConnectionState =
   | { kind: 'connecting' }
@@ -24,13 +24,19 @@ export function backoff(attempt: number): number {
   return Math.min(500 * 2 ** attempt, 10_000)
 }
 
-// connect keeps one WebSocket open, reconnecting with backoff, until the
-// returned function is called.
+export interface Connection {
+  send(msg: unknown): void
+  close(): void
+}
+
+// connect keeps one WebSocket open, reconnecting with backoff, until
+// close is called. Messages sent while disconnected are dropped; callers
+// re-send their subscriptions on each hello.
 export function connect(
   token: string,
   onState: (s: ConnectionState) => void,
   onMessage: (m: ServerMessage) => void,
-): () => void {
+): Connection {
   let attempt = 0
   let socket: WebSocket | null = null
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -43,7 +49,7 @@ export function connect(
       const msg = JSON.parse(String(ev.data)) as ServerMessage
       if (msg.type === 'hello') {
         attempt = 0
-        onState({ kind: 'open', version: String(msg.version) })
+        onState({ kind: 'open', version: msg.version })
       }
       onMessage(msg)
     }
@@ -74,9 +80,14 @@ export function connect(
   }
 
   open()
-  return () => {
-    stopped = true
-    clearTimeout(timer)
-    socket?.close()
+  return {
+    send(msg) {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg))
+    },
+    close() {
+      stopped = true
+      clearTimeout(timer)
+      socket?.close()
+    },
   }
 }
