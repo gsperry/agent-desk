@@ -65,7 +65,7 @@ Failure modes:
 Two CLI paths:
 
 | Command | Behavior | Fit |
-|---|---|---|
+| --- | --- | --- |
 | `agent-manager type <id> "<text>"` | Pastes now as the user, presses Enter. No envelope, no queue, no wait for rest. Refused from inside a session. | Agent Desk uses this. |
 | `agent-manager send <id> "<text>" --from <name>` | Queues until the agent is at rest, wraps the text in an envelope saying it came from another agent on another machine. Needs a running manager. Rate limited. | Wrong framing for a human reply. |
 
@@ -74,7 +74,7 @@ Two CLI paths:
 Experiments on the probe session:
 
 | Input | Result |
-|---|---|
+| --- | --- |
 | 5 lines, internal spaces, one blank line | One prompt. Spaces and blank line kept. Agent answered "5". |
 | 22 KB, 91 lines | One prompt in 1.4 s, intact. Agent read the last line correctly. |
 | Text typed while an AskUserQuestion dialog was open | Landed in the dialog's free-text option and was submitted as the answer. Exit 0, no warning. |
@@ -122,7 +122,7 @@ Sibling data under `projects/<encoded-cwd>/<id>/`: `subagents/agent-*.jsonl` (+ 
 Installed: 2.1.322. Recent files span 2.1.304 to 2.1.322. Survey of 28 files modified in the last 3 days, zero malformed lines.
 
 | Record `type` | Count | Rendering |
-|---|---|---|
+| --- | --- | --- |
 | `assistant` | 26,515 | Content blocks: `text`, `thinking`, `tool_use`. One record per block, grouped by `message.id`. |
 | `user` | 15,422 | String or blocks: `text`, `tool_result`. Classified below. |
 | `attachment` | 11,453 | 29 kinds (`environment`, `queued_command`, `file`, `edited_text_file`, reminders). Hidden by default; `queued_command` shown. |
@@ -137,7 +137,7 @@ Installed: 2.1.322. Recent files span 2.1.304 to 2.1.322. Survey of 28 files mod
 Classifying `user` text records:
 
 | Markers | Meaning | Rendering |
-|---|---|---|
+| --- | --- | --- |
 | `origin.kind: human`, `promptSource: typed` or `sdk` | Real human prompt. Prompts sent by `type` appear verbatim here. | User bubble. Reconciles optimistic sends. |
 | `origin.kind: peer`, `isMeta: true` | Message from another agent | Labelled peer message |
 | `origin.kind: task-notification` | Background task result (`<task-notification>`) | Collapsed notice |
