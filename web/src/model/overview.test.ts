@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView } from '../types'
-import { ago, overviewCards } from './overview'
+import { ago, overviewCards, plainText } from './overview'
 
 function s(id: string, status: string, lastActivity: string, extra: Partial<SessionView> = {}): SessionView {
   return {
@@ -47,5 +47,16 @@ describe('ago', () => {
     ['garbage', ''],
   ])('%s is %s', (iso, want) => {
     expect(ago(iso, now)).toBe(want)
+  })
+})
+
+describe('plainText', () => {
+  it.each([
+    ['Rate limiting is in.\n\n- **Limiter:** token bucket in `api/ratelimit`.', 'Rate limiting is in. Limiter: token bucket in api/ratelimit.'],
+    ['## Done\n1. See [the docs](https://x.dev) and _this_.', 'Done See the docs and this.'],
+    ['keep snake_case_names and 2*3*4', 'keep snake_case_names and 2*3*4'],
+    ['```\ncode\n```\nafter', 'after'],
+  ])('%#', (md, want) => {
+    expect(plainText(md)).toBe(want)
   })
 })

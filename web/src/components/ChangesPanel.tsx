@@ -208,16 +208,18 @@ function FileDiff({ file, comments, draft, onPick, onDraft, onAdd, onCancel, onR
                 {here.map((c) => (
                   <tr key={c.id} className="review-comment">
                     <td colSpan={4}>
-                      <span>{c.text}</span>
-                      <button
-                        type="button"
-                        className="link-button"
-                        onClick={() => {
-                          onRemove(c.id)
-                        }}
-                      >
-                        Remove
-                      </button>
+                      <div className="review-note">
+                        <span>{c.text}</span>
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => {
+                            onRemove(c.id)
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

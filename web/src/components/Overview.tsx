@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Acks } from '../model/attention'
 import { formatTokens, loadThresholds } from '../model/context'
-import { ago, overviewCards } from '../model/overview'
+import { ago, overviewCards, plainText } from '../model/overview'
 import { hasNew, type Seen } from '../model/seen'
 import type { SessionView, Summary } from '../types'
 import { glyph } from './status'
@@ -92,9 +92,9 @@ export function Overview({ sessions, acks, seen, load, onOpen }: Props) {
                   {s.branch ? ` · ${s.branch}` : ''}
                 </span>
                 {sum?.activity && sum.activityKind !== 'reply' && (
-                  <span className={`card-activity activity-${sum.activityKind ?? ''}`}>{sum.activityKind === 'tool' ? `⚙ ${sum.activity}` : sum.activity}</span>
+                  <span className={`card-activity activity-${sum.activityKind ?? ''}`}>{sum.activityKind === 'tool' ? `⚙ ${sum.activity}` : plainText(sum.activity)}</span>
                 )}
-                {sum?.lastReply && <span className="card-reply">{sum.lastReply}</span>}
+                {sum?.lastReply && <span className="card-reply">{plainText(sum.lastReply)}</span>}
                 {sum?.lastPrompt && <span className="muted card-prompt">You: {sum.lastPrompt}</span>}
                 <span className="card-foot muted">
                   {sum?.contextTokens ? (

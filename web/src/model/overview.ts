@@ -30,3 +30,17 @@ export function ago(iso: string | undefined, now: number): string {
   if (h < 48) return `${String(h)}h ago`
   return `${String(Math.floor(h / 24))}d ago`
 }
+
+// plainText turns Markdown into a one-line preview: emphasis, code marks,
+// headings, list markers and link targets go; their text stays.
+export function plainText(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s?)/gm, '')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(^|[\s(])[*_](\S(?:.*?\S)?)[*_](?=[\s).,:;!?]|$)/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

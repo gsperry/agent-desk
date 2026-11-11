@@ -2036,7 +2036,16 @@ mark {
   white-space: pre-wrap;
 }
 
-.review-comment td {
+/* A table cell must stay a table cell to keep its colSpan; the note
+   inside sticks to the left edge so it stays in view on wide diffs. */
+.review-note,
+.review-draft td > * {
+  position: sticky;
+  left: 0.6rem;
+  max-width: min(40rem, calc(100vw - 4rem));
+}
+
+.review-note {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
