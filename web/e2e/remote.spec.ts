@@ -31,6 +31,7 @@ test('remote access is set on the desk and limits a remote device to its level',
   await settings.getByLabel('Local port').fill(String(remotePort))
   await settings.getByRole('button', { name: 'Save' }).click()
   await expect(settings.getByText('Saved.')).toBeVisible()
+  await expect(settings.getByText(`Listening on 127.0.0.1:${String(remotePort)}.`)).toBeVisible()
   await expect(settings).toContainText(`http://127.0.0.1:${String(remotePort)}`)
 
   // A device without Tailscale's vouching gets nothing.

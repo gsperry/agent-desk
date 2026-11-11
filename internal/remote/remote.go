@@ -155,7 +155,8 @@ func (st *Store) Get() Settings {
 	return clone(s)
 }
 
-// Set validates and saves settings.
+// Set validates and saves settings. Saves are serialized, and each writes
+// a fresh owner-only temporary file renamed into place.
 func (st *Store) Set(s Settings) (Settings, error) {
 	v, err := s.Validate()
 	if err != nil {
@@ -165,19 +166,31 @@ func (st *Store) Set(s Settings) (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(st.Path), 0o700); err != nil {
-		return Settings{}, err
-	}
-	tmp := st.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return Settings{}, err
-	}
-	if err := os.Rename(tmp, st.Path); err != nil {
-		return Settings{}, err
-	}
 	st.mu.Lock()
+	defer st.mu.Unlock()
+	dir := filepath.Dir(st.Path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return Settings{}, err
+	}
+	tmp, err := os.CreateTemp(dir, ".remote-*.json")
+	if err != nil {
+		return Settings{}, err
+	}
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return Settings{}, err
+	}
+	if err := os.Rename(tmp.Name(), st.Path); err != nil {
+		return Settings{}, err
+	}
 	st.cur = &v
-	st.mu.Unlock()
 	return clone(v), nil
 }
 

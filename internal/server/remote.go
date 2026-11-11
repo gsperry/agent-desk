@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
+
+	"github.com/coder/websocket"
 
 	"github.com/gsperry/agent-desk/internal/remote"
 )
@@ -44,7 +47,7 @@ func (s *Server) requireRemote(need remote.Need, next http.HandlerFunc) http.Han
 			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}
-		if !remoteOriginAllowed(r, st.Host) {
+		if !remoteOriginAllowed(r, st.Host, s.cfg.RemoteHTTPOrigin) {
 			http.Error(w, "forbidden origin", http.StatusForbidden)
 			return
 		}
@@ -64,12 +67,12 @@ func (s *Server) requireRemote(need remote.Need, next http.HandlerFunc) http.Han
 	})
 }
 
-// remoteOriginAllowed accepts the remote host's own origin, and no origin
-// only on reads that are not WebSocket upgrades.
-func remoteOriginAllowed(r *http.Request, host string) bool {
+// remoteOriginAllowed accepts the remote host's own HTTPS origin, and no
+// origin only on reads that are not WebSocket upgrades.
+func remoteOriginAllowed(r *http.Request, host string, allowHTTP bool) bool {
 	origin := r.Header.Get("Origin")
 	if origin != "" {
-		return origin == "https://"+host || origin == "http://"+host
+		return origin == "https://"+host || (allowHTTP && origin == "http://"+host)
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
@@ -100,7 +103,7 @@ func (s *Server) remoteSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"available": false})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"available": true, "settings": s.cfg.Remote.Get()})
+	writeJSON(w, http.StatusOK, map[string]any{"available": true, "settings": s.cfg.Remote.Get(), "status": s.cfg.Remote.Status()})
 }
 
 // setRemoteSettings changes the settings. It is registered as local only,
@@ -121,7 +124,39 @@ func (s *Server) setRemoteSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"available": true, "settings": saved})
+	writeJSON(w, http.StatusOK, map[string]any{"available": true, "settings": saved, "status": s.cfg.Remote.Status()})
+}
+
+// trackRemote records a remote WebSocket so a settings change can close
+// it; the returned function forgets it.
+func (s *Server) trackRemote(c *websocket.Conn, user string) func() {
+	s.remoteMu.Lock()
+	s.remoteConns[c] = user
+	s.remoteMu.Unlock()
+	return func() {
+		s.remoteMu.Lock()
+		delete(s.remoteConns, c)
+		s.remoteMu.Unlock()
+	}
+}
+
+// DropRemote closes remote WebSockets the settings no longer allow: all of
+// them when remote access is off, else those whose login was removed.
+// Closing the listener does not end connections that were upgraded.
+func (s *Server) DropRemote(st remote.Settings) {
+	s.remoteMu.Lock()
+	var drop []*websocket.Conn
+	for c, user := range s.remoteConns {
+		if !st.Enabled || !slices.Contains(st.TailscaleLogins, user) {
+			drop = append(drop, c)
+		}
+	}
+	s.remoteMu.Unlock()
+	// Closed at once, without waiting on a close handshake: a revoked
+	// device gets nothing more, and the settings save does not wait.
+	for _, c := range drop {
+		_ = c.CloseNow()
+	}
 }
 
 func boolString(b bool) string {

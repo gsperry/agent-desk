@@ -55,6 +55,9 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn.SetReadLimit(64 << 10)
+	if c, ok := remoteFrom(r.Context()); ok {
+		defer s.trackRemote(conn, c.id.User)()
+	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 

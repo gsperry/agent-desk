@@ -18,7 +18,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
@@ -88,13 +91,25 @@ type Config struct {
 	Summaries SummarySource
 	// Remote holds the remote access settings. Nil turns remote access off.
 	Remote RemoteControl
+	// RemoteHTTPOrigin also accepts an http:// origin for the remote host.
+	// Only fixture mode sets it, for browser tests without TLS.
+	RemoteHTTPOrigin bool
 }
 
 // RemoteControl reads and changes the remote access settings. Set applies
-// them, starting or stopping the remote listener.
+// them, starting or stopping the remote listener; Status says whether it
+// is listening, and where.
 type RemoteControl interface {
 	Get() remote.Settings
 	Set(remote.Settings) (remote.Settings, error)
+	Status() RemoteStatus
+}
+
+// RemoteStatus is the remote listener's state, for the settings screen.
+type RemoteStatus struct {
+	Listening bool   `json:"listening"`
+	Address   string `json:"address,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 type SummarySource interface {
@@ -178,6 +193,11 @@ type Server struct {
 	origins   map[string]bool
 	mux       *http.ServeMux
 	remoteMux *http.ServeMux
+	// needs records each route's remote need, so a test can pin them.
+	needs map[string]remote.Need
+
+	remoteMu    sync.Mutex
+	remoteConns map[*websocket.Conn]string
 }
 
 func New(cfg Config) (*Server, error) {
@@ -195,10 +215,12 @@ func New(cfg Config) (*Server, error) {
 		cfg: cfg,
 		// Only the IPv4 loopback the server binds. localhost can resolve to
 		// ::1, where another local account could listen on the same port.
-		hosts:     map[string]bool{"127.0.0.1:" + port: true},
-		origins:   map[string]bool{"http://127.0.0.1:" + port: true},
-		mux:       http.NewServeMux(),
-		remoteMux: http.NewServeMux(),
+		hosts:       map[string]bool{"127.0.0.1:" + port: true},
+		origins:     map[string]bool{"http://127.0.0.1:" + port: true},
+		mux:         http.NewServeMux(),
+		remoteMux:   http.NewServeMux(),
+		needs:       map[string]remote.Need{},
+		remoteConns: map[*websocket.Conn]string{},
 	}
 	for _, o := range cfg.DevOrigins {
 		s.origins[strings.TrimRight(o, "/")] = true
@@ -210,6 +232,7 @@ func New(cfg Config) (*Server, error) {
 // route registers a handler on the local mux behind the token, and on the
 // remote mux behind identity and the level it needs.
 func (s *Server) route(pattern string, need remote.Need, h http.HandlerFunc) {
+	s.needs[pattern] = need
 	s.mux.Handle(pattern, s.requireToken(h))
 	s.remoteMux.Handle(pattern, s.requireRemote(need, h))
 }
@@ -246,6 +269,7 @@ func (s *Server) routes() {
 	s.route("GET /api/remote", remote.NeedRead, s.remoteSettings)
 	s.route("POST /api/remote", remote.NeedLocal, s.setRemoteSettings)
 	// The WebSocket only reads; it checks its own token locally.
+	s.needs["GET /api/ws"] = remote.NeedRead
 	s.mux.HandleFunc("GET /api/ws", s.websocket)
 	s.remoteMux.Handle("GET /api/ws", s.requireRemote(remote.NeedRead, s.websocket))
 	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))

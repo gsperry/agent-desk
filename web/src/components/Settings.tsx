@@ -3,7 +3,7 @@ import { defaultSnippets, validName, type Snippet } from '../model/snippets'
 import { newRule, ruleStatuses, type Rule, type RuleStatus } from '../model/rules'
 import type { SummarySettings } from '../model/summaries'
 import { useRemote } from '../remote-context'
-import { RemoteAccess, type RemoteSettings } from './RemoteAccess'
+import { RemoteAccess, type RemoteSettings, type RemoteStatus } from './RemoteAccess'
 import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 
@@ -18,8 +18,8 @@ interface Props {
   onRules: (r: Rule[]) => void
   summaries: SummarySettings
   onSummaries: (s: SummarySettings) => void
-  loadRemote: () => Promise<{ data?: RemoteSettings; available: boolean; error?: string }>
-  saveRemote: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; error?: string }>
+  loadRemote: () => Promise<{ data?: RemoteSettings; status?: RemoteStatus; available: boolean; error?: string }>
+  saveRemote: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; status?: RemoteStatus; error?: string }>
   onClose: () => void
 }
 

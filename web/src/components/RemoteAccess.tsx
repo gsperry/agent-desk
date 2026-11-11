@@ -9,9 +9,15 @@ export interface RemoteSettings {
   tailscaleLogins: string[]
 }
 
+export interface RemoteStatus {
+  listening: boolean
+  address?: string
+  error?: string
+}
+
 interface Props {
-  load: () => Promise<{ data?: RemoteSettings; available: boolean; error?: string }>
-  save: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; error?: string }>
+  load: () => Promise<{ data?: RemoteSettings; status?: RemoteStatus; available: boolean; error?: string }>
+  save: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; status?: RemoteStatus; error?: string }>
 }
 
 const levels: RemoteLevel[] = ['answer', 'reply', 'manage']
@@ -30,6 +36,7 @@ export function RemoteAccess({ load, save }: Props) {
   const [available, setAvailable] = useState(true)
   const [status, setStatus] = useState<{ error?: string; saved?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [listener, setListener] = useState<RemoteStatus | null>(null)
 
   useEffect(() => {
     let live = true
@@ -39,6 +46,7 @@ export function RemoteAccess({ load, save }: Props) {
       if (r.data) {
         setForm(r.data)
         setLogins(r.data.tailscaleLogins.join(', '))
+        setListener(r.status ?? null)
       } else if (r.error) setStatus({ error: r.error })
     })
     return () => {
@@ -58,11 +66,17 @@ export function RemoteAccess({ load, save }: Props) {
       if (r.data) {
         setForm(r.data)
         setLogins(r.data.tailscaleLogins.join(', '))
+        setListener(r.status ?? null)
         setStatus({ saved: true })
       } else setStatus({ error: r.error ?? 'Could not save.' })
     })
   }
 
+  const address = listener?.address ?? ''
+  // A Unix socket in an owner-only folder: only this account (and root,
+  // which runs tailscaled) can connect. Tests use a TCP port instead.
+  const onSocket = address.startsWith('unix:')
+  const target = onSocket ? `"${address}"` : `http://${address}`
   return (
     <div className="remote-access">
       <p className="muted setting-note">
@@ -116,16 +130,18 @@ export function RemoteAccess({ load, save }: Props) {
             }}
           />
         </label>
-        <label className="field remote-port">
-          <span>Local port</span>
-          <input
-            type="number"
-            value={form.port}
-            onChange={(e) => {
-              setForm({ ...form, port: Number(e.target.value) })
-            }}
-          />
-        </label>
+        {!onSocket && (
+          <label className="field remote-port">
+            <span>Local port</span>
+            <input
+              type="number"
+              value={form.port}
+              onChange={(e) => {
+                setForm({ ...form, port: Number(e.target.value) })
+              }}
+            />
+          </label>
+        )}
       </div>
       <div className="remote-actions">
         <button type="button" className="send" disabled={busy} onClick={submit}>
@@ -134,8 +150,13 @@ export function RemoteAccess({ load, save }: Props) {
         {status?.saved && <span className="muted">Saved.</span>}
         {status?.error && <span className="form-error">{status.error}</span>}
       </div>
+      {form.enabled && listener && (
+        <p className={listener.error ? 'form-error' : 'muted setting-note'}>
+          {listener.error ? `Not listening: ${listener.error}` : listener.listening ? `Listening on ${listener.address ?? ''}.` : 'Not listening yet. Save to start.'}
+        </p>
+      )}
       <p className="muted setting-note">
-        Then, once, on this Mac: <code>tailscale serve --bg --https=443 http://127.0.0.1:{form.port}</code>. Open{' '}
+        Then, once, on this Mac: <code>tailscale serve --bg --https=443 {target}</code>. Open{' '}
         <code>https://{form.host || 'your-mac.tail1234.ts.net'}/</code> on a device signed in to your tailnet.
       </p>
     </div>

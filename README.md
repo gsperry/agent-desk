@@ -100,13 +100,13 @@ Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -
 
 ## Remote access
 
-Off by default. Settings → Remote access lets your phone or another computer reach this desk through [Tailscale](https://tailscale.com): turn it on, list the Tailscale logins allowed in, set the host name devices use (your Mac's tailnet name), save, then run once on the Mac:
+Off by default. Settings → Remote access lets your phone or another computer reach this desk through [Tailscale](https://tailscale.com): turn it on, list the Tailscale logins allowed in, set the host name devices use (your Mac's tailnet name), save, then run the command Settings shows, once, on the Mac. It points Tailscale at Agent Desk's owner-only socket:
 
 ```sh
-tailscale serve --bg --https=443 http://127.0.0.1:7327
+tailscale serve --bg --https=443 "unix:$HOME/Library/Application Support/agent-desk/remote.sock"
 ```
 
-Open `https://<your-mac>.<tailnet>.ts.net/` on a device signed in to your tailnet. Remote devices never use the local link; Tailscale vouches for who they are. Choose what they may do: **Read and answer** (read everything, answer waiting prompts), **Reply** (also send replies) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
+Open `https://<your-mac>.<tailnet>.ts.net/` on a device signed in to your tailnet. Remote devices never use the local link; Tailscale vouches for who they are. Choose what they may do: **Read and answer** (read everything, answer waiting prompts, including typed answers to questions), **Reply** (also send replies) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
 
 ## Catch-up summaries
 

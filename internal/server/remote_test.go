@@ -38,6 +38,10 @@ func (f *fakeRemote) Set(s remote.Settings) (remote.Settings, error) {
 	return v, nil
 }
 
+func (f *fakeRemote) Status() RemoteStatus {
+	return RemoteStatus{Listening: f.Get().Enabled, Address: "unix:/tmp/test.sock"}
+}
+
 const remoteHost = "desk.tail1234.ts.net"
 
 func remoteOn(level remote.Level) *fakeRemote {
@@ -94,6 +98,9 @@ func TestRemoteAdmission(t *testing.T) {
 		{"open never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/open", `{"path":"x"}`, remoteHost, origin, "guy@example.com"}, 403},
 		{"summary never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/summary", `{"since":1,"model":"haiku"}`, remoteHost, origin, "guy@example.com"}, 403},
 		{"settings never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/remote", `{"enabled":false}`, remoteHost, origin, "guy@example.com"}, 403},
+		{"http origin refused", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "http://" + remoteHost, "guy@example.com"}, 403},
+		{"host with another port", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost + ":443", "", "guy@example.com"}, 403},
+		{"host in other case", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", "DESK.tail1234.ts.net", "", "guy@example.com"}, 403},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -197,6 +204,16 @@ func TestRemoteWebSocket(t *testing.T) {
 	if _, err := dial(""); err == nil {
 		t.Fatal("WebSocket opened without identity")
 	}
+	for _, origin := range []string{"", "https://evil.example", "http://" + remoteHost} {
+		h := http.Header{remote.TailscaleHeader: {"guy@example.com"}}
+		if origin != "" {
+			h.Set("Origin", origin)
+		}
+		if c, _, err := websocket.Dial(ctx, "ws://"+l.Addr().String()+"/api/ws", &websocket.DialOptions{Subprotocols: []string{WSProtocol}, HTTPHeader: h}); err == nil {
+			c.CloseNow()
+			t.Fatalf("WebSocket opened with origin %q", origin)
+		}
+	}
 	conn, err := dial("guy@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -205,5 +222,103 @@ func TestRemoteWebSocket(t *testing.T) {
 	var msg map[string]any
 	if err := wsjson.Read(ctx, conn, &msg); err != nil || msg["type"] != "hello" {
 		t.Fatalf("hello = %v, %v", msg, err)
+	}
+	// Turning remote access off closes the open socket.
+	rc := s.cfg.Remote.(*fakeRemote)
+	off := rc.Get()
+	off.Enabled = false
+	rc.mu.Lock()
+	rc.cur = off
+	rc.mu.Unlock()
+	s.remoteMu.Lock()
+	tracked := len(s.remoteConns)
+	s.remoteMu.Unlock()
+	if tracked != 1 {
+		t.Fatalf("tracked remote sockets = %d, want 1", tracked)
+	}
+	s.DropRemote(off)
+	readCtx, cancelRead := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelRead()
+	for {
+		if err := wsjson.Read(readCtx, conn, &msg); err != nil {
+			if readCtx.Err() != nil {
+				t.Fatal("the socket stayed open after remote access was turned off")
+			}
+			break
+		}
+	}
+}
+
+func TestRemoteCannotChangeSettings(t *testing.T) {
+	rc := remoteOn(remote.LevelManage)
+	s := newTestServer(t, Config{Remote: rc})
+	rec := doRemote(t, s, remoteReq{"POST", "/api/remote", `{"enabled":false}`, remoteHost, "https://" + remoteHost, "guy@example.com"})
+	if rec.Code != 403 || !rc.Get().Enabled {
+		t.Fatalf("status %d, settings %+v", rec.Code, rc.Get())
+	}
+	// The handler refuses a remote caller even if it were routed to it.
+	req := httptest.NewRequest("POST", "/api/remote", strings.NewReader(`{"enabled":false}`))
+	req = req.WithContext(context.WithValue(req.Context(), remoteKey{}, remoteCaller{id: remote.Identity{User: "guy@example.com"}}))
+	w := httptest.NewRecorder()
+	s.setRemoteSettings(w, req)
+	if w.Code != 403 || !rc.Get().Enabled {
+		t.Fatalf("handler check: %d %+v", w.Code, rc.Get())
+	}
+}
+
+// TestRouteNeeds pins what every route needs from a remote client, so a new
+// route that changes state cannot slip in as a read.
+func TestRouteNeeds(t *testing.T) {
+	want := map[string]remote.Need{
+		"GET /api/health":                                  remote.NeedRead,
+		"GET /api/whoami":                                  remote.NeedRead,
+		"GET /api/sessions":                                remote.NeedRead,
+		"GET /api/sessions/{id}/transcript":                remote.NeedRead,
+		"POST /api/sessions/{id}/send":                     remote.NeedReply,
+		"GET /api/sessions/{id}/pane":                      remote.NeedRead,
+		"GET /api/sessions/{id}/terminal":                  remote.NeedRead,
+		"POST /api/sessions/{id}/answer":                   remote.NeedAnswer,
+		"GET /api/sessions/{id}/agents":                    remote.NeedRead,
+		"GET /api/sessions/{id}/agents/{agent}/transcript": remote.NeedRead,
+		"GET /api/sessions/{id}/changes":                   remote.NeedRead,
+		"POST /api/paste":                                  remote.NeedLocal,
+		"GET /api/conflicts":                               remote.NeedRead,
+		"GET /api/conversations":                           remote.NeedRead,
+		"GET /api/conversations/{id}/transcript":           remote.NeedRead,
+		"GET /api/conversations/{id}/export":               remote.NeedRead,
+		"POST /api/sessions/{id}/summary":                  remote.NeedLocal,
+		"GET /api/usage":                                   remote.NeedRead,
+		"GET /api/overview":                                remote.NeedRead,
+		"GET /api/spawn-options":                           remote.NeedManage,
+		"POST /api/sessions":                               remote.NeedManage,
+		"POST /api/sessions/{id}/action":                   remote.NeedManage,
+		"POST /api/groups":                                 remote.NeedManage,
+		"POST /api/groups/delete":                          remote.NeedManage,
+		"GET /api/search":                                  remote.NeedRead,
+		"POST /api/open":                                   remote.NeedLocal,
+		"POST /api/manager/start":                          remote.NeedManage,
+		"GET /api/remote":                                  remote.NeedRead,
+		"POST /api/remote":                                 remote.NeedLocal,
+		"GET /api/ws":                                      remote.NeedRead,
+	}
+	s := newTestServer(t, Config{})
+	for p, n := range s.needs {
+		w, ok := want[p]
+		if !ok {
+			t.Errorf("route %s has no expected need here; add it deliberately", p)
+		} else if w != n {
+			t.Errorf("route %s needs %d, want %d", p, n, w)
+		}
+	}
+	for p := range want {
+		if _, ok := s.needs[p]; !ok {
+			t.Errorf("expected route %s is not registered", p)
+		}
+	}
+	// Every non-GET route needs more than reading.
+	for p, n := range s.needs {
+		if !strings.HasPrefix(p, "GET ") && n == remote.NeedRead {
+			t.Errorf("%s changes state but needs only read", p)
+		}
 	}
 }
