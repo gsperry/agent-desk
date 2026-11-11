@@ -3,7 +3,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 BIN := bin/agent-desk
 STATICCHECK := go run honnef.co/go/tools/cmd/staticcheck@v0.8.2
 
-.PHONY: build dev test lint web clean
+.PHONY: build dev test lint web e2e screenshot clean
 
 build: web
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/agent-desk
@@ -27,6 +27,12 @@ lint: web/node_modules
 	go vet ./...
 	$(STATICCHECK) ./...
 	cd web && npm run lint && npm run typecheck
+
+e2e: build
+	cd web && npx playwright test
+
+screenshot: build
+	cd web && SCREENSHOT_PATH=../docs/screenshot.png npx playwright test -g screenshot
 
 clean:
 	rm -rf bin tmp web/dist/assets web/dist/index.html
