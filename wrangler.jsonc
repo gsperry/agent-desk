@@ -1,0 +1,9 @@
+// Cloudflare Workers static assets for agent-desk.app. The site is the
+// site/ directory as is; there is no build step. "previews" lets
+// non-production branches get preview links.
+{
+  "name": "agent-desk",
+  "compatibility_date": "2026-11-11",
+  "assets": { "directory": "./site" },
+  "previews": {}
+}
