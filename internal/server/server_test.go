@@ -16,7 +16,9 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
@@ -116,6 +118,35 @@ func (f *fakeSearcher) Search(_ context.Context, q string, opts search.Options) 
 	return search.Result{Query: q, Hits: []search.Hit{}}, f.err
 }
 
+type fakeLifecycle struct {
+	err    error
+	spawn  am.SpawnRequest
+	action manage.Action
+	id     string
+	group  manage.Group
+	del    string
+}
+
+func (f *fakeLifecycle) Options(context.Context) (manage.Options, error) {
+	return manage.Options{Tools: []string{"claude"}, DefaultTool: "claude"}, f.err
+}
+func (f *fakeLifecycle) Spawn(_ context.Context, r am.SpawnRequest) (am.Session, error) {
+	f.spawn = r
+	return am.Session{ID: "n1"}, f.err
+}
+func (f *fakeLifecycle) Act(_ context.Context, id string, a manage.Action) error {
+	f.id, f.action = id, a
+	return f.err
+}
+func (f *fakeLifecycle) CreateGroup(_ context.Context, g manage.Group) error {
+	f.group = g
+	return f.err
+}
+func (f *fakeLifecycle) DeleteGroup(_ context.Context, path string) error {
+	f.del = path
+	return f.err
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -149,6 +180,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Searcher == nil {
 		cfg.Searcher = &fakeSearcher{}
 	}
+	if cfg.Lifecycle == nil {
+		cfg.Lifecycle = &fakeLifecycle{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +191,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -399,6 +433,66 @@ func TestSearchRoute(t *testing.T) {
 	bad.Handler().ServeHTTP(rec, req)
 	if rec.Code != 400 {
 		t.Fatalf("short query status %d", rec.Code)
+	}
+}
+
+func TestLifecycleRoutes(t *testing.T) {
+	own := "http://127.0.0.1:7317"
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		origin     string
+		err        error
+		wantStatus int
+		check      func(t *testing.T, f *fakeLifecycle)
+	}{
+		{"options", "GET", "/api/spawn-options", "", "", nil, 200, nil},
+		{"spawn", "POST", "/api/sessions", `{"name":"x","directory":"/src","worktree":true}`, own, nil, 200, func(t *testing.T, f *fakeLifecycle) {
+			if f.spawn.Name != "x" || f.spawn.Directory != "/src" || !f.spawn.Worktree {
+				t.Fatalf("spawn %+v", f.spawn)
+			}
+		}},
+		{"spawn refused", "POST", "/api/sessions", `{}`, own, &send.Refused{Reason: "invalid"}, 409, nil},
+		{"spawn without origin", "POST", "/api/sessions", `{}`, "", nil, 403, nil},
+		{"action", "POST", "/api/sessions/a1/action", `{"action":"move","group":"web"}`, own, nil, 200, func(t *testing.T, f *fakeLifecycle) {
+			if f.id != "a1" || f.action != (manage.Action{Action: "move", Group: "web"}) {
+				t.Fatalf("action %s %+v", f.id, f.action)
+			}
+		}},
+		{"action failed", "POST", "/api/sessions/a1/action", `{"action":"kill"}`, own, errors.New("tmux gone"), 502, nil},
+		{"create group", "POST", "/api/groups", `{"path":"ops","directory":"/srv"}`, own, nil, 200, func(t *testing.T, f *fakeLifecycle) {
+			if f.group != (manage.Group{Path: "ops", Directory: "/srv"}) {
+				t.Fatalf("group %+v", f.group)
+			}
+		}},
+		{"delete group", "POST", "/api/groups/delete", `{"path":"ops"}`, own, nil, 200, func(t *testing.T, f *fakeLifecycle) {
+			if f.del != "ops" {
+				t.Fatalf("delete %q", f.del)
+			}
+		}},
+		{"bad body", "POST", "/api/groups", `{`, own, nil, 400, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeLifecycle{err: tt.err}
+			s := newTestServer(t, Config{Lifecycle: f})
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if tt.check != nil {
+				tt.check(t, f)
+			}
+		})
 	}
 }
 

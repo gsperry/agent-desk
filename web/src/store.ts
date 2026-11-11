@@ -4,7 +4,7 @@ import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Trans
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Page, Screen, SearchResult, ServerMessage } from './types'
+import type { Answer, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -238,6 +238,48 @@ export class Store {
     if (res.ok) return null
     const body = (await res.json().catch(() => ({}))) as SendRefusal
     return body.message ?? body.error ?? `HTTP ${String(res.status)}`
+  }
+
+  private async post(path: string, body: unknown): Promise<{ data?: unknown; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = (await res.json().catch(() => ({}))) as SendRefusal
+      return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async spawnOptions(): Promise<{ data?: SpawnOptions; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/spawn-options')
+      const data = (await res.json().catch(() => ({}))) as SpawnOptions & SendRefusal
+      return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async spawn(req: SpawnRequest): Promise<{ data?: SessionView; error?: string }> {
+    const r = await this.post('/api/sessions', req)
+    return { data: r.data as SessionView | undefined, error: r.error }
+  }
+
+  async act(sessionId: string, action: SessionAction): Promise<string | null> {
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/action`, action)
+    return r.error ?? null
+  }
+
+  async createGroup(path: string, directory: string): Promise<string | null> {
+    return (await this.post('/api/groups', { path, directory })).error ?? null
+  }
+
+  async deleteGroup(path: string): Promise<string | null> {
+    return (await this.post('/api/groups/delete', { path })).error ?? null
   }
 
   async search(query: string, archived: boolean): Promise<{ result?: SearchResult; error?: string }> {

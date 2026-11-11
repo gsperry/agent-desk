@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -82,4 +83,137 @@ func (f Fixture) Type(ctx context.Context, id, text string) error {
 	defer file.Close()
 	_, err = file.Write(append(rec, '\n'))
 	return err
+}
+
+var fixtureMu sync.Mutex
+
+// update applies f to the fixture snapshot and writes it back.
+func (f Fixture) update(fn func(*Snapshot) error) error {
+	fixtureMu.Lock()
+	defer fixtureMu.Unlock()
+	data, err := os.ReadFile(f.Path)
+	if err != nil {
+		return err
+	}
+	snap, err := ParseSnapshot(data)
+	if err != nil {
+		return err
+	}
+	if err := fn(&snap); err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(f.Path, append(out, '\n'), 0o600)
+}
+
+func (f Fixture) session(snap *Snapshot, id string) (*Session, error) {
+	for i := range snap.Sessions {
+		if snap.Sessions[i].ID == id {
+			return &snap.Sessions[i], nil
+		}
+	}
+	return nil, fmt.Errorf("session %s does not exist", id)
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func (f Fixture) Spawn(_ context.Context, r SpawnRequest) (Session, error) {
+	s := Session{
+		ID:             randomHex(4),
+		Name:           r.Name,
+		Tool:           r.Tool,
+		Group:          r.Group,
+		Directory:      r.Directory,
+		Status:         "idle",
+		Running:        true,
+		AgentSessionID: fmt.Sprintf("%s-0000-4000-8000-%s", randomHex(4), randomHex(6)),
+	}
+	if s.Name == "" {
+		s.Name = s.Tool + "-" + s.ID[:4]
+	}
+	err := f.update(func(snap *Snapshot) error {
+		snap.Sessions = append(snap.Sessions, s)
+		return nil
+	})
+	return s, err
+}
+
+func (f Fixture) Kill(_ context.Context, id string) error {
+	return f.update(func(snap *Snapshot) error {
+		s, err := f.session(snap, id)
+		if err == nil {
+			s.Status, s.Running = "dead", false
+		}
+		return err
+	})
+}
+
+func (f Fixture) Revive(_ context.Context, id string) error {
+	return f.update(func(snap *Snapshot) error {
+		s, err := f.session(snap, id)
+		if err == nil {
+			s.Status, s.Running = "idle", true
+		}
+		return err
+	})
+}
+
+func (f Fixture) Archive(_ context.Context, id string, restore bool) error {
+	return f.update(func(snap *Snapshot) error {
+		s, err := f.session(snap, id)
+		if err == nil {
+			s.Archived = !restore
+		}
+		return err
+	})
+}
+
+func (f Fixture) Move(_ context.Context, id, group string) error {
+	return f.update(func(snap *Snapshot) error {
+		s, err := f.session(snap, id)
+		if err == nil {
+			s.Group = group
+		}
+		return err
+	})
+}
+
+func (f Fixture) CreateGroup(_ context.Context, path, directory string) error {
+	return f.update(func(snap *Snapshot) error {
+		snap.Groups = append(snap.Groups, Group{Path: path, Directory: directory})
+		return nil
+	})
+}
+
+func (f Fixture) DeleteGroup(_ context.Context, path string) error {
+	return f.update(func(snap *Snapshot) error {
+		groups := snap.Groups[:0]
+		for _, g := range snap.Groups {
+			if g.Path != path {
+				groups = append(groups, g)
+			}
+		}
+		snap.Groups = groups
+		for i := range snap.Sessions {
+			if snap.Sessions[i].Group == path {
+				snap.Sessions[i].Group = ""
+			}
+		}
+		return nil
+	})
+}
+
+func (f Fixture) Settings(context.Context) ([]Setting, error) {
+	return []Setting{
+		{Key: "default_tool", Value: ""},
+		{Key: "worktree_default", Value: "off"},
+		{Key: "hidden_tools", Value: "codex", Values: []string{"claude", "opencode", "codex"}},
+	}, nil
 }

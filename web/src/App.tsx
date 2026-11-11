@@ -2,15 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { takeToken } from './auth'
 import { SessionView } from './components/SessionView'
 import { Sidebar, type ViewOptions } from './components/Sidebar'
+import { ConfirmDialog } from './components/Dialog'
+import { NewGroup } from './components/NewGroup'
+import { NewSession } from './components/NewSession'
 import { SearchView } from './components/SearchView'
 import { Settings } from './components/Settings'
 import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
 import { groupSessions } from './model/sidebar'
 import type { PathRef } from './model/paths'
+import { directorySuggestions, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
-import type { Answer } from './types'
+import type { Answer, Project, SessionAction, SpawnRequest } from './types'
 import { ViewPrefsContext } from './viewprefs-context'
 
 const token = takeToken()
@@ -47,6 +51,8 @@ function Desk({ token }: { token: string }) {
   const [searchText, setSearchText] = useState('')
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [searchArchived, setSearchArchived] = useState(false)
+  type Modal = { kind: 'spawn'; initial: SpawnRequest } | { kind: 'group' } | { kind: 'deleteGroup'; path: string; busy: boolean; error: string | null }
+  const [modal, setModal] = useState<Modal | null>(null)
 
   useEffect(() => {
     const q = searchText.trim()
@@ -68,7 +74,9 @@ function Desk({ token }: { token: string }) {
   }, [viewPrefs])
 
   const sessions = useMemo(() => data.sessions?.sessions ?? [], [data.sessions])
-  const groups = useMemo(() => groupSessions(sessions, { ...view, acks }), [sessions, view, acks])
+  const amGroups = useMemo(() => data.sessions?.groups ?? [], [data.sessions])
+  const groups = useMemo(() => groupSessions(sessions, { ...view, acks, groups: amGroups }), [sessions, view, acks, amGroups])
+  const directories = useMemo(() => directorySuggestions(sessions, amGroups), [sessions, amGroups])
   // j/k walk every session that needs the human, even when filters hide some.
   const walkOrder = useMemo(() => ordered(groupSessions(sessions, { showArchived: false, acks })), [sessions, acks])
   const attention = attentionCount(sessions, acks)
@@ -148,6 +156,12 @@ function Desk({ token }: { token: string }) {
   }, [store])
   const readScreen = useCallback((id: string) => store.screen(id), [store])
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
+  const loadOptions = useCallback(() => store.spawnOptions(), [store])
+  const spawn = useCallback((r: SpawnRequest) => store.spawn(r), [store])
+  const act = useCallback((id: string, a: SessionAction) => store.act(id, a), [store])
+  const openSpawn = useCallback((project: Project | null) => {
+    setModal({ kind: 'spawn', initial: spawnDefaults(project, '', false) })
+  }, [])
   const runSearch = useCallback((q: string, archived: boolean) => store.search(q, archived), [store])
   const around = useCallback((id: string, uuid: string) => store.around(id, uuid), [store])
   const openPath = useCallback(
@@ -196,6 +210,13 @@ function Desk({ token }: { token: string }) {
           }}
           search={searchText}
           onSearch={setSearchText}
+          onNewSession={openSpawn}
+          onNewGroup={() => {
+            setModal({ kind: 'group' })
+          }}
+          onDeleteGroup={(path) => {
+            setModal({ kind: 'deleteGroup', path, busy: false, error: null })
+          }}
         />
         {searchQuery ? (
           <SearchView
@@ -229,6 +250,8 @@ function Desk({ token }: { token: string }) {
               readScreen={readScreen}
               answer={answer}
               openPath={openPath}
+              groups={amGroups}
+              act={act}
             />
           ) : (
             <main className="main">
@@ -241,6 +264,49 @@ function Desk({ token }: { token: string }) {
               {attention > 0 ? `${String(attention)} session${attention === 1 ? ' needs' : 's need'} you. Press j to go to the first.` : 'Pick a session on the left, or press ⌘K.'}
             </div>
           </main>
+        )}
+        {modal?.kind === 'spawn' && (
+          <NewSession
+            initial={modal.initial}
+            directories={directories}
+            loadOptions={loadOptions}
+            spawn={spawn}
+            onStarted={(id) => {
+              setModal(null)
+              select(id)
+            }}
+            onClose={() => {
+              setModal(null)
+            }}
+          />
+        )}
+        {modal?.kind === 'group' && (
+          <NewGroup
+            directories={directories}
+            create={(path, directory) => store.createGroup(path, directory)}
+            onClose={() => {
+              setModal(null)
+            }}
+          />
+        )}
+        {modal?.kind === 'deleteGroup' && (
+          <ConfirmDialog
+            title={`Delete group ${modal.path}?`}
+            message="The group is removed. Sessions in it move to the root and keep running."
+            confirm="Delete group"
+            danger
+            busy={modal.busy}
+            error={modal.error}
+            onConfirm={() => {
+              setModal({ ...modal, busy: true })
+              void store.deleteGroup(modal.path).then((error) => {
+                setModal(error ? { ...modal, busy: false, error } : null)
+              })
+            }}
+            onClose={() => {
+              setModal(null)
+            }}
+          />
         )}
         {toast && (
           <div className="toast" role="status">

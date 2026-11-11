@@ -24,6 +24,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
+	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
 	procrun "github.com/gsperry/agent-desk/internal/run"
@@ -99,6 +100,7 @@ func run(o options) error {
 		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures)},
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
+		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},
 	})
 	if err != nil {
 		return err
@@ -131,7 +133,14 @@ func run(o options) error {
 	return srv.Shutdown(shutdown)
 }
 
-func newPoller(fixtures string) (*hub.Poller, am.Client, error) {
+// backend is everything Agent Desk asks agent-manager to do, from the CLI or
+// from the fixture.
+type backend interface {
+	am.Client
+	manage.Backend
+}
+
+func newPoller(fixtures string) (*hub.Poller, backend, error) {
 	home, _ := os.UserHomeDir()
 	p := &hub.Poller{Resolver: &grouping.Resolver{Runner: procrun.Exec{Timeout: 3 * time.Second}, Home: home}}
 	if fixtures != "" {

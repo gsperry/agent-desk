@@ -37,7 +37,7 @@ func (p *Poller) init() {
 	p.once.Do(func() {
 		p.trigger = make(chan struct{}, 1)
 		p.subs = map[chan State]struct{}{}
-		p.state = State{Sessions: []SessionView{}}
+		p.state = State{Sessions: []SessionView{}, Groups: []GroupView{}}
 	})
 }
 
@@ -152,7 +152,12 @@ func (p *Poller) build(ctx context.Context) State {
 		prev.Error = &StateError{Kind: kind, Message: err.Error()}
 		return prev
 	}
-	st := State{ManagerAwake: snap.ManagerAwake, Sessions: make([]SessionView, 0, len(snap.Sessions))}
+	st := State{ManagerAwake: snap.ManagerAwake, Sessions: make([]SessionView, 0, len(snap.Sessions)), Groups: []GroupView{}}
+	for _, g := range snap.Groups {
+		if !g.Archived {
+			st.Groups = append(st.Groups, GroupView{Path: g.Path, Directory: g.Directory})
+		}
+	}
 	for _, s := range snap.Sessions {
 		if s.Self {
 			st.InsideSession = true

@@ -24,11 +24,17 @@ export interface SessionView {
   project: Project
 }
 
+export interface GroupView {
+  path: string
+  directory?: string
+}
+
 export interface State {
   managerAwake: boolean
   insideSession: boolean
   error?: { kind: 'not_installed' | 'failed'; message: string }
   sessions: SessionView[]
+  groups?: GroupView[]
 }
 
 export type ItemKind =
@@ -118,3 +124,23 @@ export interface SearchResult {
   truncated: boolean
   searched: number
 }
+
+export interface SpawnOptions {
+  tools: string[]
+  defaultTool: string
+  worktreeDefault: boolean
+  groups: GroupView[]
+}
+
+export interface SpawnRequest {
+  name: string
+  tool: string
+  group: string
+  directory: string
+  worktree: boolean
+  prompt: string
+  model: string
+  effort: string
+}
+
+export type SessionAction = { action: 'kill' | 'revive' | 'archive' | 'restore' } | { action: 'move'; group: string }

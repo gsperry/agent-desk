@@ -1532,3 +1532,130 @@ mark {
 .excerpt-open {
   display: block;
 }
+
+/* Session management */
+
+.group-actions {
+  display: inline-flex;
+  gap: 0.1rem;
+  margin-left: auto;
+  opacity: 0;
+}
+
+.group-head:hover .group-actions,
+.group-actions:focus-within {
+  opacity: 1;
+}
+
+.group-actions .icon-button {
+  font-size: 0.85rem;
+  letter-spacing: 0;
+}
+
+.empty-group {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+}
+
+.session-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.move-select {
+  padding: 0.05rem 0.3rem;
+}
+
+.actions-note {
+  font-size: 0.72rem;
+}
+
+.dialog {
+  width: min(32rem, calc(100% - 2rem));
+}
+
+.dialog-body p {
+  margin: 0.75rem 0 0;
+  line-height: 1.5;
+}
+
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.1rem;
+}
+
+.dialog-note {
+  margin-right: auto;
+  font-size: 0.78rem;
+}
+
+.secondary {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: none;
+  cursor: pointer;
+}
+
+.send.danger {
+  background: var(--error);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.field > span {
+  color: var(--dim);
+}
+
+.field input,
+.field select,
+.field textarea {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.check {
+  font-size: 0.85rem;
+}
+
+.form-error {
+  margin: 0.6rem 0 0;
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+.form .link-button {
+  align-self: flex-start;
+}

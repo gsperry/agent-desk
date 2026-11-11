@@ -1,4 +1,4 @@
-import type { Project, SessionView } from '../types'
+import type { GroupView, Project, SessionView } from '../types'
 import { needsAttention, type Acks } from './attention'
 
 // Lower sorts first: what needs the human, then what is busy, then the rest.
@@ -28,6 +28,9 @@ export interface SidebarOptions {
   acks?: Acks
   // onlyAttention keeps just the sessions that need the human.
   onlyAttention?: boolean
+  // groups are agent-manager groups; empty ones still get a heading so a
+  // session can be started in them.
+  groups?: GroupView[]
 }
 
 // groupSessions files sessions under their project. Groups that need
@@ -46,6 +49,12 @@ export function groupSessions(sessions: SessionView[], opts: SidebarOptions): Si
     }
     g.sessions.push(s)
     if (attention) g.attention++
+  }
+  if (!opts.onlyAttention) {
+    for (const g of opts.groups ?? []) {
+      const key = 'group:' + g.path
+      if (!byKey.has(key)) byKey.set(key, { project: { key, name: g.path, root: g.directory, kind: 'group' }, sessions: [], attention: 0 })
+    }
   }
   const groups = [...byKey.values()]
   for (const g of groups) {

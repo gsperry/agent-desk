@@ -4,7 +4,7 @@ import { needsAttention, type Acks } from '../model/attention'
 import { archivedCount, type SidebarGroup } from '../model/sidebar'
 import type { Permission } from '../notify'
 import type { Prefs } from '../store'
-import type { State } from '../types'
+import type { Project, State } from '../types'
 import { glyph } from './status'
 
 export interface ViewOptions {
@@ -30,6 +30,9 @@ interface Props {
   onOpenSettings: () => void
   search: string
   onSearch: (text: string) => void
+  onNewSession: (project: Project | null) => void
+  onNewGroup: () => void
+  onDeleteGroup: (path: string) => void
 }
 
 export function Sidebar(props: Props) {
@@ -42,6 +45,17 @@ export function Sidebar(props: Props) {
       <header className="sidebar-head">
         <span className="brand">Agent Desk</span>
         <span className="head-right">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="New session"
+            title="New session"
+            onClick={() => {
+              props.onNewSession(null)
+            }}
+          >
+            ＋
+          </button>
           <button type="button" className="icon-button" aria-label="Settings" title="Settings" onClick={props.onOpenSettings}>
             ⚙
           </button>
@@ -89,7 +103,34 @@ export function Sidebar(props: Props) {
             <h2 className="group-head" title={g.project.root ?? g.project.name}>
               <span className="group-name">{g.project.name}</span>
               {g.attention > 0 && <span className="badge">{g.attention}</span>}
+              <span className="group-actions">
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`New session in ${g.project.name}`}
+                  title="New session here"
+                  onClick={() => {
+                    props.onNewSession(g.project)
+                  }}
+                >
+                  ＋
+                </button>
+                {g.project.kind === 'group' && (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Delete group ${g.project.name}`}
+                    title="Delete group"
+                    onClick={() => {
+                      props.onDeleteGroup(g.project.name)
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
             </h2>
+            {g.sessions.length === 0 && <p className="muted pad empty-group">No sessions yet.</p>}
             <ul>
               {g.sessions.map((s) => (
                 <li key={s.id}>
@@ -127,6 +168,9 @@ export function Sidebar(props: Props) {
             Show archived ({archived})
           </label>
         )}
+        <button type="button" className="link-button" onClick={props.onNewGroup}>
+          New group
+        </button>
         <NotifyControls {...props} />
         <p className="keys">⌘K switch · j/k next that needs you · / search</p>
       </footer>
