@@ -10,6 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
+	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/locate"
 	"github.com/gsperry/agent-desk/internal/tail"
 	"github.com/gsperry/agent-desk/internal/transcript"
@@ -139,6 +140,32 @@ func (t *Transcripts) Around(ctx context.Context, sessionID, uuid string, radius
 		break
 	}
 	return page
+}
+
+// Agents lists the subagents the session's conversation spawned.
+func (t *Transcripts) Agents(ctx context.Context, sessionID string) ([]agents.Agent, error) {
+	d := t.open(ctx, sessionID)
+	d.mu.Lock()
+	path := d.path
+	items := append([]transcript.Item(nil), d.items...)
+	d.lastActive = time.Now()
+	d.mu.Unlock()
+	if path == "" {
+		return []agents.Agent{}, nil
+	}
+	return agents.List(path, items)
+}
+
+// AgentTranscript reads one subagent's transcript.
+func (t *Transcripts) AgentTranscript(ctx context.Context, sessionID, agentID string) ([]transcript.Item, error) {
+	d := t.open(ctx, sessionID)
+	d.mu.Lock()
+	path := d.path
+	d.mu.Unlock()
+	if path == "" {
+		return nil, agents.ErrNotFound
+	}
+	return agents.Transcript(path, agentID)
 }
 
 // Subscribe opens the transcript and returns a channel of changes after the

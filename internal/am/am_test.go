@@ -146,6 +146,18 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadStyled(t *testing.T) {
+	r := &fakeRunner{out: []byte(`{"output":"\u001b[31mred\u001b[0m"}`)}
+	c := &CLI{Runner: r, Bin: "agent-manager"}
+	got, err := c.ReadStyled(context.Background(), "a1")
+	if err != nil || got != "\x1b[31mred\x1b[0m" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if strings.Join(r.args, " ") != "agent-manager read --styled --json -- a1" {
+		t.Fatalf("args = %v", r.args)
+	}
+}
+
 func TestConfigDir(t *testing.T) {
 	tests := []struct {
 		name, amDir, xdg, want string
@@ -162,5 +174,17 @@ func TestConfigDir(t *testing.T) {
 				t.Fatalf("ConfigDir() = %q, %v; want %q", got, err, tt.want)
 			}
 		})
+	}
+}
+
+func TestFixtureExpandsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "snapshot.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"sessions":[{"id":"x","directory":"${FIXTURES}/repo"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Fixture{Path: path}.Snapshot(context.Background())
+	if err != nil || snap.Sessions[0].Directory != filepath.Join(dir, "repo") {
+		t.Fatalf("directory %q, err %v", snap.Sessions[0].Directory, err)
 	}
 }

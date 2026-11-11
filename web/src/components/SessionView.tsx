@@ -6,7 +6,19 @@ import type { SessionView as Session } from '../types'
 import type { PathRef } from '../model/paths'
 import { OpenPathContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
+import { AgentLinksContext } from '../agents-context'
+import { agentCounts } from '../model/agents'
+import type { Changes, Item, SubAgent } from '../types'
+import { AgentsPanel } from './AgentsPanel'
+import { NotesPanel } from './NotesPanel'
+import { togglePin } from '../model/pins'
+import type { Suggestion } from '../model/rules'
+import { PinsContext, pinsFor, useNotebook } from '../pins-context'
+import { ChangesPanel } from './ChangesPanel'
+import { blockedReason } from '../model/compose'
+import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
+import { ContextMeter } from './ContextMeter'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
 import { SessionActions } from './SessionActions'
@@ -26,11 +38,26 @@ interface Props {
   send: (id: string, text: string) => void
   dismiss: (id: string, clientId: string) => void
   readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
+  readStyled: (id: string) => Promise<{ screen?: string; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
   act: (id: string, a: SessionAction) => Promise<string | null>
+  // seenMark is how far the reader had looked before opening this session.
+  seenMark?: { seq: number }
+  readAgents: (id: string) => Promise<SubAgent[] | null>
+  readAgentTranscript: (id: string, agentId: string) => Promise<Item[] | null>
+  readChanges: (id: string, mode: Changes['mode']) => Promise<{ data?: Changes; error?: string }>
+  conflicts: Conflict[]
+  sessions: Session[]
+  pasteImage: (image: Blob) => Promise<{ path?: string; error?: string }>
+  exportConversation: (conversationId: string) => void
+  suggestion?: Suggestion
+  dismissSuggestion: (sessionId: string) => void
 }
+
+// The subagent list refreshes this often while a session is open.
+const agentsRefreshMs = 5000
 
 export function SessionView(props: Props) {
   const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer, openPath } = props
@@ -42,6 +69,44 @@ export function SessionView(props: Props) {
   )
   const [sends, setSends] = useState(0)
   const [showPane, setShowPane] = useState(false)
+  // Captured once, so the divider stays put while the session is marked
+  // read underneath it.
+  const [markAtOpen] = useState(props.seenMark)
+  const [agents, setAgents] = useState<SubAgent[]>([])
+  const [agentsOpen, setAgentsOpen] = useState(false)
+  const [changesOpen, setChangesOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notebook, setNotebook] = useNotebook(props.session?.agentSessionId)
+  const pins = pinsFor(notebook, setNotebook, togglePin)
+  const [openAgent, setOpenAgent] = useState<string | null>(null)
+  const { readAgents } = props
+  const isClaude = session?.tool === 'claude'
+  useEffect(() => {
+    if (!isClaude) return
+    let live = true
+    const load = () => {
+      void readAgents(sessionId).then((list) => {
+        if (live && list) setAgents(list)
+      })
+    }
+    load()
+    const t = setInterval(load, agentsRefreshMs)
+    return () => {
+      live = false
+      clearInterval(t)
+    }
+  }, [readAgents, sessionId, isClaude])
+  const agentLinks = useMemo(() => {
+    const byToolUse = new Map(agents.map((a) => [a.toolUseId, a.id]))
+    return {
+      agentFor: (toolUseId: string) => byToolUse.get(toolUseId),
+      open: (id: string) => {
+        setOpenAgent(id)
+        setAgentsOpen(true)
+      },
+    }
+  }, [agents])
+  const counts = agentCounts(agents)
   const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>()
   useEffect(() => {
     follow(sessionId)
@@ -68,100 +133,247 @@ export function SessionView(props: Props) {
 
   return (
     <OpenPathContext.Provider value={openHere}>
-      <main className="main">
-        <header className="session-head">
-          <div className="session-title">
-            <span className={`glyph status-${session.status}`} aria-hidden>
-              {glyph(session.status)}
+    <AgentLinksContext.Provider value={agentLinks}>
+    <PinsContext.Provider value={session.agentSessionId ? pins : null}>
+        <main className="main">
+          <header className="session-head">
+            <div className="session-title">
+              <span className={`glyph status-${session.status}`} aria-hidden>
+                {glyph(session.status)}
+              </span>
+              <h1>{session.name}</h1>
+              <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
+              {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
+            <ContextMeter items={d.items} />
+            {props.conflicts.length > 0 && (
+            <span className="chip conflict-chip" title={conflictTitle(props.conflicts, props.sessions)}>
+              ⚠ {props.conflicts.length} shared file{props.conflicts.length === 1 ? '' : 's'}
             </span>
-            <h1>{session.name}</h1>
-            <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
-            {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
-            {session.running && (
+          )}
+          <button
+            type="button"
+            className="chip chip-button changes-toggle"
+            aria-pressed={changesOpen}
+            onClick={() => {
+              setChangesOpen(!changesOpen)
+              setAgentsOpen(false)
+              setNotesOpen(false)
+            }}
+          >
+            Changes
+          </button>
+          {counts.total > 0 && (
               <button
                 type="button"
-                className="chip chip-button terminal-toggle"
-                aria-pressed={paneOpen}
+                className="chip chip-button agents-toggle"
+                aria-pressed={agentsOpen}
                 onClick={() => {
-                  setShowPane(!showPane)
+                  setAgentsOpen(!agentsOpen)
+                  setOpenAgent(null)
+                  setNotesOpen(false)
                 }}
               >
-                Terminal
+                Agents {counts.running > 0 ? `${String(counts.running)} running · ` : ''}
+                {counts.total}
               </button>
             )}
-          </div>
-          <div className="session-sub">
-            {header.title && <span>{header.title}</span>}
-            <span className="muted" title={d.path ?? session.directory}>
-              {session.project.name}
-              {session.branch ? ` · ${session.branch}` : ''}
-            </span>
-            <SessionActions session={session} groups={props.groups} act={props.act} />
-          {header.prLinks.map((pr) => (
-              <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
-                PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
-              </a>
-            ))}
-          </div>
-        </header>
-        <StatusBanner session={session} doc={d} />
-        {d.items.length > 0 || pending.length > 0 ? (
-          <Transcript
-            sessionId={sessionId}
-            items={d.items}
-            hasMore={d.hasMore}
-            loadingOlder={d.loadingOlder}
-            live={session.running}
-            followKey={sends}
-            onLoadOlder={() => {
-              loadOlder(sessionId)
+              {session.agentSessionId && (
+                <button
+                  type="button"
+                  className="chip chip-button notes-toggle"
+                  aria-pressed={notesOpen}
+                  onClick={() => {
+                    setNotesOpen(!notesOpen)
+                    setAgentsOpen(false)
+                    setChangesOpen(false)
+                  }}
+                >
+                  Notes{notebook.pins.length > 0 ? ` · ${String(notebook.pins.length)}` : ''}
+                </button>
+              )}
+              {session.running && (
+                <button
+                  type="button"
+                  className="chip chip-button terminal-toggle"
+                  aria-pressed={paneOpen}
+                  onClick={() => {
+                    setShowPane(!showPane)
+                  }}
+                >
+                  Terminal
+                </button>
+              )}
+            </div>
+            <div className="session-sub">
+              {header.title && <span>{header.title}</span>}
+              <span className="muted" title={d.path ?? session.directory}>
+                {session.project.name}
+                {session.branch ? ` · ${session.branch}` : ''}
+              </span>
+              <SessionActions session={session} groups={props.groups} act={props.act} />
+              {isClaude && session.agentSessionId && d.items.length > 0 && (
+                <button
+                  type="button"
+                  className="chip chip-button export-button"
+                  onClick={() => {
+                    if (session.agentSessionId) props.exportConversation(session.agentSessionId)
+                  }}
+                >
+                  Export
+                </button>
+              )}
+            {header.prLinks.map((pr) => (
+                <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
+                  PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
+                </a>
+              ))}
+            </div>
+          </header>
+          <StatusBanner session={session} doc={d} />
+          {d.items.length > 0 || pending.length > 0 ? (
+            <Transcript
+              sessionId={sessionId}
+              items={d.items}
+              hasMore={d.hasMore}
+              loadingOlder={d.loadingOlder}
+              live={session.running}
+              followKey={sends}
+            markAtOpen={markAtOpen}
+          filterable
+              onLoadOlder={() => {
+                loadOlder(sessionId)
+              }}
+              trailing={
+                <PendingReplies
+                  pending={pending}
+                  onRetry={(p) => {
+                    dismiss(sessionId, p.clientId)
+                    send(sessionId, p.text)
+                  }}
+                  onEdit={(p) => {
+                    dismiss(sessionId, p.clientId)
+                    setRestore({ text: p.text, nonce: Date.now() })
+                  }}
+                  onDismiss={(p) => {
+                    dismiss(sessionId, p.clientId)
+                  }}
+                />
+              }
+            />
+          ) : (
+            <div className="empty">{emptyText(session, d)}</div>
+          )}
+          {paneOpen && (
+            <LivePane
+              sessionId={sessionId}
+              read={readScreen}
+              readStyled={props.readStyled}
+              answer={answer}
+              onClose={
+                showPane
+                  ? () => {
+                      setShowPane(false)
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {props.suggestion && (
+            <div className="suggestion" role="status" aria-label="Suggested reply">
+              <div className="suggestion-text">
+                <span className="muted">Rule “{props.suggestion.ruleName}” suggests replying:</span>
+                <p>{props.suggestion.text}</p>
+              </div>
+              <div className="suggestion-actions">
+                <button
+                  type="button"
+                  className="send"
+                  disabled={blockedReason(session, connected, insideSession) !== null}
+                  title={blockedReason(session, connected, insideSession) ?? undefined}
+                  onClick={() => {
+                    if (!props.suggestion) return
+                    send(sessionId, props.suggestion.text)
+                    setSends((n) => n + 1)
+                    props.dismissSuggestion(sessionId)
+                  }}
+                >
+                  Send
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    if (!props.suggestion) return
+                    setRestore({ text: props.suggestion.text, nonce: Date.now() })
+                    props.dismissSuggestion(sessionId)
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    props.dismissSuggestion(sessionId)
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+          <Composer
+            key={sessionId}
+            session={session}
+            connected={connected}
+            insideSession={insideSession}
+            restore={restore}
+          pasteImage={props.pasteImage}
+            onSend={(text) => {
+              send(sessionId, text)
+              setSends((n) => n + 1)
             }}
-            trailing={
-              <PendingReplies
-                pending={pending}
-                onRetry={(p) => {
-                  dismiss(sessionId, p.clientId)
-                  send(sessionId, p.text)
-                }}
-                onEdit={(p) => {
-                  dismiss(sessionId, p.clientId)
-                  setRestore({ text: p.text, nonce: Date.now() })
-                }}
-                onDismiss={(p) => {
-                  dismiss(sessionId, p.clientId)
-                }}
-              />
-            }
           />
-        ) : (
-          <div className="empty">{emptyText(session, d)}</div>
-        )}
-        {paneOpen && (
-          <LivePane
+          {changesOpen && (
+          <ChangesPanel
             sessionId={sessionId}
-            read={readScreen}
-            answer={answer}
-            onClose={
-              showPane
-                ? () => {
-                    setShowPane(false)
-                  }
-                : undefined
-            }
+            canSend={blockedReason(session, connected, insideSession)}
+            load={props.readChanges}
+            onSend={(text) => {
+              send(sessionId, text)
+              setSends((n) => n + 1)
+              setChangesOpen(false)
+            }}
+            onClose={() => {
+              setChangesOpen(false)
+            }}
           />
         )}
-        <Composer
-          key={sessionId}
-          session={session}
-          connected={connected}
-          insideSession={insideSession}
-          restore={restore}
-          onSend={(text) => {
-            send(sessionId, text)
-            setSends((n) => n + 1)
-          }}
-        />
-      </main>
+        {agentsOpen && (
+            <AgentsPanel
+              sessionId={sessionId}
+              agents={agents}
+              openAgent={openAgent}
+              onOpen={setOpenAgent}
+              onClose={() => {
+                setAgentsOpen(false)
+                setOpenAgent(null)
+              }}
+              readTranscript={props.readAgentTranscript}
+            />
+          )}
+        {notesOpen && (
+          <NotesPanel
+            notebook={notebook}
+            onChange={setNotebook}
+            onClose={() => {
+              setNotesOpen(false)
+            }}
+          />
+        )}
+        </main>
+    </PinsContext.Provider>
+    </AgentLinksContext.Provider>
     </OpenPathContext.Provider>
   )
 }

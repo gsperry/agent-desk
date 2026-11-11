@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -207,22 +208,30 @@ func (s *Server) transcriptWindow(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.cfg.Transcripts.Around(r.Context(), r.PathValue("id"), uuid, aroundRadius))
 		return
 	}
-	before, limit := -1, 0
+	before, limit, err := windowParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.cfg.Transcripts.Window(r.Context(), r.PathValue("id"), before, limit))
+}
+
+// windowParams reads before (a Seq, -1 for the newest) and limit.
+func windowParams(r *http.Request) (before, limit int, err error) {
+	before = -1
 	if v := r.URL.Query().Get("before"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			http.Error(w, "before must be a non-negative integer", http.StatusBadRequest)
-			return
+			return 0, 0, errors.New("before must be a non-negative integer")
 		}
 		before = n
 	}
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 2000 {
-			http.Error(w, "limit must be 1 to 2000", http.StatusBadRequest)
-			return
+			return 0, 0, errors.New("limit must be 1 to 2000")
 		}
 		limit = n
 	}
-	writeJSON(w, http.StatusOK, s.cfg.Transcripts.Window(r.Context(), r.PathValue("id"), before, limit))
+	return before, limit, nil
 }

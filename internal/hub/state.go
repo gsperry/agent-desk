@@ -48,6 +48,8 @@ type SessionView struct {
 	Environment    string           `json:"environment,omitempty"`
 	AgentSessionID string           `json:"agentSessionId,omitempty"`
 	Project        grouping.Project `json:"project"`
+	// LastActivity is when the transcript last changed, RFC 3339.
+	LastActivity string `json:"lastActivity,omitempty"`
 }
 
 func viewOf(s am.Session, p grouping.Project) SessionView {

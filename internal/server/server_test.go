@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,14 +17,20 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
+	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/conflicts"
+	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
+	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
+	"github.com/gsperry/agent-desk/internal/usage"
 )
 
 const testToken = "0123456789abcdef0123456789abcdef"
@@ -70,6 +77,20 @@ func (f *fakeTranscripts) Around(_ context.Context, id, uuid string, _ int) hub.
 	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 3, Kind: transcript.KindUser, UUID: uuid}}}
 }
 
+func (f *fakeTranscripts) Agents(_ context.Context, id string) ([]agents.Agent, error) {
+	if id == "broken" {
+		return nil, errors.New("boom")
+	}
+	return []agents.Agent{{ID: "aaa", Status: agents.StatusRunning}}, nil
+}
+
+func (f *fakeTranscripts) AgentTranscript(_ context.Context, _, agentID string) ([]transcript.Item, error) {
+	if agentID != "aaa" {
+		return nil, agents.ErrNotFound
+	}
+	return []transcript.Item{{Seq: 0, Kind: transcript.KindText, Text: "sub"}}, nil
+}
+
 func (f *fakeTranscripts) Subscribe(_ context.Context, id string) (hub.Page, <-chan hub.Event, func()) {
 	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 0, Kind: transcript.KindUser, Text: "hi"}}}, f.events, func() {}
 }
@@ -92,6 +113,9 @@ type fakePanes struct {
 }
 
 func (f *fakePanes) Screen(context.Context, string) (pane.Screen, error) { return f.screen, f.err }
+func (f *fakePanes) Styled(context.Context, string) (string, error) {
+	return "\x1b[1m" + f.screen.Text, f.err
+}
 func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
 	f.answer = a
 	return f.err
@@ -147,6 +171,62 @@ func (f *fakeLifecycle) DeleteGroup(_ context.Context, path string) error {
 	return f.err
 }
 
+type fakeChanges struct{}
+
+func (fakeChanges) Changes(_ context.Context, id, mode string) (changes.Changes, error) {
+	if id == "norepo" {
+		return changes.Changes{}, &send.Refused{Reason: "not_repo"}
+	}
+	return changes.Changes{Repo: "/r", Mode: mode, Files: []changes.File{}}, nil
+}
+
+type fakeHistory struct{}
+
+func (fakeHistory) List(context.Context) ([]history.Conversation, error) {
+	return []history.Conversation{{ID: "c1", Title: "Old work"}}, nil
+}
+
+func (fakeHistory) Read(_ context.Context, id string, before, limit int) (hub.Page, error) {
+	if id != "c1" {
+		return hub.Page{}, history.ErrNotFound
+	}
+	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: before, Kind: transcript.KindText, Text: strconv.Itoa(limit)}}}, nil
+}
+
+func (fakeHistory) Export(_ context.Context, id string) (string, string, error) {
+	if id != "c1" {
+		return "", "", history.ErrNotFound
+	}
+	return "old-work.md", "# Old work\n", nil
+}
+
+type fakeUsage struct{}
+
+func (fakeUsage) Report(_ context.Context, days int) (usage.Report, error) {
+	return usage.Report{From: strconv.Itoa(days)}, nil
+}
+
+type fakePastes struct{}
+
+func (fakePastes) Save(data []byte) (string, error) {
+	if string(data) == "png" {
+		return "/cache/paste-1.png", nil
+	}
+	return "", errors.New("only PNG, JPEG, GIF and WebP images can be pasted")
+}
+
+type fakeConflicts struct{}
+
+func (fakeConflicts) Find(context.Context) map[string][]conflicts.Conflict {
+	return map[string][]conflicts.Conflict{"a1": {{Path: "/x", Others: []string{"b2"}}}}
+}
+
+type fakeOverview struct{}
+
+func (fakeOverview) Summaries(context.Context) map[string]overview.Summary {
+	return map[string]overview.Summary{"a1": {Activity: "Bash: go test"}}
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -183,6 +263,24 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Lifecycle == nil {
 		cfg.Lifecycle = &fakeLifecycle{}
 	}
+	if cfg.Overview == nil {
+		cfg.Overview = fakeOverview{}
+	}
+	if cfg.Changes == nil {
+		cfg.Changes = fakeChanges{}
+	}
+	if cfg.Conflicts == nil {
+		cfg.Conflicts = fakeConflicts{}
+	}
+	if cfg.Pastes == nil {
+		cfg.Pastes = fakePastes{}
+	}
+	if cfg.History == nil {
+		cfg.History = fakeHistory{}
+	}
+	if cfg.Usage == nil {
+		cfg.Usage = fakeUsage{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +289,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}, Changes: fakeChanges{}, Conflicts: fakeConflicts{}, Pastes: fakePastes{}, History: fakeHistory{}, Usage: fakeUsage{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -233,6 +331,17 @@ func TestRequestChecks(t *testing.T) {
 		{"search", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
 		{"search without token", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "", 401},
 		{"transcript around a hit", "GET", "/api/sessions/a1/transcript?around=u-1", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"conflicts", "GET", "/api/conflicts", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"changes", "GET", "/api/sessions/a1/changes?mode=branch", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"changes outside a repo", "GET", "/api/sessions/norepo/changes", "127.0.0.1:7317", "", "Bearer " + testToken, 409},
+		{"changes without token", "GET", "/api/sessions/a1/changes", "127.0.0.1:7317", "", "", 401},
+		{"overview", "GET", "/api/overview", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"overview without token", "GET", "/api/overview", "127.0.0.1:7317", "", "", 401},
+		{"agents", "GET", "/api/sessions/a1/agents", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"agents failure", "GET", "/api/sessions/broken/agents", "127.0.0.1:7317", "", "Bearer " + testToken, 502},
+		{"agent transcript", "GET", "/api/sessions/a1/agents/aaa/transcript", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"missing agent transcript", "GET", "/api/sessions/a1/agents/zzz/transcript", "127.0.0.1:7317", "", "Bearer " + testToken, 404},
+		{"agents without token", "GET", "/api/sessions/a1/agents", "127.0.0.1:7317", "", "", 401},
 		{"transcript window without token", "GET", "/api/sessions/a1/transcript", "127.0.0.1:7317", "", "", 401},
 		{"unknown api route without token", "GET", "/api/anything", "127.0.0.1:7317", "", "", 401},
 		{"static without token", "GET", "/", "127.0.0.1:7317", "", "", 200},
@@ -348,6 +457,8 @@ func TestPaneRoutes(t *testing.T) {
 	}{
 		{"screen", "GET", "/api/sessions/a1/pane", "", &fakePanes{screen: pane.Screen{Text: "hello"}}, "", 200, `"text":"hello"`},
 		{"screen refused", "GET", "/api/sessions/a1/pane", "", &fakePanes{err: &send.Refused{Reason: send.ReasonNotRunning}}, "", 409, "not_running"},
+		{"terminal", "GET", "/api/sessions/a1/terminal", "", &fakePanes{screen: pane.Screen{Text: "hi"}}, "", 200, `"screen":"\u001b[1mhi"`},
+		{"terminal refused", "GET", "/api/sessions/a1/terminal", "", &fakePanes{err: &send.Refused{Reason: send.ReasonNotRunning}}, "", 409, "not_running"},
 		{"answer", "POST", "/api/sessions/a1/answer", `{"action":"choose","index":1,"label":"No"}`, &fakePanes{}, "http://127.0.0.1:7317", 200, "ok"},
 		{"answer refused", "POST", "/api/sessions/a1/answer", `{"action":"key","key":"x"}`, &fakePanes{err: &send.Refused{Reason: "bad_key"}}, "http://127.0.0.1:7317", 409, "bad_key"},
 		{"answer bad body", "POST", "/api/sessions/a1/answer", `[`, &fakePanes{}, "http://127.0.0.1:7317", 400, "JSON"},
@@ -492,6 +603,76 @@ func TestLifecycleRoutes(t *testing.T) {
 			}
 			if tt.check != nil {
 				tt.check(t, f)
+			}
+		})
+	}
+}
+
+func TestPasteRoute(t *testing.T) {
+	tests := []struct {
+		name, body, origin string
+		want               int
+		wantBody           string
+	}{
+		{"saved", "png", "http://127.0.0.1:7317", 200, "paste-1.png"},
+		{"not an image", "<html>", "http://127.0.0.1:7317", 400, "only PNG"},
+		{"no origin", "png", "", 403, "forbidden"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{})
+			req := httptest.NewRequest("POST", "/api/paste", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestConversationRoutes(t *testing.T) {
+	tests := []struct {
+		name, path string
+		token      bool
+		want       int
+		wantBody   string
+	}{
+		{"list", "/api/conversations", true, 200, `"title":"Old work"`},
+		{"list needs token", "/api/conversations", false, 401, ""},
+		{"read", "/api/conversations/c1/transcript?before=7&limit=50", true, 200, `"seq":7`},
+		{"read passes limit", "/api/conversations/c1/transcript?limit=50", true, 200, `"text":"50"`},
+		{"unknown", "/api/conversations/zz/transcript", true, 404, "not found"},
+		{"export", "/api/conversations/c1/export", true, 200, "# Old work"},
+		{"export needs token", "/api/conversations/c1/export", false, 401, ""},
+		{"export unknown", "/api/conversations/zz/export", true, 404, "not found"},
+		{"usage default", "/api/usage", true, 200, `"from":"30"`},
+		{"usage days", "/api/usage?days=7", true, 200, `"from":"7"`},
+		{"usage bad days", "/api/usage?days=0", true, 400, "days"},
+		{"usage needs token", "/api/usage", false, 401, ""},
+		{"bad before", "/api/conversations/c1/transcript?before=-2", true, 400, "before"},
+		{"bad limit", "/api/conversations/c1/transcript?limit=9999", true, 400, "limit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{})
+			req := httptest.NewRequest("GET", tt.path, nil)
+			req.Host = "127.0.0.1:7317"
+			if tt.token {
+				req.Header.Set("Authorization", "Bearer "+testToken)
+			}
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+			}
+			if tt.name == "export" && rec.Header().Get("Content-Disposition") != `attachment; filename="old-work.md"` {
+				t.Fatalf("disposition %q", rec.Header().Get("Content-Disposition"))
 			}
 		})
 	}

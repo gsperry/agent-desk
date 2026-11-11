@@ -109,6 +109,30 @@
       "archived": false,
       "agent_session_id": "99999999-9999-4999-8999-999999999999",
       "self": false
+    },
+    {
+      "id": "a0000010",
+      "name": "orchestrator",
+      "tool": "claude",
+      "group": "",
+      "directory": "/home/dev/src/orch",
+      "status": "working",
+      "running": true,
+      "archived": false,
+      "agent_session_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "self": false
+    },
+    {
+      "id": "a0000011",
+      "name": "reviewer",
+      "tool": "claude",
+      "group": "",
+      "directory": "${FIXTURES}/repo",
+      "status": "idle",
+      "running": true,
+      "archived": false,
+      "agent_session_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "self": false
     }
   ],
   "terminals": [],

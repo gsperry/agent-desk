@@ -76,11 +76,8 @@ export function SessionActions({ session, groups, act }: Props) {
           </option>
         ))}
       </select>
-      <span
-        className="muted actions-note"
-        title="agent-manager has no command for these yet; use its TUI (r, d, R, f)."
-      >
-        Rename, delete, restart, fork: in agent-manager
+      <span className="muted actions-note" title="Rename, delete, restart and fork have no agent-manager command yet; use its TUI (r, d, R, f).">
+        More in agent-manager
       </span>
       {error && !confirmStop && <span className="form-error">{error}</span>}
       {confirmStop && (

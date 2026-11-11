@@ -56,3 +56,44 @@ test('a dialog on screen refuses the send and the text can be edited', async ({ 
   await expect(failed).toHaveCount(0)
   await expect(composer(page)).toHaveValue('pick nothing')
 })
+
+test('snippets insert from the menu and from /name plus Tab', async ({ page }) => {
+  await open(page, 'a0000003')
+  const box = composer(page)
+  await box.fill('/tests')
+  await box.press('Tab')
+  await expect(box).toHaveValue('Run the full test suite and fix anything that fails before moving on.')
+  await box.fill('')
+  await page.getByRole('button', { name: 'Snippets' }).click()
+  await page.getByRole('menuitem', { name: /\/status/ }).click()
+  await expect(box).toHaveValue(/short status/)
+})
+
+test('a snippet added in Settings fills in variables', async ({ page }) => {
+  await open(page, 'a0000003')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'Add snippet' }).click()
+  await dialog.getByRole('textbox', { name: 'Snippet name' }).last().fill('where')
+  await dialog.getByRole('textbox', { name: 'Snippet text' }).last().fill('You are {session} in {project}.')
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  const box = composer(page)
+  await box.fill('/where')
+  await box.press('Tab')
+  await expect(box).toHaveValue('You are probe in probe.')
+})
+
+test('a pasted image is stored and its path inserted', async ({ page }) => {
+  await open(page, 'a0000003')
+  const box = composer(page)
+  await box.fill('Look at this:')
+  await box.evaluate((el) => {
+    const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), (c) => c.charCodeAt(0))
+    const dt = new DataTransfer()
+    dt.items.add(new File([bytes], 'shot.png', { type: 'image/png' }))
+    const ta = el as HTMLTextAreaElement
+    ta.setSelectionRange(ta.value.length, ta.value.length)
+    ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  })
+  await expect(box).toHaveValue(/^Look at this: \/.*\/pastes\/paste-[^/]+\.png$/)
+})

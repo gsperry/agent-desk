@@ -74,7 +74,13 @@ func (x Exec) Run(ctx context.Context, name string, args ...string) ([]byte, err
 // without Agent Desk's token. Process ancestry can still identify a
 // caller; see docs/integration-notes.md.
 func Environ() []string {
-	drop := map[string]bool{"TMUX": true, "TMUX_PANE": true, "AGENT_MANAGER_SESSION_ID": true, "AGENT_DESK_TOKEN": true}
+	// CLAUDE_CODE_SESSION_ID matters when Agent Desk is started from inside
+	// a Claude Code session: agent-manager maps it to the session that owns
+	// the conversation and then refuses to type for "that session".
+	drop := map[string]bool{
+		"TMUX": true, "TMUX_PANE": true, "AGENT_MANAGER_SESSION_ID": true,
+		"CLAUDE_CODE_SESSION_ID": true, "AGENT_DESK_TOKEN": true,
+	}
 	var env []string
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")

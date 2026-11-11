@@ -44,6 +44,30 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 | `--port` | `7317` | Port on 127.0.0.1. A busy port falls back to a free one. |
 | `--no-open` | off | Print the URL without opening a browser. |
 
+## Oversight
+
+- **Overview:** the home screen (click "Agent Desk" in the sidebar) shows a card per session: what it is doing now, its last reply and your last prompt, context use, and when it last changed. Sessions that need you come first.
+- **Subagents:** the Agents button in a session's header lists the subagents its conversation spawned, running first, with type, description and duration. Click one to read its transcript, live while it runs. Agent tool calls link to their subagent.
+- **Since you last looked:** sidebar rows with new activity get a dot, and opening the session shows a divider before what arrived since your last visit.
+- **Context meter:** the session header shows how much context the latest turn used and, once that model has auto-compacted in a transcript Agent Desk has read, how close it is to compacting again.
+
+## Review and steer
+
+- **Changes:** the Changes button shows the session's git changes, uncommitted or since its branch left the default branch. Click a diff line to comment; Send review sends all comments as one numbered prompt. Git runs read-only with external diff tools, text converters, the repository's filter drivers, hooks and fsmonitor disabled, so a repository's config cannot make it run commands.
+- **Shared files:** ⚠ on a sidebar row and in the session header means another live session wrote the same file in the last six hours.
+- **Activity filter:** above the transcript, show all activity, only shell commands, only file changes, or only errors. Risky shell commands (recursive deletes, force pushes, hard resets, `sudo` and others) carry a warning badge.
+- **Snippets:** the composer's ⋯ menu inserts a saved reply, or type `/name` and press Tab. Edit them in Settings; `{session}`, `{branch}`, `{project}` and `{directory}` are filled in.
+- **Images:** paste an image into the composer. It is saved owner-only under your user cache directory, its path is inserted for the agent to read, and it is removed after seven days.
+
+## History and insight
+
+- **All conversations** (sidebar footer): every Claude Code conversation on disk, not only those agent-manager runs, newest first with title, directory and branch. Filter by any of them, and open one read-only in the normal viewer.
+- **Resume:** a past conversation no session holds can be reopened as a new agent-manager session (`agent-manager spawn --resume`), in the directory it was saved in. One a session already holds links to that session instead.
+- **Export:** the Export button in a session or conversation downloads it as Markdown: prompts and replies in full, tool calls one line each, failed tool output in short. Thinking is left out.
+- **Templates:** "Save as template" in the new session form keeps its CLI, directory, group, worktree, prompt, model and effort; pick one at the top of the form next time. Remove them in Settings.
+- **Pins and notes:** pin a prompt or reply with the pin beside it, and keep a note per conversation in the Notes panel. Both stay in this browser.
+- **Usage** (sidebar footer): tokens, replies, agent working time and time waiting on you, by day, model, project and conversation, subagents included. Cost is what Claude Code reported, at list price, which can differ from what your provider bills.
+
 ## Replying
 
 Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.
@@ -62,6 +86,8 @@ Rename, delete, restart with a fresh context, and fork have no agent-manager com
 
 When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. Options that need typing, such as "Type something", are left to agent-manager.
 
+"Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
+
 Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape. Before choosing an option it reads the screen again and refuses if the choice changed.
 
 ## Search, files and settings
@@ -69,6 +95,10 @@ Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -
 - **Search:** the box at the top of the sidebar (or `/`) searches every Claude session's transcript: prompts, replies, thinking, tool input and tool output. Click a result to see it in context, then open the session.
 - **Files:** inline code that names a file, and the Open button on file tools, open the file in VS Code at the right line (`code -g path:line`). Relative paths resolve against the session's directory. If `code` is not on your PATH, run "Shell Command: Install 'code' command in PATH" in VS Code.
 - **Settings** (gear in the sidebar): theme (system, light or dark), font size, reading width, and whether each kind of tool call and thinking starts expanded or collapsed.
+
+## Rules
+
+Settings → Rules: when a session matching a name, project or group reaches a status (waits for you, finishes a turn, hits an error, goes idle), notify you, suggest a reply, or both. A suggested reply appears above the composer with Send, Edit and Dismiss, and is only sent when you press Send. It goes away when the session's status moves on. Rules run while an Agent Desk tab is open.
 
 ## Sessions that need you
 

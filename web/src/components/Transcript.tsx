@@ -1,4 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { filterItems, type ActivityFilter } from '../model/filter'
+import { blockSeqs } from '../model/highlight'
+import { dividerSeq } from '../model/seen'
 import { buildBlocks } from '../model/transcript'
 import { BlockView } from '../render/Blocks'
 import type { Item } from '../types'
@@ -15,12 +18,17 @@ interface Props {
   // followKey changes when the reader acts (sends a reply), which brings
   // the view back to the latest output.
   followKey?: number
+  markAtOpen?: { seq: number }
+  // filterable shows the activity filter bar.
+  filterable?: boolean
 }
 
 // Within this many pixels of the bottom counts as following the latest.
 const followSlack = 80
 
-export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLoadOlder, trailing, followKey }: Props) {
+export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, live, onLoadOlder, trailing, followKey, markAtOpen, filterable }: Props) {
+  const [filter, setFilter] = useState<ActivityFilter>('all')
+  const items = useMemo(() => filterItems(allItems, filter), [allItems, filter])
   const scroller = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const following = useRef(true)
@@ -31,6 +39,18 @@ export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLo
   const prev = useRef({ sessionId, firstSeq, lastSeq, height: 0, count: items.length })
 
   const blocks = useMemo(() => buildBlocks(items), [items])
+  const newFrom = useMemo(
+    () =>
+      dividerSeq(
+        markAtOpen,
+        items.map((i) => i.seq),
+      ),
+    [markAtOpen, items],
+  )
+  const dividerKey = useMemo(() => {
+    if (newFrom === null) return null
+    return blocks.find((b) => blockSeqs(b).some((s) => s >= newFrom))?.key ?? null
+  }, [blocks, newFrom])
 
   const scrollToBottom = () => {
     const el = scroller.current
@@ -104,9 +124,44 @@ export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLo
     <div className="transcript-wrap">
       <div className="transcript" ref={scroller} onScroll={onScroll}>
         <div className="reading" ref={content}>
+          {filterable && (
+            <div className="activity-bar">
+              <div className="activity-filter segmented" role="radiogroup" aria-label="Show">
+                {(
+                  [
+                    ['all', 'All'],
+                    ['commands', 'Commands'],
+                    ['files', 'File changes'],
+                    ['errors', 'Errors'],
+                  ] as const
+                ).map(([f, label]) => (
+                  <button
+                    key={f}
+                    type="button"
+                    role="radio"
+                    aria-checked={filter === f}
+                    className={filter === f ? 'active' : undefined}
+                    onClick={() => {
+                      setFilter(f)
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {filter !== 'all' && items.length <= allItems.filter((i) => i.kind === 'user').length && <p className="muted">Nothing of this kind in the loaded history.</p>}
           {hasMore && <p className="muted center">{loadingOlder ? 'Loading earlier messages…' : 'Scroll up for earlier messages'}</p>}
           {blocks.map((b) => (
-            <BlockView key={b.key} block={b} live={live} />
+            <Fragment key={b.key}>
+              {b.key === dividerKey && (
+                <div className="new-divider" role="separator">
+                  <span>New since you last looked</span>
+                </div>
+              )}
+              <BlockView block={b} live={live} />
+            </Fragment>
           ))}
           {trailing}
         </div>

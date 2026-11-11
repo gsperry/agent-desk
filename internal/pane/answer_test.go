@@ -21,6 +21,9 @@ func (f *fakeSessions) Trigger()         {}
 type fakeReader struct{ screen string }
 
 func (f fakeReader) Read(context.Context, string) (string, error) { return f.screen, nil }
+func (f fakeReader) ReadStyled(context.Context, string) (string, error) {
+	return "\x1b[31m" + f.screen, nil
+}
 
 type recordKeys struct{ got []string }
 
@@ -97,6 +100,23 @@ func TestScreen(t *testing.T) {
 	}
 	if _, err := a.Screen(context.Background(), "missing"); err == nil {
 		t.Fatal("unknown session read")
+	}
+}
+
+func TestStyled(t *testing.T) {
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}, {ID: "s2"}}}},
+		Reader:   fakeReader{screen: "hello"},
+		Keys:     &recordKeys{},
+	}
+	got, err := a.Styled(context.Background(), "s1")
+	if err != nil || got != "\x1b[31mhello" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	for _, id := range []string{"s2", "missing", "../x"} {
+		if _, err := a.Styled(context.Background(), id); err == nil {
+			t.Errorf("Styled(%q) read a session it should refuse", id)
+		}
 	}
 }
 

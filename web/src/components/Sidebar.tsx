@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { ConnectionState } from '../api'
 import { needsAttention, type Acks } from '../model/attention'
+import { conflictTitle, type Conflicts } from '../model/conflicts'
+import { hasNew, type Seen } from '../model/seen'
 import { archivedCount, type SidebarGroup } from '../model/sidebar'
 import type { Permission } from '../notify'
 import type { Prefs } from '../store'
@@ -17,6 +19,8 @@ interface Props {
   conn: ConnectionState
   groups: SidebarGroup[]
   acks: Acks
+  seen: Seen
+  conflicts: Conflicts
   attention: number
   view: ViewOptions
   onView: (v: ViewOptions) => void
@@ -33,6 +37,11 @@ interface Props {
   onNewSession: (project: Project | null) => void
   onNewGroup: () => void
   onDeleteGroup: (path: string) => void
+  onHome: () => void
+  onHistory: () => void
+  historyOpen: boolean
+  onUsage: () => void
+  usageOpen: boolean
 }
 
 export function Sidebar(props: Props) {
@@ -43,7 +52,9 @@ export function Sidebar(props: Props) {
   return (
     <nav className="sidebar" aria-label="Sessions">
       <header className="sidebar-head">
-        <span className="brand">Agent Desk</span>
+        <button type="button" className="brand" title="Overview" onClick={props.onHome}>
+          Agent Desk
+        </button>
         <span className="head-right">
           <button
             type="button"
@@ -146,6 +157,14 @@ export function Sidebar(props: Props) {
                       {glyph(s.status)}
                     </span>
                     <span className="row-name">{s.name}</span>
+                    {props.conflicts[s.id] && (
+                      <span className="conflict-mark" title={conflictTitle(props.conflicts[s.id] ?? [], sessions)} aria-label="shares files with another session">
+                        ⚠
+                      </span>
+                    )}
+                    {s.id !== selected && hasNew(s, props.seen) && (
+                      <span className="unread" title="New activity since you last looked" aria-label="new activity" />
+                    )}
                     {s.tool !== 'claude' && <span className="row-tool">{s.tool}</span>}
                     <span className="row-status">{s.status}</span>
                   </button>
@@ -170,6 +189,12 @@ export function Sidebar(props: Props) {
         )}
         <button type="button" className="link-button" onClick={props.onNewGroup}>
           New group
+        </button>
+        <button type="button" className="link-button history-link" aria-current={props.historyOpen ? 'page' : undefined} onClick={props.onHistory}>
+          All conversations
+        </button>
+        <button type="button" className="link-button history-link" aria-current={props.usageOpen ? 'page' : undefined} onClick={props.onUsage}>
+          Usage
         </button>
         <NotifyControls {...props} />
         <p className="keys">⌘K switch · j/k next that needs you · / search</p>

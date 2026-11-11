@@ -25,11 +25,18 @@ export function spawnDefaults(project: Project | null, tool: string, worktree: b
   return { ...base, directory: project.root ?? '' }
 }
 
+// resumeDefaults reopens a saved conversation where it was saved.
+export function resumeDefaults(id: string, directory: string): SpawnRequest {
+  return { name: '', tool: 'claude', group: '', directory, worktree: false, prompt: '', model: '', effort: '', resume: id }
+}
+
 // formProblem is the first thing the form must fix before it can submit.
 export function formProblem(r: SpawnRequest): string | null {
   const d = r.directory.trim()
   if (!d) return 'Choose a directory.'
   if (!d.startsWith('/') && !d.startsWith('~/')) return 'Use a full path, starting with / or ~/.'
+  if (r.resume && r.worktree) return 'A resumed conversation runs in the directory it was saved in, not a new worktree.'
+  if (r.resume && r.tool !== 'claude') return 'Only Claude Code conversations can be resumed.'
   if (/\s/.test(r.model.trim()) || /\s/.test(r.effort.trim())) return 'Model and effort are single words.'
   return null
 }

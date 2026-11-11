@@ -52,3 +52,23 @@ test('a reply refused for a dialog opens the terminal', async ({ page }) => {
   const pane = page.getByRole('region', { name: 'Terminal' })
   await expect(pane.locator('.live-option')).toHaveCount(2)
 })
+
+test('the terminal shows the screen in color, read-only, and keeps the answer buttons', async ({ page }) => {
+  await open(page, 'a0000002')
+  const pane = page.getByRole('region', { name: 'Terminal' })
+  await pane.getByRole('button', { name: 'Color' }).click()
+  const screen = pane.locator('.xterm-rows')
+  await expect(screen).toContainText('Do you want to proceed?')
+  await expect(pane.locator('.live-screen')).toHaveCount(0)
+  await expect(pane.getByRole('button', { name: /^1 Yes/ })).toBeVisible()
+  // Typing into the terminal sends nothing.
+  await pane.locator('.xterm').click()
+  await page.keyboard.type('x')
+  await page.keyboard.press('Enter')
+  expect(keys()).toBe('')
+  // The choice is remembered.
+  await page.reload()
+  await expect(page.getByRole('region', { name: 'Terminal' }).locator('.xterm-rows')).toContainText('Do you want to proceed?')
+  await page.getByRole('region', { name: 'Terminal' }).getByRole('button', { name: 'Plain text' }).click()
+  await expect(page.getByRole('region', { name: 'Terminal' }).locator('.live-screen')).toContainText('Do you want to proceed?')
+})

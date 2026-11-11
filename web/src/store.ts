@@ -3,8 +3,10 @@ import { apiFetch, connect, type Connection, type ConnectionState } from './api'
 import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Transition } from './model/attention'
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
+import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
+import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest } from './types'
+import type { Answer, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -22,6 +24,11 @@ export interface StoreState {
   // toast is a short message about an action that failed, such as opening
   // a file.
   toast: { message: string; id: number } | null
+  seen: Seen
+  rules: Rule[]
+  // suggestions holds a rule's suggested reply per session until it is
+  // sent, dismissed, or the session's status moves on.
+  suggestions: Record<string, Suggestion>
 }
 
 const acksKey = 'agent-desk:acks'
@@ -37,7 +44,7 @@ function readJSON<T>(key: string, fallback: T): T {
 }
 
 const glyphs: Record<string, string> = { waiting: '◆', errored: '✕', finished: '●' }
-const verbs: Record<string, string> = { waiting: 'is waiting for you', errored: 'hit an error', finished: 'finished its turn' }
+const verbs: Record<string, string> = { waiting: 'is waiting for you', errored: 'hit an error', finished: 'finished its turn', idle: 'went idle' }
 
 export interface SendRefusal {
   reason?: string
@@ -71,7 +78,22 @@ export class Store {
       prefs: readJSON<Prefs>(prefsKey, { notify: true, notifyOnFinish: false }),
       permission: notifier.permission(),
       toast: null,
+      seen: loadSeen(localStorage),
+      rules: loadRules(localStorage),
+      suggestions: {},
     }
+  }
+
+  // markViewed records that the reader has looked at a conversation up to
+  // its current activity and the last item on screen.
+  markViewed(conv: string, at: string, seq: number) {
+    this.setSeen(markSeen(this.state.seen, conv, at, seq))
+  }
+
+  private setSeen(seen: Seen) {
+    if (seen === this.state.seen) return
+    saveSeen(localStorage, seen)
+    this.set({ ...this.state, seen })
   }
 
   // setOnOpen sets what a notification click does.
@@ -99,6 +121,37 @@ export class Store {
     const next = { ...this.state.prefs, ...prefs }
     localStorage.setItem(prefsKey, JSON.stringify(next))
     this.set({ ...this.state, prefs: next })
+  }
+
+  setRules(rules: Rule[]) {
+    saveRules(localStorage, rules)
+    this.set({ ...this.state, rules })
+  }
+
+  dismissSuggestion(sessionId: string) {
+    if (!(sessionId in this.state.suggestions)) return
+    const rest = Object.fromEntries(Object.entries(this.state.suggestions).filter(([id]) => id !== sessionId))
+    this.set({ ...this.state, suggestions: rest })
+  }
+
+  private runRules(list: Transition[]) {
+    if (list.length === 0) return
+    const out = applyRules(this.state.rules, list)
+    const cleared = new Set(out.cleared)
+    const suggestions = Object.fromEntries(Object.entries(this.state.suggestions).filter(([id]) => !cleared.has(id)))
+    for (const sg of out.suggestions) suggestions[sg.sessionId] = sg
+    this.set({ ...this.state, suggestions })
+    if (this.notifier.permission() !== 'granted') return
+    const { prefs } = this.state
+    for (const { rule, transition: t } of out.notify) {
+      // The general notification already covers it, or the reader is looking.
+      if (prefs.notify && shouldNotify(t, { onFinish: prefs.notifyOnFinish })) continue
+      if (this.visible && this.viewing === t.session.id) continue
+      const s = t.session
+      this.notifier.show(`${s.name} ${verbs[t.to] ?? t.to}`, `Rule: ${rule.name}`, `rule-${s.id}`, () => {
+        this.onOpen(s.id)
+      })
+    }
   }
 
   async requestPermission() {
@@ -149,7 +202,10 @@ export class Store {
     if (data === this.state.data) return
     this.set({ ...this.state, data, pending: this.reconciled(data) })
     if (msg.type === 'sessions') {
-      this.notifyTransitions(transitions(this.prevStatuses, msg.state.sessions))
+      this.setSeen(baseline(this.state.seen, msg.state.sessions))
+      const changes = transitions(this.prevStatuses, msg.state.sessions)
+      this.notifyTransitions(changes)
+      this.runRules(changes)
       this.prevStatuses = statusMap(msg.state.sessions)
       this.refreshAcks()
     }
@@ -282,6 +338,101 @@ export class Store {
     return (await this.post('/api/groups/delete', { path })).error ?? null
   }
 
+  async changes(sessionId: string, mode: Changes['mode']): Promise<{ data?: Changes; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/changes?mode=${mode}`)
+      const body = (await res.json().catch(() => ({}))) as Changes & SendRefusal
+      return res.ok ? { data: body } : { error: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // paste stores an image for the composer and returns its path.
+  async paste(image: Blob): Promise<{ path?: string; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/paste', { method: 'POST', body: image })
+      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string }
+      return res.ok ? { path: body.path } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async conflicts(): Promise<Record<string, { path: string; others: string[] }[]> | null> {
+    const res = await apiFetch(this.token, '/api/conflicts').catch(() => null)
+    if (!res?.ok) return null
+    return ((await res.json()) as { conflicts: Record<string, { path: string; others: string[] }[]> }).conflicts
+  }
+
+  // conversations lists every Claude Code conversation on disk.
+  async conversations(): Promise<{ data?: Conversation[]; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/conversations')
+      const body = (await res.json().catch(() => ({}))) as { conversations?: Conversation[]; error?: string }
+      return res.ok && body.conversations ? { data: body.conversations } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // styledScreen reads the agent's screen with color, for the read-only
+  // terminal view.
+  async styledScreen(sessionId: string): Promise<{ screen?: string; message?: string }> {
+    try {
+      const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/terminal`)
+      const body = (await res.json().catch(() => ({}))) as { screen?: string } & SendRefusal
+      return res.ok ? { screen: body.screen ?? '' } : { message: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { message: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // usage totals tokens, time and reported cost over the last days days.
+  async usage(days: number): Promise<{ data?: UsageReport; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, `/api/usage?days=${String(days)}`)
+      const body = (await res.json().catch(() => ({}))) as UsageReport & { error?: string }
+      return res.ok ? { data: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // conversationPage reads a conversation's newest items, or those before
+  // a sequence number.
+  async conversationPage(id: string, before?: number): Promise<{ data?: Page; error?: string }> {
+    const params = new URLSearchParams()
+    if (before !== undefined) params.set('before', String(before))
+    try {
+      const res = await apiFetch(this.token, `/api/conversations/${encodeURIComponent(id)}/transcript?${params.toString()}`)
+      const body = (await res.json().catch(() => ({}))) as Page & { error?: string }
+      return res.ok ? { data: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async overview(): Promise<Record<string, Summary> | null> {
+    const res = await apiFetch(this.token, '/api/overview').catch(() => null)
+    if (!res?.ok) return null
+    return ((await res.json()) as { summaries: Record<string, Summary> }).summaries
+  }
+
+  async agents(sessionId: string): Promise<SubAgent[] | null> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/agents`).catch(() => null)
+    if (!res?.ok) return null
+    return ((await res.json()) as { agents: SubAgent[] }).agents
+  }
+
+  async agentTranscript(sessionId: string, agentId: string): Promise<Item[] | null> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/transcript`).catch(
+      () => null,
+    )
+    if (!res?.ok) return null
+    return ((await res.json()) as { items: Item[] }).items
+  }
+
   async search(query: string, archived: boolean): Promise<{ result?: SearchResult; error?: string }> {
     const params = new URLSearchParams({ q: query })
     if (archived) params.set('archived', '1')
@@ -310,6 +461,24 @@ export class Store {
     if (res?.ok) return
     const body = res ? ((await res.json().catch(() => ({}))) as SendRefusal) : {}
     this.showToast(body.message ?? body.error ?? 'Could not open the file.')
+  }
+
+  // exportConversation downloads a conversation as Markdown.
+  async exportConversation(id: string) {
+    const res = await apiFetch(this.token, `/api/conversations/${encodeURIComponent(id)}/export`).catch(() => null)
+    if (!res?.ok) {
+      this.showToast(res?.status === 404 ? 'Claude Code has not saved this conversation yet.' : 'Could not export the conversation.')
+      return
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'conversation.md'
+    const url = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 10_000)
   }
 
   showToast(message: string) {

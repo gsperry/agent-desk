@@ -92,7 +92,7 @@ Rules Agent Desk follows (`internal/send`):
 
 A reply sent while the agent works is queued by Claude Code and recorded only as a `queued_command` attachment, never as a `user` record. The parser renders it as a prompt and the client reconciles against it.
 
-Caller pitfall: the CLI identifies its caller by process ancestry, then `TMUX_PANE`, then `AGENT_MANAGER_SESSION_ID` (`main.go`, `callerSession`). If Agent Desk is started from a shell inside an `am_*` pane (a `T` terminal or an agent), every `type` is refused. Agent Desk checks `self: true` in the snapshot at startup and shows a clear error.
+Caller pitfall: the CLI identifies its caller by process ancestry, then `CLAUDE_CODE_SESSION_ID` (the session owning that conversation), then `AGENT_MANAGER_SESSION_ID`, then `TMUX_PANE` (`main.go`, `callerSession`). Agent Desk drops those variables from its child processes, but ancestry still counts. If Agent Desk is started from a shell inside an `am_*` pane (a `T` terminal or an agent), every `type` is refused. Agent Desk checks `self: true` in the snapshot at startup and shows a clear error.
 
 ## 4. Mapping a session to its transcript
 

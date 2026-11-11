@@ -1,0 +1,2 @@
+{"type":"user","uuid":"a-1","timestamp":"2026-11-10T09:00:02.000Z","isSidechain":true,"agentId":"aaa1","message":{"role":"user","content":"Implement row 1."}}
+{"type":"assistant","uuid":"a-2","timestamp":"2026-11-10T09:19:00.000Z","isSidechain":true,"agentId":"aaa1","message":{"id":"msg_a1","content":[{"type":"text","text":"Row 1 implemented and tested."}]}}

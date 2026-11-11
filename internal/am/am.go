@@ -52,6 +52,8 @@ type Client interface {
 	Type(ctx context.Context, id, text string) error
 	// Read returns the session's visible screen as plain text.
 	Read(ctx context.Context, id string) (string, error)
+	// ReadStyled returns the screen with its color escape sequences.
+	ReadStyled(ctx context.Context, id string) (string, error)
 }
 
 // ErrNotInstalled reports agent-manager missing from PATH.
@@ -136,6 +138,21 @@ func (c *CLI) Type(ctx context.Context, id, text string) error {
 
 func (c *CLI) Read(ctx context.Context, id string) (string, error) {
 	out, err := c.run(ctx, "read", "--json", "--", id)
+	if err != nil {
+		return "", err
+	}
+	var screen struct {
+		Output string `json:"output"`
+	}
+	if err := json.Unmarshal(out, &screen); err != nil {
+		return "", fmt.Errorf("agent-manager read: %w", err)
+	}
+	return screen.Output, nil
+}
+
+// ReadStyled is Read with the screen's color escape sequences kept.
+func (c *CLI) ReadStyled(ctx context.Context, id string) (string, error) {
+	out, err := c.run(ctx, "read", "--styled", "--json", "--", id)
 	if err != nil {
 		return "", err
 	}

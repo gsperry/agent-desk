@@ -37,11 +37,19 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/locate`: conversation id to `<config>/projects/*/<id>.jsonl`
 - `internal/tail`: offset follower (partial lines, truncation, replacement, deletion)
 - `internal/transcript`: tolerant JSONL parser to typed items
-- `internal/hub`: session poller (1 s plus hook-file events) and live transcripts
-- `internal/manage`: spawn, kill, revive, archive, move and groups through agent-manager, validated against current state
+- `internal/hub`: session poller (1 s plus hook-file events, transcript activity) and live transcripts
+- `internal/manage`: spawn (and resume), kill, revive, archive, move and groups through agent-manager, validated against current state
+- `internal/agents`: subagents of a conversation (`subagents/*.meta.json`), status from task notifications, and their transcripts
+- `internal/overview`: per-session summary from the transcript tail, cached by size and mtime
+- `internal/changes`: read-only git changes for a session (ext diff, textconv, repo filter drivers, hooks and fsmonitor disabled; GIT_ variables dropped), parsed into hunks
+- `internal/conflicts`: files written by more than one live session, from transcript tails
+- `internal/paste`: pasted images, type sniffed from bytes, owner-only, cleaned after 7 days
+- `internal/history`: every conversation on disk (listing cached by size and mtime) and read-only paging
+- `internal/export`: transcript to Markdown
+- `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
-- `internal/pane`: dialog parser and answers (allow-listed keys through `tmux -L agentmgr send-keys`)
+- `internal/pane`: dialog parser, answers (allow-listed keys through `tmux -L agentmgr send-keys`) and the styled screen for the read-only color view
 - `internal/send`: reply gate (status, dialog footer, composer draft, text cleaning) and delivery through `agent-manager type`
 - `internal/server`: HTTP, WebSocket, auth checks
 - `web/src/model`: pure view-model logic, covered by Vitest

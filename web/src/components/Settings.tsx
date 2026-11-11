@@ -1,9 +1,18 @@
 import type { ReactNode } from 'react'
+import { defaultSnippets, validName, type Snippet } from '../model/snippets'
+import { newRule, ruleStatuses, type Rule, type RuleStatus } from '../model/rules'
+import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 
 interface Props {
   prefs: ViewPrefs
   onChange: (p: ViewPrefs) => void
+  snippets: Snippet[]
+  onSnippets: (s: Snippet[]) => void
+  templates: Template[]
+  onTemplates: (t: Template[]) => void
+  rules: Rule[]
+  onRules: (r: Rule[]) => void
   onClose: () => void
 }
 
@@ -36,7 +45,10 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, onClose }: Props) {
+  const setRule = (id: string, p: Partial<Rule>) => {
+    onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
+  }
   const set = (p: Partial<ViewPrefs>) => {
     onChange({ ...prefs, ...p })
   }
@@ -170,9 +182,177 @@ export function Settings({ prefs, onChange, onClose }: Props) {
           />
           <p className="muted setting-note">Failed tool calls always start expanded. Changes apply to blocks as they appear.</p>
         </Section>
+        <Section title="Reply snippets">
+          <p className="muted setting-note">
+            Insert from the composer's ⋯ menu, or type /name and press Tab. {'{session}'}, {'{branch}'}, {'{project}'} and {'{directory}'} are filled in.
+          </p>
+          {snippets.map((sn, i) => (
+            <div key={i} className="snippet-edit">
+              <input
+                aria-label="Snippet name"
+                value={sn.name}
+                className={validName(sn.name) ? undefined : 'invalid'}
+                onChange={(e) => {
+                  onSnippets(snippets.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                }}
+              />
+              <textarea
+                aria-label="Snippet text"
+                rows={2}
+                value={sn.text}
+                onChange={(e) => {
+                  onSnippets(snippets.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))
+                }}
+              />
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  onSnippets(snippets.filter((_, j) => j !== i))
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div className="snippet-actions">
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                onSnippets([...snippets, { name: `snippet${String(snippets.length + 1)}`, text: '' }])
+              }}
+            >
+              Add snippet
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                onSnippets(defaultSnippets)
+              }}
+            >
+              Restore defaults
+            </button>
+          </div>
+        </Section>
+        <Section title="Rules">
+          <p className="muted setting-note">
+            When a session reaches a status, notify you, suggest a reply, or both. A suggested reply shows above the composer and is only sent when you press Send. Rules run while an Agent Desk tab is open.
+          </p>
+          {rules.map((r) => (
+            <fieldset key={r.id} className="rule-edit" aria-label={`Rule ${r.name}`}>
+              <div className="rule-line">
+                <input
+                  type="checkbox"
+                  aria-label="Enabled"
+                  checked={r.enabled}
+                  onChange={(e) => {
+                    setRule(r.id, { enabled: e.target.checked })
+                  }}
+                />
+                <input
+                  aria-label="Rule name"
+                  value={r.name}
+                  onChange={(e) => {
+                    setRule(r.id, { name: e.target.value })
+                  }}
+                />
+                <button
+                  type="button"
+                  className="link-button"
+                  aria-label={`Remove rule ${r.name}`}
+                  onClick={() => {
+                    onRules(rules.filter((x) => x.id !== r.id))
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="rule-line">
+                <span className="muted">When a session matching</span>
+                <input
+                  aria-label="Match"
+                  placeholder="any session"
+                  value={r.match}
+                  onChange={(e) => {
+                    setRule(r.id, { match: e.target.value })
+                  }}
+                />
+                <select
+                  aria-label="Status"
+                  value={r.status}
+                  onChange={(e) => {
+                    setRule(r.id, { status: e.target.value as RuleStatus })
+                  }}
+                >
+                  {ruleStatuses.map(([v, label]) => (
+                    <option key={v} value={v}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={r.notify}
+                  onChange={(e) => {
+                    setRule(r.id, { notify: e.target.checked })
+                  }}
+                />{' '}
+                Notify me
+              </label>
+              <textarea
+                aria-label="Suggested reply"
+                rows={2}
+                placeholder="Suggested reply (optional). {session}, {branch}, {project} and {directory} are filled in."
+                value={r.prompt}
+                onChange={(e) => {
+                  setRule(r.id, { prompt: e.target.value })
+                }}
+              />
+            </fieldset>
+          ))}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              onRules([...rules, newRule(`r${String(Date.now())}`)])
+            }}
+          >
+            Add rule
+          </button>
+        </Section>
+        <Section title="Session templates">
+          <p className="muted setting-note">Save one from the new session form with “Save as template”; pick it at the top of the form next time.</p>
+          {templates.length === 0 && <p className="muted setting-note">No templates yet.</p>}
+          <ul className="template-list">
+            {templates.map((t) => (
+              <li key={t.name}>
+                <strong>{t.name}</strong>
+                <span className="muted">{templateSummary(t)}</span>
+                <button
+                  type="button"
+                  className="link-button"
+                  aria-label={`Remove template ${t.name}`}
+                  onClick={() => {
+                    onTemplates(templates.filter((x) => x.name !== t.name))
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Section>
       </div>
     </div>
   )
+}
+
+function templateSummary(t: Template): string {
+  return [t.tool, t.directory, t.group && `group ${t.group}`, t.worktree && 'worktree', t.model, t.effort, t.prompt && 'with prompt'].filter(Boolean).join(' · ')
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

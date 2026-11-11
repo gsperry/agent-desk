@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { diffStats, patchRows, replaceRows, type DiffRow } from '../model/diff'
+import { riskyCommand } from '../model/filter'
 import { toolPathRef } from '../model/paths'
 import { toolLabel } from '../model/transcript'
 import { initiallyOpen } from '../model/viewprefs'
+import { useAgentLinks } from '../agents-context'
 import { useOpenPath } from '../session-context'
 import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
@@ -60,10 +62,13 @@ export function ToolCall({ use, result, live }: Props) {
   const [open, setOpen] = useState(() => initiallyOpen(name, prefs, { failed, diffRows: rows.length }))
   const state = result ? (failed ? 'error' : 'done') : live ? 'running' : 'none'
   const openPath = useOpenPath()
+  const risk = name === 'Bash' ? riskyCommand(str(obj(use.tool?.input).command)) : null
+  const links = useAgentLinks()
+  const subagent = links && use.tool?.id ? links.agentFor(use.tool.id) : undefined
   const fileRef = toolPathRef(obj(use.tool?.input), rows.find((r) => r.newNo !== undefined)?.newNo)
 
   return (
-    <div className={`tool tool-${state}`}>
+    <div className={`tool tool-${state}${risk ? ' tool-risky' : ''}`}>
       <button
         type="button"
         className="tool-row"
@@ -75,6 +80,11 @@ export function ToolCall({ use, result, live }: Props) {
         <span className="chevron">{open ? '▾' : '▸'}</span>
         <span className="tool-name">{label.name}</span>
         <span className="tool-summary">{label.summary}</span>
+        {risk && (
+          <span className="risk-badge" title={`Risky: ${risk}`}>
+            ⚠ {risk}
+          </span>
+        )}
         {stats && (
           <span className="tool-stats">
             <span className="add">+{stats.added}</span> <span className="del">−{stats.removed}</span>
@@ -82,6 +92,18 @@ export function ToolCall({ use, result, live }: Props) {
         )}
         <span className="tool-state">{state === 'running' ? '…' : state === 'error' ? 'failed' : ''}</span>
       </button>
+      {subagent && links && (
+        <button
+          type="button"
+          className="tool-open tool-open-agent"
+          title="Read this subagent's transcript"
+          onClick={() => {
+            links.open(subagent)
+          }}
+        >
+          View transcript
+        </button>
+      )}
       {fileRef && openPath && (
         <button
           type="button"

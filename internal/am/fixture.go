@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,12 +24,23 @@ type Fixture struct {
 	Path string
 }
 
+// Snapshot expands ${FIXTURES} in session directories to the fixture
+// directory, so tests can point a session at a repository they create.
 func (f Fixture) Snapshot(context.Context) (Snapshot, error) {
 	data, err := os.ReadFile(f.Path)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	return ParseSnapshot(data)
+	snap, err := ParseSnapshot(data)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if dir, err := filepath.Abs(filepath.Dir(f.Path)); err == nil {
+		for i := range snap.Sessions {
+			snap.Sessions[i].Directory = strings.ReplaceAll(snap.Sessions[i].Directory, "${FIXTURES}", dir)
+		}
+	}
+	return snap, nil
 }
 
 func (f Fixture) StartServe(context.Context) error { return nil }
@@ -41,6 +53,15 @@ func (f Fixture) Read(_ context.Context, id string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(f.Path), "panes", filepath.Base(id)+".txt"))
 	if errors.Is(err, os.ErrNotExist) {
 		return idleScreen, nil
+	}
+	return string(data), err
+}
+
+// ReadStyled serves panes/<id>.ansi, or the plain screen when there is none.
+func (f Fixture) ReadStyled(ctx context.Context, id string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(f.Path), "panes", filepath.Base(id)+".ansi"))
+	if errors.Is(err, os.ErrNotExist) {
+		return f.Read(ctx, id)
 	}
 	return string(data), err
 }
@@ -134,6 +155,9 @@ func (f Fixture) Spawn(_ context.Context, r SpawnRequest) (Session, error) {
 		Status:         "idle",
 		Running:        true,
 		AgentSessionID: fmt.Sprintf("%s-0000-4000-8000-%s", randomHex(4), randomHex(6)),
+	}
+	if r.Resume != "" {
+		s.AgentSessionID = r.Resume
 	}
 	if s.Name == "" {
 		s.Name = s.Tool + "-" + s.ID[:4]

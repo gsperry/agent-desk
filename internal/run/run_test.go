@@ -53,8 +53,9 @@ func TestEnvironDropsSessionVariables(t *testing.T) {
 	t.Setenv("AGENT_MANAGER_SESSION_ID", "abcd1234")
 	t.Setenv("AGENT_DESK_KEEP", "yes")
 	t.Setenv("AGENT_DESK_TOKEN", "secret")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "df2d1f97-0000-4000-8000-000000000000")
 	env := strings.Join(Environ(), "\n")
-	for _, k := range []string{"TMUX=", "TMUX_PANE=", "AGENT_MANAGER_SESSION_ID=", "AGENT_DESK_TOKEN="} {
+	for _, k := range []string{"TMUX=", "TMUX_PANE=", "AGENT_MANAGER_SESSION_ID=", "CLAUDE_CODE_SESSION_ID=", "AGENT_DESK_TOKEN="} {
 		if strings.Contains("\n"+env, "\n"+k) {
 			t.Errorf("%s still present", k)
 		}

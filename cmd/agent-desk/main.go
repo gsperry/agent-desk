@@ -22,16 +22,22 @@ import (
 	"time"
 
 	"github.com/gsperry/agent-desk/internal/am"
+	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/grouping"
+	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
+	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
+	"github.com/gsperry/agent-desk/internal/paste"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
+	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
 )
 
@@ -82,7 +88,12 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
+	poller.Activity = transcriptActivity(transcripts.Locator)
 	searcher := &search.Searcher{Sessions: poller, Locator: transcripts.Locator}
+	pastes, err := pasteStore(o.fixtures)
+	if err != nil {
+		return err
+	}
 	l, err := listen(o.port)
 	if err != nil {
 		return err
@@ -102,6 +113,15 @@ func run(o options) error {
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},
+		Overview:    &overview.Overview{Sessions: poller, Locator: transcripts.Locator},
+		Conflicts:   &conflicts.Finder{Sessions: poller, Locator: transcripts.Locator},
+		Pastes:      pastes,
+		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
+		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
+		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
+			Timeout: 15 * time.Second,
+			Env:     changes.Env(procrun.Environ()),
+		}}},
 	})
 	if err != nil {
 		return err
@@ -122,6 +142,7 @@ func run(o options) error {
 	defer stop()
 	go poller.Run(ctx)
 	go transcripts.Run(ctx)
+	go cleanPastes(ctx, pastes)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	select {
@@ -158,6 +179,25 @@ func newPoller(fixtures string) (*hub.Poller, backend, error) {
 	return p, c, nil
 }
 
+// transcriptActivity is the transcript's modification time, for Claude
+// sessions whose transcript exists.
+func transcriptActivity(l *locate.Locator) func(context.Context, am.Session) (time.Time, bool) {
+	return func(ctx context.Context, s am.Session) (time.Time, bool) {
+		if s.Tool != "claude" || s.AgentSessionID == "" {
+			return time.Time{}, false
+		}
+		path, err := l.Find(ctx, s.AgentSessionID, s.Environment)
+		if err != nil {
+			return time.Time{}, false
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return info.ModTime(), true
+	}
+}
+
 // newTranscripts reads Claude's transcripts, or <fixtures>/claude in
 // fixture mode.
 func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*hub.Transcripts, error) {
@@ -172,6 +212,37 @@ func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*h
 		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
 		Sessions: sessions,
 	}, nil
+}
+
+// pasteStore keeps pasted images under the user cache directory, or the
+// fixture directory in fixture mode.
+func pasteStore(fixtures string) (paste.Store, error) {
+	if fixtures != "" {
+		// Agents read the path from anywhere, so it must be absolute.
+		dir, err := filepath.Abs(filepath.Join(fixtures, "pastes"))
+		return paste.Store{Dir: dir}, err
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return paste.Store{}, err
+	}
+	return paste.Store{Dir: filepath.Join(dir, "agent-desk", "pastes")}, nil
+}
+
+// cleanPastes removes week-old pasted images at start and once a day.
+func cleanPastes(ctx context.Context, s paste.Store) {
+	const age = 7 * 24 * time.Hour
+	s.Cleanup(age, time.Now())
+	t := time.NewTicker(24 * time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			s.Cleanup(age, now)
+		}
+	}
 }
 
 // keys presses dialog keys through agent-manager's tmux server, or records
