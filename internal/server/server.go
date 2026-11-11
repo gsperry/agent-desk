@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/send"
 )
 
@@ -45,10 +46,18 @@ type Config struct {
 	Transcripts TranscriptSource
 	// Sender delivers replies to sessions.
 	Sender Sender
+	// Panes serves the live pane.
+	Panes Panes
 }
 
 type Sender interface {
 	Send(ctx context.Context, sessionID, text string) (send.Result, error)
+}
+
+// Panes reads a session's screen and answers its dialogs.
+type Panes interface {
+	Screen(ctx context.Context, sessionID string) (pane.Screen, error)
+	Answer(ctx context.Context, sessionID string, a pane.Answer) error
 }
 
 type TranscriptSource interface {
@@ -74,8 +83,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil {
-		return nil, errors.New("sessions, manager, transcripts and sender are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil {
+		return nil, errors.New("sessions, manager, transcripts, sender and panes are required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -97,6 +106,8 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("GET /api/sessions", s.requireToken(http.HandlerFunc(s.sessions)))
 	s.mux.Handle("GET /api/sessions/{id}/transcript", s.requireToken(http.HandlerFunc(s.transcriptWindow)))
 	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
+	s.mux.Handle("GET /api/sessions/{id}/pane", s.requireToken(http.HandlerFunc(s.screen)))
+	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
 	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
 	s.mux.HandleFunc("GET /api/ws", s.websocket)
 	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
@@ -190,15 +201,49 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	res, err := s.cfg.Sender.Send(ctx, r.PathValue("id"), body.Text)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) screen(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	sc, err := s.cfg.Panes.Screen(ctx, r.PathValue("id"))
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, sc)
+}
+
+func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
+	var a pane.Answer
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&a); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be a JSON answer"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if writeRefusal(w, s.cfg.Panes.Answer(ctx, r.PathValue("id"), a)) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// writeRefusal writes err as 409 for a refusal or 502 otherwise, and
+// reports whether it wrote anything.
+func writeRefusal(w http.ResponseWriter, err error) bool {
 	var refused *send.Refused
 	switch {
+	case err == nil:
+		return false
 	case errors.As(err, &refused):
 		writeJSON(w, http.StatusConflict, refused)
-	case err != nil:
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 	default:
-		writeJSON(w, http.StatusOK, res)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -24,6 +24,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
+	"github.com/gsperry/agent-desk/internal/pane"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
@@ -92,6 +93,7 @@ func run(o options) error {
 		Manager:     client,
 		Transcripts: transcripts,
 		Sender:      &send.Sender{Sessions: poller, Pane: client},
+		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures)},
 	})
 	if err != nil {
 		return err
@@ -155,6 +157,15 @@ func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*h
 		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
 		Sessions: sessions,
 	}, nil
+}
+
+// keys presses dialog keys through agent-manager's tmux server, or records
+// them in <fixtures>/keys.log in fixture mode.
+func keys(fixtures string) pane.Keys {
+	if fixtures != "" {
+		return pane.FileKeys{Path: filepath.Join(fixtures, "keys.log")}
+	}
+	return pane.TmuxKeys{Runner: procrun.Exec{Timeout: 5 * time.Second}}
 }
 
 // sessionToken reads AGENT_DESK_TOKEN so `make dev` keeps one token across
