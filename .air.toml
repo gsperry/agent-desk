@@ -1,0 +1,12 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/agent-desk ./cmd/agent-desk"
+entrypoint = ["./tmp/agent-desk", "--no-open", "--dev-origin", "http://localhost:5173"]
+include_ext = ["go"]
+exclude_dir = ["web", "tmp", "bin", "docs", "testdata"]
+delay = 300
+
+[misc]
+clean_on_exit = true
