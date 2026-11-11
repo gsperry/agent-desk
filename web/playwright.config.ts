@@ -9,6 +9,8 @@ export const token = 'e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2
 export default defineConfig({
   testDir: 'e2e',
   timeout: 30_000,
+  // Tests change the shared fixture copy, so they run one at a time.
+  workers: 1,
   use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
   webServer: {
     command: `rm -rf .e2e-fixtures && cp -RL ../testdata/fixtures/desk .e2e-fixtures && ../bin/agent-desk --no-open --port ${String(port)} --fixtures .e2e-fixtures`,
