@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Desk: a local GUI for your coding agents</title>
+  <meta name="description" content="Agent Desk is a local GUI over agent-manager. Read every coding agent's session as a document, answer its prompts, review its changes and reply, while every agent keeps running in tmux.">
+  <meta property="og:title" content="Agent Desk">
+  <meta property="og:description" content="A local GUI for your fleet of coding agents. Read, answer, review and reply, while every agent keeps running in tmux.">
+  <meta property="og:image" content="https://agent-desk.app/img/session.png">
+  <meta property="og:url" content="https://agent-desk.app/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://agent-desk.app/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="wordmark" href="/">Agent&nbsp;Desk<span class="mark" aria-hidden="true"></span></a>
+    <nav aria-label="Site">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#local">Local and safe</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/gsperry/agent-desk" aria-label="Agent Desk on GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">Go · React · Apache 2.0 · macOS first</p>
+        <h1>A desk for your <em>fleet</em> of coding agents.</h1>
+        <p class="lede">
+          <strong>Agent Desk</strong> is a local GUI over
+          <a href="https://agent-manager.dev">agent-manager</a>. Every Claude Code session reads as a
+          document. Answer a waiting agent with one click, review its diff and send notes back, and see the
+          whole fleet at a glance. Every agent keeps running in tmux; closing Agent Desk stops nothing.
+        </p>
+        <div class="cta">
+          <a class="button primary" href="#install">Install</a>
+          <a class="button" href="https://github.com/gsperry/agent-desk">View on GitHub</a>
+        </div>
+        <div class="command" role="group" aria-label="Install command">
+          <code><span class="prompt">$</span> git clone https://github.com/gsperry/agent-desk</code>
+          <button type="button" class="copy" data-copy="git clone https://github.com/gsperry/agent-desk">Copy</button>
+        </div>
+      </div>
+      <figure class="shot hero-shot">
+        <figcaption><span class="fig">Fig. 1</span> A session as a document: prompt, reply, tool calls, diffs</figcaption>
+        <img src="/img/session.png" width="1440" height="900" alt="Agent Desk showing a session: the sidebar groups sessions by project with live status, and the transcript shows a prompt, the agent's reply, a code edit as a diff and test runs">
+      </figure>
+    </section>
+
+    <section id="features" class="section">
+      <p class="eyebrow">Features</p>
+      <h2>Everything an agent needs from you, in one place.</h2>
+
+      <div class="feature">
+        <div class="feature-text">
+          <h3>See the whole fleet</h3>
+          <p>The overview gives every session a card: what it is doing right now, its last reply, your last prompt, context use and when it last changed. Sessions waiting on you come first, and a dot marks anything new since you last looked.</p>
+          <p class="small">Subagents too: the Agents panel lists every subagent a conversation started, with its own live transcript.</p>
+        </div>
+        <figure class="shot">
+          <figcaption><span class="fig">Fig. 2</span> Overview</figcaption>
+          <img src="/img/overview.png" width="1440" height="900" loading="lazy" alt="The overview: a card per session with status, current activity, last reply, context use and age, waiting and errored sessions first">
+        </figure>
+      </div>
+
+      <div class="feature flip">
+        <div class="feature-text">
+          <h3>Answer without attaching</h3>
+          <p>When an agent stops on a permission prompt or a question, the terminal opens under its transcript with a button for each option. Agent Desk reads the screen again before it presses a key, and refuses if the choice changed.</p>
+          <p class="small">Replies go through <code>agent-manager type</code>, and are refused with a reason when they would land anywhere but the agent's prompt.</p>
+        </div>
+        <figure class="shot">
+          <figcaption><span class="fig">Fig. 3</span> A waiting agent, answered with one click</figcaption>
+          <img src="/img/waiting.png" width="1440" height="900" loading="lazy" alt="A session waiting on a permission prompt: the failed test run, the agent's explanation, the terminal screen and a button for each answer">
+        </figure>
+      </div>
+
+      <div class="feature">
+        <div class="feature-text">
+          <h3>Review the diff, send notes back</h3>
+          <p>The Changes panel shows a session's git changes, uncommitted or for the whole branch. Click a line to comment; Send review hands the agent every comment as one numbered prompt.</p>
+          <p class="small">Git runs read-only, with external diff tools, text converters, the repository's filter drivers and hooks disabled, so a repository cannot make it run commands.</p>
+        </div>
+        <figure class="shot">
+          <figcaption><span class="fig">Fig. 4</span> Line comments on a session's changes</figcaption>
+          <img src="/img/changes.png" width="1440" height="900" loading="lazy" alt="The Changes panel: a file list, a diff with added and removed lines, and a review comment attached to a line">
+        </figure>
+      </div>
+
+      <div class="feature flip">
+        <div class="feature-text">
+          <h3>History and usage</h3>
+          <p>Browse every conversation on disk, not only the running ones, export any of them to Markdown, or resume one as a new agent-manager session. Usage shows tokens, agent working time and time spent waiting on you, by day, model, project and conversation.</p>
+          <p class="small">Cost is what Claude Code reports, at list price.</p>
+        </div>
+        <figure class="shot">
+          <figcaption><span class="fig">Fig. 5</span> Usage over 30 days</figcaption>
+          <img src="/img/usage.png" width="1440" height="900" loading="lazy" alt="The usage view: totals for tokens, replies, working time, waiting time and reported cost, a bar chart of tokens per day, and tables by model and project">
+        </figure>
+      </div>
+
+      <ul class="more">
+        <li><strong>Search</strong> every transcript: prompts, replies, thinking and tool output.</li>
+        <li><strong>Notifications</strong> when a session waits, errors or finishes, and a "needs you" count in the tab.</li>
+        <li><strong>Snippets</strong> for replies you send often, with <code>/name</code> and Tab.</li>
+        <li><strong>Rules</strong> that notify you or suggest a reply when a session reaches a status. You always press Send.</li>
+        <li><strong>Pins and notes</strong> per conversation, kept in your browser.</li>
+        <li><strong>Image paste</strong> into the composer, stored owner-only and cleaned after a week.</li>
+        <li><strong>Color terminal</strong> view of any session, read-only.</li>
+        <li><strong>Shell edits shown:</strong> files a command changed, with line counts and diffs.</li>
+        <li><strong>Catch-up summaries</strong> of what happened while you were away, opt-in, through your own Claude Code CLI. They cost tokens.</li>
+        <li><strong>Session management:</strong> start, stop, revive, archive and move sessions, with templates for new ones.</li>
+      </ul>
+    </section>
+
+    <section id="how" class="section">
+      <p class="eyebrow">How it works</p>
+      <h2>agent-manager runs the agents. Agent Desk is where you read and talk to them.</h2>
+      <ol class="steps">
+        <li><span class="step">01</span><div><h3>Sessions stay in agent-manager</h3><p>Every agent runs in agent-manager's tmux server with your own CLI, login and config. Agent Desk reads session state from <code>agent-manager snapshot</code> and acts only through its commands.</p></div></li>
+        <li><span class="step">02</span><div><h3>Transcripts become documents</h3><p>Claude Code's session files are parsed into prompts, replies, tool calls and diffs, and followed live as the agent writes. Records it does not recognize are shown, never dropped.</p></div></li>
+        <li><span class="step">03</span><div><h3>One binary, one port</h3><p>A Go server with the React app embedded, on 127.0.0.1. Close it and every agent keeps working.</p></div></li>
+      </ol>
+    </section>
+
+    <section id="local" class="section">
+      <p class="eyebrow">Local and safe</p>
+      <h2>Your agents, your machine, nobody else.</h2>
+      <div class="grid">
+        <div class="card"><h3>Loopback only</h3><p>Listens on 127.0.0.1. Every request needs a token that changes on each start, and must name the server's own host; state-changing requests must come from its own origin.</p></div>
+        <div class="card"><h3>No telemetry</h3><p>No analytics, no network calls beyond localhost. This page has none either.</p></div>
+        <div class="card"><h3>No API keys</h3><p>Agent Desk never asks for a key and never calls a model API. Optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.</p></div>
+        <div class="card"><h3>Read-only transcripts</h3><p>Nothing is ever written under <code>~/.claude</code>. Agent Desk reads Claude Code's files and runs local CLIs, nothing more.</p></div>
+      </div>
+    </section>
+
+    <section id="install" class="section">
+      <p class="eyebrow">Install</p>
+      <h2>Build it from source.</h2>
+      <div class="install">
+        <div>
+          <h3>You need</h3>
+          <ul>
+            <li><a href="https://agent-manager.dev">agent-manager</a> 0.48 or later, with tmux</li>
+            <li><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a></li>
+            <li>Go 1.27 and Node 24 or later, to build</li>
+          </ul>
+        </div>
+        <pre class="terminal"><code><span class="prompt">$</span> git clone https://github.com/gsperry/agent-desk
+<span class="prompt">$</span> cd agent-desk
+<span class="prompt">$</span> make build
+<span class="prompt">$</span> install -m 0755 bin/agent-desk ~/.local/bin/agent-desk
+<span class="prompt">$</span> agent-desk
+<span class="out">Agent Desk listening on http://127.0.0.1:7317</span></code></pre>
+      </div>
+      <p class="small">It opens in your browser. Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Agent Desk is an independent project, not affiliated with or endorsed by the agent-manager authors or Anthropic.</p>
+    <p><a href="https://github.com/gsperry/agent-desk">GitHub</a> · <a href="https://github.com/gsperry/agent-desk/blob/main/LICENSE">Apache 2.0</a> · <a href="https://github.com/gsperry/agent-desk/blob/main/SECURITY.md">Security</a> · Screenshots show made-up demo sessions.</p>
+  </footer>
+
+  <script src="/copy.js" defer></script>
+</body>
+</html>
