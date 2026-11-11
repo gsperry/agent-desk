@@ -38,6 +38,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/tail`: offset follower (partial lines, truncation, replacement, deletion)
 - `internal/transcript`: tolerant JSONL parser to typed items
 - `internal/hub`: session poller (1 s plus hook-file events) and live transcripts
+- `internal/manage`: spawn, kill, revive, archive, move and groups through agent-manager, validated against current state
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
 - `internal/pane`: dialog parser and answers (allow-listed keys through `tmux -L agentmgr send-keys`)
