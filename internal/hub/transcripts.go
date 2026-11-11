@@ -120,6 +120,27 @@ func (d *doc) window(before, limit int) Page {
 	return page
 }
 
+// Around returns up to radius items on each side of the first item with
+// uuid, for showing a search hit in context. Items is empty when the uuid
+// is not in the transcript.
+func (t *Transcripts) Around(ctx context.Context, sessionID, uuid string, radius int) Page {
+	d := t.open(ctx, sessionID)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lastActive = time.Now()
+	page := Page{SessionID: d.sessionID, Status: d.status, Path: d.path, Items: []transcript.Item{}}
+	for i, it := range d.items {
+		if it.UUID != uuid {
+			continue
+		}
+		start, end := max(i-radius, 0), min(i+radius+1, len(d.items))
+		page.Items = append(page.Items, d.items[start:end]...)
+		page.HasMore = start > 0
+		break
+	}
+	return page
+}
+
 // Subscribe opens the transcript and returns a channel of changes after the
 // returned first page.
 func (t *Transcripts) Subscribe(ctx context.Context, sessionID string) (Page, <-chan Event, func()) {

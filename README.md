@@ -42,6 +42,12 @@ When a session waits on a permission prompt or a question, a Terminal panel open
 
 Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape. Before choosing an option it reads the screen again and refuses if the choice changed.
 
+## Search, files and settings
+
+- **Search:** the box at the top of the sidebar (or `/`) searches every Claude session's transcript: prompts, replies, thinking, tool input and tool output. Click a result to see it in context, then open the session.
+- **Files:** inline code that names a file, and the Open button on file tools, open the file in VS Code at the right line (`code -g path:line`). Relative paths resolve against the session's directory. If `code` is not on your PATH, run "Shell Command: Install 'code' command in PATH" in VS Code.
+- **Settings** (gear in the sidebar): theme (system, light or dark), font size, reading width, and whether each kind of tool call and thinking starts expanded or collapsed.
+
 ## Sessions that need you
 
 A session needs you when it is waiting on a question or permission prompt, has errored, or has finished a turn you have not looked at yet. The sidebar's "Needs you" filter and the tab title show the count.
@@ -50,7 +56,8 @@ A session needs you when it is waiting on a question or permission prompt, has e
 | --- | --- |
 | ⌘K / Ctrl+K | Switch to any session by name |
 | j / k | Next / previous session that needs you |
-| Esc | Leave the composer, so j and k work again |
+| / | Search transcripts |
+| Esc | Leave the composer or the search box |
 
 "Turn on notifications" in the sidebar enables browser notifications when a session starts waiting or errors, and optionally when a turn finishes. Notifications need an open Agent Desk tab. A session you are looking at does not notify.
 

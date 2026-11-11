@@ -4,7 +4,7 @@ import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Trans
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Page, Screen, ServerMessage } from './types'
+import type { Answer, Page, Screen, SearchResult, ServerMessage } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -19,6 +19,9 @@ export interface StoreState {
   acks: Acks
   prefs: Prefs
   permission: Permission
+  // toast is a short message about an action that failed, such as opening
+  // a file.
+  toast: { message: string; id: number } | null
 }
 
 const acksKey = 'agent-desk:acks'
@@ -67,6 +70,7 @@ export class Store {
       acks: readJSON<Acks>(acksKey, {}),
       prefs: readJSON<Prefs>(prefsKey, { notify: true, notifyOnFinish: false }),
       permission: notifier.permission(),
+      toast: null,
     }
   }
 
@@ -234,6 +238,44 @@ export class Store {
     if (res.ok) return null
     const body = (await res.json().catch(() => ({}))) as SendRefusal
     return body.message ?? body.error ?? `HTTP ${String(res.status)}`
+  }
+
+  async search(query: string, archived: boolean): Promise<{ result?: SearchResult; error?: string }> {
+    const params = new URLSearchParams({ q: query })
+    if (archived) params.set('archived', '1')
+    try {
+      const res = await apiFetch(this.token, `/api/search?${params.toString()}`)
+      const body = (await res.json().catch(() => ({}))) as SearchResult & { error?: string }
+      return res.ok ? { result: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async around(sessionId: string, uuid: string): Promise<Page | null> {
+    const params = new URLSearchParams({ around: uuid })
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/transcript?${params.toString()}`).catch(() => null)
+    if (!res?.ok) return null
+    return (await res.json()) as Page
+  }
+
+  async openPath(sessionId: string, ref: { path: string; line?: number }) {
+    const res = await apiFetch(this.token, '/api/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, path: ref.path, line: ref.line ?? 0 }),
+    }).catch(() => null)
+    if (res?.ok) return
+    const body = res ? ((await res.json().catch(() => ({}))) as SendRefusal) : {}
+    this.showToast(body.message ?? body.error ?? 'Could not open the file.')
+  }
+
+  showToast(message: string) {
+    this.set({ ...this.state, toast: { message, id: ++this.nextId } })
+  }
+
+  clearToast(id: number) {
+    if (this.state.toast?.id === id) this.set({ ...this.state, toast: null })
   }
 
   dismiss(sessionId: string, clientId: string) {

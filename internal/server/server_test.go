@@ -17,7 +17,9 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
+	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
 )
@@ -62,6 +64,10 @@ func (f *fakeTranscripts) Window(_ context.Context, id string, before, limit int
 	return hub.Page{SessionID: id, Status: hub.DocOK}
 }
 
+func (f *fakeTranscripts) Around(_ context.Context, id, uuid string, _ int) hub.Page {
+	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 3, Kind: transcript.KindUser, UUID: uuid}}}
+}
+
 func (f *fakeTranscripts) Subscribe(_ context.Context, id string) (hub.Page, <-chan hub.Event, func()) {
 	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 0, Kind: transcript.KindUser, Text: "hi"}}}, f.events, func() {}
 }
@@ -87,6 +93,27 @@ func (f *fakePanes) Screen(context.Context, string) (pane.Screen, error) { retur
 func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
 	f.answer = a
 	return f.err
+}
+
+type fakeOpener struct {
+	req open.Request
+	err error
+}
+
+func (f *fakeOpener) Open(_ context.Context, req open.Request) error {
+	f.req = req
+	return f.err
+}
+
+type fakeSearcher struct {
+	q    string
+	opts search.Options
+	err  error
+}
+
+func (f *fakeSearcher) Search(_ context.Context, q string, opts search.Options) (search.Result, error) {
+	f.q, f.opts = q, opts
+	return search.Result{Query: q, Hits: []search.Hit{}}, f.err
 }
 
 type fakeManager struct{ err error }
@@ -116,6 +143,12 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Panes == nil {
 		cfg.Panes = &fakePanes{screen: pane.Screen{Text: "screen"}}
 	}
+	if cfg.Opener == nil {
+		cfg.Opener = &fakeOpener{}
+	}
+	if cfg.Searcher == nil {
+		cfg.Searcher = &fakeSearcher{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +157,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -162,6 +195,9 @@ func TestRequestChecks(t *testing.T) {
 		{"transcript window bad before", "GET", "/api/sessions/a1/transcript?before=x", "127.0.0.1:7317", "", "Bearer " + testToken, 400},
 		{"transcript window negative before", "GET", "/api/sessions/a1/transcript?before=-5", "127.0.0.1:7317", "", "Bearer " + testToken, 400},
 		{"transcript window huge limit", "GET", "/api/sessions/a1/transcript?limit=99999", "127.0.0.1:7317", "", "Bearer " + testToken, 400},
+		{"search", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"search without token", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "", 401},
+		{"transcript around a hit", "GET", "/api/sessions/a1/transcript?around=u-1", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
 		{"transcript window without token", "GET", "/api/sessions/a1/transcript", "127.0.0.1:7317", "", "", 401},
 		{"unknown api route without token", "GET", "/api/anything", "127.0.0.1:7317", "", "", 401},
 		{"static without token", "GET", "/", "127.0.0.1:7317", "", "", 200},
@@ -305,6 +341,64 @@ func TestPaneRoutes(t *testing.T) {
 	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
 	if p.answer != (pane.Answer{Action: "choose", Index: 2, Label: "Blue"}) {
 		t.Fatalf("answer = %+v", p.answer)
+	}
+}
+
+func TestOpenRoute(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		opener     *fakeOpener
+		origin     string
+		wantStatus int
+	}{
+		{"opened", `{"sessionId":"a1","path":"src/x.go","line":4}`, &fakeOpener{}, "http://127.0.0.1:7317", 200},
+		{"refused", `{"path":"x"}`, &fakeOpener{err: &send.Refused{Reason: "not_found"}}, "http://127.0.0.1:7317", 409},
+		{"bad body", `{`, &fakeOpener{}, "http://127.0.0.1:7317", 400},
+		{"no origin", `{"path":"x"}`, &fakeOpener{}, "", 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Opener: tt.opener})
+			req := httptest.NewRequest("POST", "/api/open", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+	o := &fakeOpener{}
+	s := newTestServer(t, Config{Opener: o})
+	req := httptest.NewRequest("POST", "/api/open", strings.NewReader(`{"sessionId":"a1","path":"src/x.go","line":4}`))
+	req.Host, req.Header = "127.0.0.1:7317", http.Header{"Origin": {"http://127.0.0.1:7317"}, "Authorization": {"Bearer " + testToken}}
+	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+	if o.req != (open.Request{SessionID: "a1", Path: "src/x.go", Line: 4}) {
+		t.Fatalf("req = %+v", o.req)
+	}
+}
+
+func TestSearchRoute(t *testing.T) {
+	f := &fakeSearcher{}
+	s := newTestServer(t, Config{Searcher: f})
+	req := httptest.NewRequest("GET", "/api/search?q=flaky+test&archived=1&limit=7", nil)
+	req.Host = "127.0.0.1:7317"
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != 200 || f.q != "flaky test" || !f.opts.IncludeArchived || f.opts.Limit != 7 {
+		t.Fatalf("status %d q %q opts %+v", rec.Code, f.q, f.opts)
+	}
+	bad := newTestServer(t, Config{Searcher: &fakeSearcher{err: search.ErrQuery}})
+	rec = httptest.NewRecorder()
+	bad.Handler().ServeHTTP(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("short query status %d", rec.Code)
 	}
 }
 

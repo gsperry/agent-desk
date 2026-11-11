@@ -27,6 +27,9 @@ interface Props {
   permission: Permission
   onPrefs: (p: Partial<Prefs>) => void
   onRequestPermission: () => void
+  onOpenSettings: () => void
+  search: string
+  onSearch: (text: string) => void
 }
 
 export function Sidebar(props: Props) {
@@ -38,8 +41,31 @@ export function Sidebar(props: Props) {
     <nav className="sidebar" aria-label="Sessions">
       <header className="sidebar-head">
         <span className="brand">Agent Desk</span>
-        <span className={`conn conn-${conn.kind}`} title={connTitle(conn)} />
+        <span className="head-right">
+          <button type="button" className="icon-button" aria-label="Settings" title="Settings" onClick={props.onOpenSettings}>
+            ⚙
+          </button>
+          <span className={`conn conn-${conn.kind}`} title={connTitle(conn)} />
+        </span>
       </header>
+      <div className="search-box">
+        <input
+          id="search-box"
+          type="search"
+          value={props.search}
+          placeholder="Search transcripts  /"
+          aria-label="Search transcripts"
+          onChange={(e) => {
+            props.onSearch(e.target.value)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              props.onSearch('')
+              e.currentTarget.blur()
+            }
+          }}
+        />
+      </div>
       <Banners state={state} conn={conn} onStartManager={onStartManager} />
       <div className="filters">
         <button
@@ -102,7 +128,7 @@ export function Sidebar(props: Props) {
           </label>
         )}
         <NotifyControls {...props} />
-        <p className="keys">⌘K switch · j/k next that needs you</p>
+        <p className="keys">⌘K switch · j/k next that needs you · / search</p>
       </footer>
     </nav>
   )

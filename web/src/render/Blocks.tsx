@@ -1,5 +1,6 @@
 import { memo, useState, type ReactNode } from 'react'
 import { formatDuration, type Block, type Step } from '../model/transcript'
+import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
 import { Markdown } from './Markdown'
 import { ToolCall } from './ToolCall'
@@ -142,8 +143,16 @@ function RawEvent({ item }: { item: Item }) {
   return <Expandable className="raw" label="Unrecognized event" summary={item.label ?? ''} body={<pre className="notice-body">{item.raw}</pre>} />
 }
 
-function Expandable({ className, label, summary, body }: { className: string; label: string; summary: string; body: ReactNode }) {
-  const [open, setOpen] = useState(false)
+interface ExpandableProps {
+  className: string
+  label: string
+  summary: string
+  body: ReactNode
+  defaultOpen?: boolean
+}
+
+function Expandable({ className, label, summary, body, defaultOpen = false }: ExpandableProps) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
     <div className={className}>
       <button
@@ -179,6 +188,7 @@ function stepKey(s: Step, i: number): string {
 }
 
 function StepView({ step, live }: { step: Step; live: boolean }) {
+  const prefs = useViewPrefs()
   switch (step.kind) {
     case 'text':
       return <Markdown text={step.item.text ?? ''} />
@@ -188,7 +198,15 @@ function StepView({ step, live }: { step: Step; live: boolean }) {
       if (!step.item.text && (typeof ms !== 'number' || ms < 1000)) return null
       const label = typeof ms === 'number' ? `Thought for ${formatDuration(ms)}` : 'Thought'
       if (!step.item.text) return <p className="thinking">{label}</p>
-      return <Expandable className="thinking" label={label} summary="" body={<Markdown text={step.item.text} />} />
+      return (
+        <Expandable
+          className="thinking"
+          label={label}
+          summary=""
+          body={<Markdown text={step.item.text} />}
+          defaultOpen={prefs.collapse.thinking === 'open'}
+        />
+      )
     }
     case 'tool':
       return <ToolCall use={step.use} result={step.result} live={live} />

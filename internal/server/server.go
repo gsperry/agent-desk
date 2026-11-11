@@ -15,11 +15,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
+	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 )
 
@@ -50,6 +53,18 @@ type Config struct {
 	Sender Sender
 	// Panes serves the live pane.
 	Panes Panes
+	// Opener opens files in the editor.
+	Opener Opener
+	// Searcher searches transcripts.
+	Searcher Searcher
+}
+
+type Searcher interface {
+	Search(ctx context.Context, query string, opts search.Options) (search.Result, error)
+}
+
+type Opener interface {
+	Open(ctx context.Context, req open.Request) error
 }
 
 type Sender interface {
@@ -64,6 +79,7 @@ type Panes interface {
 
 type TranscriptSource interface {
 	Window(ctx context.Context, sessionID string, before, limit int) hub.Page
+	Around(ctx context.Context, sessionID, uuid string, radius int) hub.Page
 	Subscribe(ctx context.Context, sessionID string) (hub.Page, <-chan hub.Event, func())
 }
 
@@ -85,8 +101,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil {
-		return nil, errors.New("sessions, manager, transcripts, sender and panes are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil {
+		return nil, errors.New("sessions, manager, transcripts, sender, panes, opener and searcher are required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -110,6 +126,8 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
 	s.mux.Handle("GET /api/sessions/{id}/pane", s.requireToken(http.HandlerFunc(s.screen)))
 	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
+	s.mux.Handle("GET /api/search", s.requireToken(http.HandlerFunc(s.search)))
+	s.mux.Handle("POST /api/open", s.requireToken(http.HandlerFunc(s.open)))
 	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
 	s.mux.HandleFunc("GET /api/ws", s.websocket)
 	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
@@ -231,6 +249,36 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	err := s.cfg.Panes.Answer(ctx, r.PathValue("id"), a)
 	logOutcome("answer", r.PathValue("id"), fmt.Sprintf("action=%s index=%d key=%s", a.Action, a.Index, a.Key), "ok", err)
 	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	res, err := s.cfg.Searcher.Search(ctx, q.Get("q"), search.Options{IncludeArchived: q.Get("archived") == "1", Limit: limit})
+	switch {
+	case errors.Is(err, search.ErrQuery):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case err != nil:
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "search took too long: " + err.Error()})
+	default:
+		writeJSON(w, http.StatusOK, res)
+	}
+}
+
+func (s *Server) open(w http.ResponseWriter, r *http.Request) {
+	var req open.Request
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be a JSON open request"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if writeRefusal(w, s.cfg.Opener.Open(ctx, req)) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

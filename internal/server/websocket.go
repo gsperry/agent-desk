@@ -193,8 +193,20 @@ func pageMessage(p hub.Page) map[string]any {
 	return map[string]any{"type": "transcript.page", "page": p}
 }
 
-// transcriptWindow serves older pages for scrollback.
+// aroundRadius is how many items a search hit shows on each side.
+const aroundRadius = 12
+
+// transcriptWindow serves older pages for scrollback, or a search hit in
+// context with around=<uuid>.
 func (s *Server) transcriptWindow(w http.ResponseWriter, r *http.Request) {
+	if uuid := r.URL.Query().Get("around"); uuid != "" {
+		if len(uuid) > 128 {
+			http.Error(w, "around is too long", http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, s.cfg.Transcripts.Around(r.Context(), r.PathValue("id"), uuid, aroundRadius))
+		return
+	}
 	before, limit := -1, 0
 	if v := r.URL.Query().Get("before"); v != "" {
 		n, err := strconv.Atoi(v)

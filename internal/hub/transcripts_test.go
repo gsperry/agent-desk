@@ -172,3 +172,30 @@ func TestTranscriptStatuses(t *testing.T) {
 		}
 	}
 }
+
+func TestAround(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "projects", "p", convA+".jsonl")
+	var b strings.Builder
+	for i := range 10 {
+		b.WriteString(userLine("u"+string(rune('a'+i)), string(rune('a'+i))))
+	}
+	appendTo(t, path, b.String())
+	sessions := &staticSessions{ch: make(chan State)}
+	sessions.set(SessionView{ID: "s1", Tool: "claude", AgentSessionID: convA})
+	tr := &Transcripts{Locator: &locate.Locator{DefaultRoot: root}, Sessions: sessions}
+	tests := []struct {
+		uuid string
+		want string
+	}{
+		{"ue", "c,d,e,f,g"},
+		{"ua", "a,b,c"},
+		{"uj", "h,i,j"},
+		{"missing", ""},
+	}
+	for _, tt := range tests {
+		if got := texts(tr.Around(context.Background(), "s1", tt.uuid, 2).Items); got != tt.want {
+			t.Errorf("Around(%s) = %q, want %q", tt.uuid, got, tt.want)
+		}
+	}
+}
