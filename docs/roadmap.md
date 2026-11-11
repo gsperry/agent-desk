@@ -52,4 +52,5 @@ Goal: supervise and correct work, not only chat.
 | 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |
 | 10.3 | Catch-up summaries (done, off by default) | [design/catch-up-summaries.md](design/catch-up-summaries.md) | Decided: opt-in, labelled as costing tokens |
 | 10.4 | Desktop app | Design in [design/desktop-app.md](design/desktop-app.md); not built (Tauri 2 needs a newer Rust than the installed 1.82) | Rust update, signing and distribution, repository layout |
-| 10.5 | Away from the desk | Design in [design/away-from-desk.md](design/away-from-desk.md); not built | All of it; nothing is built without a decision |
+| 10.5 | Away from the desk | Design in [design/away-from-desk.md](design/away-from-desk.md); permission levels decided (read and answer, reply, start and stop; changeable only locally); not built | Which reach option (Tailscale, Cloudflare Tunnel and Access, or a hosted relay later) |
+| 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Revisit after remote access |
