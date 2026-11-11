@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { defaultSnippets, validName, type Snippet } from '../model/snippets'
 import { newRule, ruleStatuses, type Rule, type RuleStatus } from '../model/rules'
 import type { SummarySettings } from '../model/summaries'
+import { useRemote } from '../remote-context'
+import { RemoteAccess, type RemoteSettings } from './RemoteAccess'
 import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 
@@ -16,6 +18,8 @@ interface Props {
   onRules: (r: Rule[]) => void
   summaries: SummarySettings
   onSummaries: (s: SummarySettings) => void
+  loadRemote: () => Promise<{ data?: RemoteSettings; available: boolean; error?: string }>
+  saveRemote: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; error?: string }>
   onClose: () => void
 }
 
@@ -48,7 +52,8 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onClose }: Props) {
+  const onDesk = !useRemote().remote
   const setRule = (id: string, p: Partial<Rule>) => {
     onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
   }
@@ -185,6 +190,8 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
           />
           <p className="muted setting-note">Failed tool calls always start expanded. Changes apply to blocks as they appear.</p>
         </Section>
+        {onDesk && (
+          <>
         <Section title="Reply snippets">
           <p className="muted setting-note">
             Insert from the composer's ⋯ menu, or type /name and press Tab. {'{session}'}, {'{branch}'}, {'{project}'} and {'{directory}'} are filled in.
@@ -375,6 +382,11 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             ))}
           </ul>
         </Section>
+            <Section title="Remote access">
+              <RemoteAccess load={loadRemote} save={saveRemote} />
+            </Section>
+          </>
+        )}
       </div>
     </div>
   )

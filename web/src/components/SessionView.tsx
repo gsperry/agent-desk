@@ -19,6 +19,7 @@ import { ChangesPanel } from './ChangesPanel'
 import { blockedReason } from '../model/compose'
 import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
+import { can, useRemote } from '../remote-context'
 import { ContextMeter } from './ContextMeter'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
@@ -64,6 +65,8 @@ const agentsRefreshMs = 5000
 
 export function SessionView(props: Props) {
   const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer, openPath } = props
+  const remoteInfo = useRemote()
+  const mayReply = can(remoteInfo, 'reply')
   const openHere = useCallback(
     (ref: PathRef) => {
       openPath(sessionId, ref)
@@ -136,7 +139,7 @@ export function SessionView(props: Props) {
   }
 
   return (
-    <OpenPathContext.Provider value={openHere}>
+    <OpenPathContext.Provider value={can(remoteInfo, 'local') ? openHere : null}>
     <AgentLinksContext.Provider value={agentLinks}>
     <PinsContext.Provider value={session.agentSessionId ? pins : null}>
         <main className="main">
@@ -181,7 +184,7 @@ export function SessionView(props: Props) {
                 {counts.total}
               </button>
             )}
-              {props.catchUp && isClaude && session.agentSessionId && (
+              {props.catchUp && can(remoteInfo, 'local') && isClaude && session.agentSessionId && (
                 <button
                   type="button"
                   className="chip chip-button catchup-toggle"
@@ -236,7 +239,7 @@ export function SessionView(props: Props) {
                 {session.project.name}
                 {session.branch ? ` · ${session.branch}` : ''}
               </span>
-              <SessionActions session={session} groups={props.groups} act={props.act} />
+              {can(remoteInfo, 'manage') && <SessionActions session={session} groups={props.groups} act={props.act} />}
               {isClaude && session.agentSessionId && d.items.length > 0 && (
                 <button
                   type="button"
@@ -325,7 +328,7 @@ export function SessionView(props: Props) {
               }
             />
           )}
-          {props.suggestion && (
+          {props.suggestion && mayReply && (
             <div className="suggestion" role="status" aria-label="Suggested reply">
               <div className="suggestion-text">
                 <span className="muted">Rule “{props.suggestion.ruleName}” suggests replying:</span>
@@ -369,22 +372,26 @@ export function SessionView(props: Props) {
               </div>
             </div>
           )}
-          <Composer
-            key={sessionId}
-            session={session}
-            connected={connected}
-            insideSession={insideSession}
-            restore={restore}
-          pasteImage={props.pasteImage}
-            onSend={(text) => {
-              send(sessionId, text)
-              setSends((n) => n + 1)
-            }}
-          />
+          {mayReply ? (
+            <Composer
+              key={sessionId}
+              session={session}
+              connected={connected}
+              insideSession={insideSession}
+              restore={restore}
+              pasteImage={can(remoteInfo, 'local') ? props.pasteImage : undefined}
+              onSend={(text) => {
+                send(sessionId, text)
+                setSends((n) => n + 1)
+              }}
+            />
+          ) : (
+            <p className="muted remote-no-reply">Replies are off for remote devices at this level. Waiting prompts can still be answered in the Terminal panel.</p>
+          )}
           {changesOpen && (
           <ChangesPanel
             sessionId={sessionId}
-            canSend={blockedReason(session, connected, insideSession)}
+            canSend={mayReply ? blockedReason(session, connected, insideSession) : 'Replies are off for remote devices at this level.'}
             load={props.readChanges}
             onSend={(text) => {
               send(sessionId, text)

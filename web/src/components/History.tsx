@@ -6,6 +6,7 @@ import { togglePin } from '../model/pins'
 import { PinsContext, pinsFor, useNotebook } from '../pins-context'
 import { NotesPanel } from './NotesPanel'
 import { Transcript } from './Transcript'
+import { can, useRemote } from '../remote-context'
 
 interface ListProps {
   load: () => Promise<{ data?: Conversation[]; error?: string }>
@@ -112,6 +113,7 @@ export function ConversationView({ id, conversation, owner, load, onBack, onOpen
   const [loading, setLoading] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const remoteInfo = useRemote()
   const [notesOpen, setNotesOpen] = useState(false)
   const [notebook, setNotebook] = useNotebook(id)
   const pins = pinsFor(notebook, setNotebook, togglePin)
@@ -174,7 +176,8 @@ export function ConversationView({ id, conversation, owner, load, onBack, onOpen
               Open session {owner.name}
             </button>
           ) : (
-            conversation && (
+            conversation &&
+            can(remoteInfo, 'manage') && (
               <button
                 type="button"
                 className="chip chip-button resume-button"

@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/paste"
+	"github.com/gsperry/agent-desk/internal/remote"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
@@ -96,6 +98,11 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
+	remoteStore, err := remoteSettingsStore(o.fixtures)
+	if err != nil {
+		return err
+	}
+	remoteAccess := &remoteListener{store: remoteStore}
 	l, err := listen(o.port)
 	if err != nil {
 		return err
@@ -121,6 +128,7 @@ func run(o options) error {
 		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
+		Remote:      remoteAccess,
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
 			Timeout: 15 * time.Second,
 			Env:     changes.Env(procrun.Environ()),
@@ -130,6 +138,11 @@ func run(o options) error {
 		return err
 	}
 	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	remoteAccess.handler = s.RemoteHandler()
+	if err := remoteAccess.apply(remoteStore.Get()); err != nil {
+		log.Printf("remote access: %v", err)
+	}
+	defer remoteAccess.stop()
 
 	base := "http://" + addr
 	if o.openBase != "" {
@@ -215,6 +228,71 @@ func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*h
 		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
 		Sessions: sessions,
 	}, nil
+}
+
+// remoteSettingsStore keeps remote access settings in the user config
+// directory, or the fixture directory in fixture mode.
+func remoteSettingsStore(fixtures string) (*remote.Store, error) {
+	if fixtures != "" {
+		return &remote.Store{Path: filepath.Join(fixtures, "remote.json")}, nil
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	return &remote.Store{Path: filepath.Join(dir, "agent-desk", "remote.json")}, nil
+}
+
+// remoteListener serves remote clients on their own 127.0.0.1 port while
+// remote access is on, for a proxy such as tailscale serve to forward to.
+type remoteListener struct {
+	store   *remote.Store
+	handler http.Handler
+
+	mu   sync.Mutex
+	srv  *http.Server
+	port int
+}
+
+func (r *remoteListener) Get() remote.Settings { return r.store.Get() }
+
+// Set saves the settings and starts, moves or stops the listener to match.
+func (r *remoteListener) Set(s remote.Settings) (remote.Settings, error) {
+	saved, err := r.store.Set(s)
+	if err != nil {
+		return remote.Settings{}, err
+	}
+	return saved, r.apply(saved)
+}
+
+func (r *remoteListener) apply(s remote.Settings) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.srv != nil && (!s.Enabled || s.Port != r.port) {
+		_ = r.srv.Close()
+		r.srv = nil
+		log.Printf("remote access stopped")
+	}
+	if !s.Enabled || r.srv != nil || r.handler == nil {
+		return nil
+	}
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.Port))
+	if err != nil {
+		return fmt.Errorf("could not listen on 127.0.0.1:%d: %w", s.Port, err)
+	}
+	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second}
+	r.port = s.Port
+	go func(srv *http.Server) { _ = srv.Serve(l) }(r.srv)
+	log.Printf("remote access on 127.0.0.1:%d for https://%s (level %s)", s.Port, s.Host, s.Level)
+	return nil
+}
+
+func (r *remoteListener) stop() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.srv != nil {
+		_ = r.srv.Close()
+	}
 }
 
 // summaryRunner runs the user's Claude Code CLI for catch-up summaries. In

@@ -34,7 +34,9 @@ type clientMessage struct {
 }
 
 func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
-	if !s.wsTokenOK(r) {
+	// A remote request was admitted by requireRemote; a local one needs the
+	// token.
+	if _, remote := remoteFrom(r.Context()); !remote && !s.wsTokenOK(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}

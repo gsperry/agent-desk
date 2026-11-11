@@ -1,6 +1,6 @@
 # Away from the desk
 
-Status: design. Decided: three remote permission levels, changeable only locally; phone push deferred. Open: how remote clients reach the desk.
+Status: R0 (groundwork) and R1 (Tailscale) built. Decided: three remote permission levels, changeable only locally; phone push deferred; reach in order Tailscale, then Cloudflare Tunnel and Access, then a hosted relay as its own decision.
 
 ## Goal
 

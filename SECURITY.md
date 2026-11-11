@@ -24,6 +24,14 @@ Agent Desk can type into agent sessions and start new ones, so access to its API
 
 - The browser opens through an owner-only launcher file, so the token never appears in a process's arguments, which other accounts can read.
 
+Remote access, off by default:
+
+- A second listener, also on 127.0.0.1, serves remote devices through a proxy that proves identity (`tailscale serve`, which sets `Tailscale-User-Login`). Only logins listed in the settings get in; the local token is never accepted there, and the identity header is never accepted on the local listener.
+- Every remote request must name the configured host; state-changing requests and WebSocket upgrades must come from that host's origin.
+- Each route declares the level it needs (read and answer, reply, start and stop). Settings, rules, catch-up summaries, opening files and pasting images are refused remotely at every level.
+- The settings live in an owner-only file and change only through the local listener.
+- Any local process can reach the remote port and claim an identity, as it could already drive agent-manager directly; that stays out of scope, as below.
+
 Known limits:
 
 - The URL with the token is printed when Agent Desk starts. Do not redirect that output to a file other accounts can read.

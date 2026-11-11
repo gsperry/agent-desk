@@ -6,6 +6,7 @@ import { expire, reconcile, type Pending } from './model/pending'
 import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
+import type { RemoteSettings } from './components/RemoteAccess'
 import type { Answer, CatchUp, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
@@ -386,6 +387,23 @@ export class Store {
     } catch (e) {
       return { message: e instanceof Error ? e.message : String(e) }
     }
+  }
+
+  // remoteSettings reads the remote access settings, on the desk.
+  async remoteSettings(): Promise<{ data?: RemoteSettings; available: boolean; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/remote')
+      const body = (await res.json().catch(() => ({}))) as { available?: boolean; settings?: RemoteSettings; error?: string }
+      if (!res.ok) return { available: true, error: body.error ?? `HTTP ${String(res.status)}` }
+      return { data: body.settings, available: body.available !== false }
+    } catch (e) {
+      return { available: true, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async setRemoteSettings(s: RemoteSettings): Promise<{ data?: RemoteSettings; error?: string }> {
+    const r = await this.post('/api/remote', s)
+    return { data: (r.data as { settings?: RemoteSettings } | undefined)?.settings, error: r.error }
   }
 
   // catchUp asks the user's Claude Code CLI for a summary of what happened

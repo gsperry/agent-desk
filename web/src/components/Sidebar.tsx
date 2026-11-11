@@ -1,3 +1,4 @@
+import { can, levelLabels, useRemote } from '../remote-context'
 import { useState } from 'react'
 import type { ConnectionState } from '../api'
 import { needsAttention, type Acks } from '../model/attention'
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export function Sidebar(props: Props) {
+  const remoteInfo = useRemote()
   const { state, conn, groups, acks, attention, view, onView, selected, onSelect, onStartManager } = props
   const sessions = state?.sessions ?? []
   const archived = archivedCount(sessions)
@@ -56,17 +58,19 @@ export function Sidebar(props: Props) {
           Agent Desk
         </button>
         <span className="head-right">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="New session"
-            title="New session"
-            onClick={() => {
-              props.onNewSession(null)
-            }}
-          >
-            ＋
-          </button>
+          {can(remoteInfo, 'manage') && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="New session"
+              title="New session"
+              onClick={() => {
+                props.onNewSession(null)
+              }}
+            >
+              ＋
+            </button>
+          )}
           <button type="button" className="icon-button" aria-label="Settings" title="Settings" onClick={props.onOpenSettings}>
             ⚙
           </button>
@@ -115,6 +119,7 @@ export function Sidebar(props: Props) {
               <span className="group-name">{g.project.name}</span>
               {g.attention > 0 && <span className="badge">{g.attention}</span>}
               <span className="group-actions">
+                {can(remoteInfo, 'manage') && (
                 <button
                   type="button"
                   className="icon-button"
@@ -126,7 +131,8 @@ export function Sidebar(props: Props) {
                 >
                   ＋
                 </button>
-                {g.project.kind === 'group' && (
+                )}
+                {g.project.kind === 'group' && can(remoteInfo, 'manage') && (
                   <button
                     type="button"
                     className="icon-button"
@@ -187,9 +193,11 @@ export function Sidebar(props: Props) {
             Show archived ({archived})
           </label>
         )}
-        <button type="button" className="link-button" onClick={props.onNewGroup}>
-          New group
-        </button>
+        {can(remoteInfo, 'manage') && (
+          <button type="button" className="link-button" onClick={props.onNewGroup}>
+            New group
+          </button>
+        )}
         <button type="button" className="link-button history-link" aria-current={props.historyOpen ? 'page' : undefined} onClick={props.onHistory}>
           All conversations
         </button>
@@ -197,6 +205,12 @@ export function Sidebar(props: Props) {
           Usage
         </button>
         <NotifyControls {...props} />
+        {remoteInfo.remote && (
+          <p className="remote-badge" title="You are on a remote device. The level is changed on the desk.">
+            Remote · {levelLabels[remoteInfo.level]}
+            {remoteInfo.user ? ` · ${remoteInfo.user}` : ''}
+          </p>
+        )}
         <p className="keys">⌘K switch · j/k next that needs you · / search</p>
       </footer>
     </nav>

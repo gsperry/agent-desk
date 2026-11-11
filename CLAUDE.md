@@ -13,7 +13,7 @@ Background: [docs/integration-notes.md](docs/integration-notes.md) (how agent-ma
 - **Every tmux call names the socket**: `tmux -L agentmgr`. A bare `tmux` hits the user's own server.
 - **The JSONL parser is tolerant.** Unknown or malformed records become raw items. Never crash on input, never silently drop a record. New record shapes get an anonymized sample in `testdata/` with the Claude Code version it came from.
 - **Send through `agent-manager type`**, gated on status and on a dialog check of the pane. Never `send`, which labels text as coming from another agent. A typed answer to a dialog's text option goes through `agent-manager type` too, only after a fresh read of the pane confirms that option is selected.
-- Keep the server's checks: loopback bind, token on every API request and WebSocket, Host check on every request, Origin check on state-changing requests and upgrades.
+- Keep the server's checks: loopback bind, token on every API request and WebSocket, Host check on every request, Origin check on state-changing requests and upgrades. The remote listener (off by default) keeps the loopback bind, Host and Origin checks, takes identity from the proxy instead of the token, and gates every route on its declared level; remote settings change only from the local listener.
 
 ## Commands
 
@@ -49,6 +49,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/export`: transcript to Markdown
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
 - `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
+- `internal/remote`: remote access levels, settings (owner-only file) and the Tailscale identity check
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
 - `internal/pane`: dialog parser, answers (allow-listed keys through `tmux -L agentmgr send-keys`) and the styled screen for the read-only color view

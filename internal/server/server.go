@@ -31,6 +31,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/paste"
+	"github.com/gsperry/agent-desk/internal/remote"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/summary"
@@ -85,6 +86,15 @@ type Config struct {
 	// Summaries writes catch-up summaries with the user's Claude Code CLI,
 	// only when asked.
 	Summaries SummarySource
+	// Remote holds the remote access settings. Nil turns remote access off.
+	Remote RemoteControl
+}
+
+// RemoteControl reads and changes the remote access settings. Set applies
+// them, starting or stopping the remote listener.
+type RemoteControl interface {
+	Get() remote.Settings
+	Set(remote.Settings) (remote.Settings, error)
 }
 
 type SummarySource interface {
@@ -163,10 +173,11 @@ type ManagerStarter interface {
 }
 
 type Server struct {
-	cfg     Config
-	hosts   map[string]bool
-	origins map[string]bool
-	mux     *http.ServeMux
+	cfg       Config
+	hosts     map[string]bool
+	origins   map[string]bool
+	mux       *http.ServeMux
+	remoteMux *http.ServeMux
 }
 
 func New(cfg Config) (*Server, error) {
@@ -184,43 +195,63 @@ func New(cfg Config) (*Server, error) {
 		cfg: cfg,
 		// Only the IPv4 loopback the server binds. localhost can resolve to
 		// ::1, where another local account could listen on the same port.
-		hosts:   map[string]bool{"127.0.0.1:" + port: true},
-		origins: map[string]bool{"http://127.0.0.1:" + port: true},
-		mux:     http.NewServeMux(),
+		hosts:     map[string]bool{"127.0.0.1:" + port: true},
+		origins:   map[string]bool{"http://127.0.0.1:" + port: true},
+		mux:       http.NewServeMux(),
+		remoteMux: http.NewServeMux(),
 	}
 	for _, o := range cfg.DevOrigins {
 		s.origins[strings.TrimRight(o, "/")] = true
 	}
-	s.mux.Handle("GET /api/health", s.requireToken(http.HandlerFunc(s.health)))
-	s.mux.Handle("GET /api/sessions", s.requireToken(http.HandlerFunc(s.sessions)))
-	s.mux.Handle("GET /api/sessions/{id}/transcript", s.requireToken(http.HandlerFunc(s.transcriptWindow)))
-	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
-	s.mux.Handle("GET /api/sessions/{id}/pane", s.requireToken(http.HandlerFunc(s.screen)))
-	s.mux.Handle("GET /api/sessions/{id}/terminal", s.requireToken(http.HandlerFunc(s.terminal)))
-	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
-	s.mux.Handle("GET /api/sessions/{id}/agents", s.requireToken(http.HandlerFunc(s.listAgents)))
-	s.mux.Handle("GET /api/sessions/{id}/agents/{agent}/transcript", s.requireToken(http.HandlerFunc(s.agentTranscript)))
-	s.mux.Handle("GET /api/sessions/{id}/changes", s.requireToken(http.HandlerFunc(s.changes)))
-	s.mux.Handle("POST /api/paste", s.requireToken(http.HandlerFunc(s.paste)))
-	s.mux.Handle("GET /api/conflicts", s.requireToken(http.HandlerFunc(s.conflicts)))
-	s.mux.Handle("GET /api/conversations", s.requireToken(http.HandlerFunc(s.conversations)))
-	s.mux.Handle("GET /api/conversations/{id}/transcript", s.requireToken(http.HandlerFunc(s.conversationTranscript)))
-	s.mux.Handle("GET /api/conversations/{id}/export", s.requireToken(http.HandlerFunc(s.exportConversation)))
-	s.mux.Handle("POST /api/sessions/{id}/summary", s.requireToken(http.HandlerFunc(s.summarize)))
-	s.mux.Handle("GET /api/usage", s.requireToken(http.HandlerFunc(s.usage)))
-	s.mux.Handle("GET /api/overview", s.requireToken(http.HandlerFunc(s.overview)))
-	s.mux.Handle("GET /api/spawn-options", s.requireToken(http.HandlerFunc(s.spawnOptions)))
-	s.mux.Handle("POST /api/sessions", s.requireToken(http.HandlerFunc(s.spawn)))
-	s.mux.Handle("POST /api/sessions/{id}/action", s.requireToken(http.HandlerFunc(s.action)))
-	s.mux.Handle("POST /api/groups", s.requireToken(http.HandlerFunc(s.createGroup)))
-	s.mux.Handle("POST /api/groups/delete", s.requireToken(http.HandlerFunc(s.deleteGroup)))
-	s.mux.Handle("GET /api/search", s.requireToken(http.HandlerFunc(s.search)))
-	s.mux.Handle("POST /api/open", s.requireToken(http.HandlerFunc(s.open)))
-	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
-	s.mux.HandleFunc("GET /api/ws", s.websocket)
-	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
-	s.mux.Handle("/", s.static())
+	s.routes()
 	return s, nil
+}
+
+// route registers a handler on the local mux behind the token, and on the
+// remote mux behind identity and the level it needs.
+func (s *Server) route(pattern string, need remote.Need, h http.HandlerFunc) {
+	s.mux.Handle(pattern, s.requireToken(h))
+	s.remoteMux.Handle(pattern, s.requireRemote(need, h))
+}
+
+// routes is every API route and what a remote client needs to use it.
+func (s *Server) routes() {
+	s.route("GET /api/health", remote.NeedRead, s.health)
+	s.route("GET /api/whoami", remote.NeedRead, s.whoami)
+	s.route("GET /api/sessions", remote.NeedRead, s.sessions)
+	s.route("GET /api/sessions/{id}/transcript", remote.NeedRead, s.transcriptWindow)
+	s.route("POST /api/sessions/{id}/send", remote.NeedReply, s.send)
+	s.route("GET /api/sessions/{id}/pane", remote.NeedRead, s.screen)
+	s.route("GET /api/sessions/{id}/terminal", remote.NeedRead, s.terminal)
+	s.route("POST /api/sessions/{id}/answer", remote.NeedAnswer, s.answer)
+	s.route("GET /api/sessions/{id}/agents", remote.NeedRead, s.listAgents)
+	s.route("GET /api/sessions/{id}/agents/{agent}/transcript", remote.NeedRead, s.agentTranscript)
+	s.route("GET /api/sessions/{id}/changes", remote.NeedRead, s.changes)
+	s.route("POST /api/paste", remote.NeedLocal, s.paste)
+	s.route("GET /api/conflicts", remote.NeedRead, s.conflicts)
+	s.route("GET /api/conversations", remote.NeedRead, s.conversations)
+	s.route("GET /api/conversations/{id}/transcript", remote.NeedRead, s.conversationTranscript)
+	s.route("GET /api/conversations/{id}/export", remote.NeedRead, s.exportConversation)
+	s.route("POST /api/sessions/{id}/summary", remote.NeedLocal, s.summarize)
+	s.route("GET /api/usage", remote.NeedRead, s.usage)
+	s.route("GET /api/overview", remote.NeedRead, s.overview)
+	s.route("GET /api/spawn-options", remote.NeedManage, s.spawnOptions)
+	s.route("POST /api/sessions", remote.NeedManage, s.spawn)
+	s.route("POST /api/sessions/{id}/action", remote.NeedManage, s.action)
+	s.route("POST /api/groups", remote.NeedManage, s.createGroup)
+	s.route("POST /api/groups/delete", remote.NeedManage, s.deleteGroup)
+	s.route("GET /api/search", remote.NeedRead, s.search)
+	s.route("POST /api/open", remote.NeedLocal, s.open)
+	s.route("POST /api/manager/start", remote.NeedManage, s.startManager)
+	s.route("GET /api/remote", remote.NeedRead, s.remoteSettings)
+	s.route("POST /api/remote", remote.NeedLocal, s.setRemoteSettings)
+	// The WebSocket only reads; it checks its own token locally.
+	s.mux.HandleFunc("GET /api/ws", s.websocket)
+	s.remoteMux.Handle("GET /api/ws", s.requireRemote(remote.NeedRead, s.websocket))
+	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
+	s.remoteMux.Handle("/api/", s.requireRemote(remote.NeedRead, http.NotFoundHandler().ServeHTTP))
+	s.mux.Handle("/", s.static())
+	s.remoteMux.Handle("/", s.requireRemote(remote.NeedRead, s.static().ServeHTTP))
 }
 
 func (s *Server) Handler() http.Handler {
@@ -233,12 +264,26 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "forbidden origin", http.StatusForbidden)
 			return
 		}
-		h := w.Header()
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'")
+		securityHeaders(w)
 		s.mux.ServeHTTP(w, r)
+	})
+}
+
+func securityHeaders(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'")
+}
+
+// RemoteHandler serves remote clients. It is mounted on its own listener
+// behind a proxy that proves identity; every route checks the host, the
+// origin, the identity and the level it needs.
+func (s *Server) RemoteHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		securityHeaders(w)
+		s.remoteMux.ServeHTTP(w, r)
 	})
 }
 
