@@ -37,3 +37,14 @@ test('the activity filter narrows the transcript and risky commands stand out', 
   await expect(main.locator('.tool')).toHaveCount(0)
   await expect(main.getByText('Nothing of this kind')).toBeVisible()
 })
+
+test('a shell command shows the files it changed, with counts and diffs', async ({ page }) => {
+  await page.goto(`${base}/s/a0000009#t=${token}`)
+  const main = page.getByRole('main')
+  const bash = main.locator('.tool').filter({ hasText: 'Bash' })
+  await expect(bash.locator('.tool-row .tool-stats')).toHaveText('+2 −0')
+  await bash.locator('.tool-row').click()
+  const file = bash.locator('.shell-file')
+  await expect(file.locator('.shell-file-head')).toContainText('Created /home/dev/src/files/greeting.txt')
+  await expect(file.locator('tr.diff-add')).toHaveCount(2)
+})

@@ -7,6 +7,7 @@ Real Claude Code transcripts, anonymized with `go run ./tools/anonymize`. Struct
 | `session-a.jsonl` | 2.1.312, 2.1.319 | 516 | A complete short session with edits, Bash, AskUserQuestion and subagents |
 | `session-b.jsonl` | 2.1.319 | 600 | The first 600 records of a session that compacts early |
 | `probe.jsonl` | 2.1.322 | 64 | The Phase 0 probe: agent-manager preamble, multi-line and long prompts, AskUserQuestion answered by a typed prompt |
+| `bash-edit-diff.jsonl` | 2.1.322 | 2 | A Bash call that changed three files: its result carries `bashEditDiff` with per-file hunks |
 | `edge-cases.jsonl` | n/a | 12 | Hand-written malformed and unknown records |
 
 Add a sample when Claude Code introduces a record shape the parser does not know, and record its version here.

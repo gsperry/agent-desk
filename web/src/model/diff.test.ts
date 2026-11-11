@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diffStats, patchRows, replaceRows } from './diff'
+import { bashFiles, diffStats, patchRows, replaceRows } from './diff'
 
 describe('patchRows', () => {
   it('numbers lines across hunks and marks gaps', () => {
@@ -30,5 +30,34 @@ describe('replaceRows', () => {
       { type: 'del', text: 'b' },
       { type: 'add', text: 'c' },
     ])
+  })
+})
+
+describe('bashFiles', () => {
+  it('reads files, created flags and counts from bashEditDiff', () => {
+    const detail = {
+      stdout: 'ok',
+      bashEditDiff: {
+        files: [
+          { filePath: 'site/_headers', created: true, hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 2, lines: ['+a', '+b'] }] },
+          { filePath: 'site/index.html', hunks: [{ oldStart: 3, oldLines: 2, newStart: 3, newLines: 1, lines: [' keep', '-old', '-older', '+new'] }] },
+          { hunks: [] },
+          'junk',
+        ],
+        moreFiles: 2,
+        changedFiles: ['site/_headers', 'site/index.html'],
+      },
+    }
+    const { files, more } = bashFiles(detail)
+    expect(files.map((f) => [f.path, f.created, f.added, f.removed])).toEqual([
+      ['site/_headers', true, 2, 0],
+      ['site/index.html', false, 1, 2],
+    ])
+    expect(files[1]?.rows[0]).toEqual({ type: 'ctx', oldNo: 3, newNo: 3, text: 'keep' })
+    expect(more).toBe(2)
+  })
+
+  it.each([undefined, null, {}, { bashEditDiff: 'x' }, { bashEditDiff: { files: 'x', moreFiles: -1 } }])('ignores %j', (d) => {
+    expect(bashFiles(d)).toEqual({ files: [], more: 0 })
   })
 })

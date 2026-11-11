@@ -2647,3 +2647,25 @@ mark {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* Files a shell command changed */
+
+.shell-files {
+  margin-top: 0.6rem;
+}
+
+.shell-file + .shell-file {
+  margin-top: 0.6rem;
+}
+
+.shell-file-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+}
+
+.shell-file-head code {
+  overflow-wrap: anywhere;
+}

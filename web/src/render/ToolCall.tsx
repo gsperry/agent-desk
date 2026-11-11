@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { diffStats, patchRows, replaceRows, type DiffRow } from '../model/diff'
+import { bashFiles, diffStats, patchRows, replaceRows, type BashFile, type DiffRow } from '../model/diff'
 import { riskyCommand } from '../model/filter'
 import { toolPathRef } from '../model/paths'
 import { toolLabel } from '../model/transcript'
@@ -56,7 +56,8 @@ export function ToolCall({ use, result, live }: Props) {
   const label = toolLabel(use)
   const isEdit = editTools.has(name)
   const rows = isEdit ? editRows(use, result) : []
-  const stats = isEdit && rows.length ? diffStats(rows) : name === 'Write' ? newFileStats(use) : null
+  const shell = name === 'Bash' ? bashFiles(result?.result?.detail) : { files: [], more: 0 }
+  const stats = isEdit && rows.length ? diffStats(rows) : name === 'Write' ? newFileStats(use) : shellStats(shell.files)
   const failed = result?.result?.isError === true
   const prefs = useViewPrefs()
   const [open, setOpen] = useState(() => initiallyOpen(name, prefs, { failed, diffRows: rows.length }))
@@ -116,7 +117,43 @@ export function ToolCall({ use, result, live }: Props) {
           Open
         </button>
       )}
-      {open && <div className="tool-body">{body(use, result, rows)}</div>}
+      {open && (
+        <div className="tool-body">
+          {body(use, result, rows)}
+          {shell.files.length > 0 && <ShellFiles files={shell.files} more={shell.more} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// shellStats totals the lines a shell command changed across files.
+function shellStats(files: BashFile[]): { added: number; removed: number } | null {
+  if (files.length === 0) return null
+  return files.reduce((t, f) => ({ added: t.added + f.added, removed: t.removed + f.removed }), { added: 0, removed: 0 })
+}
+
+// ShellFiles shows the files a shell command changed, each with its diff,
+// as Claude Code recorded them.
+function ShellFiles({ files, more }: { files: BashFile[]; more: number }) {
+  return (
+    <div className="shell-files">
+      {files.map((f) => (
+        <div key={f.path} className="shell-file">
+          <p className="shell-file-head">
+            <span>{f.created ? 'Created' : 'Updated'}</span> <code>{f.path}</code>{' '}
+            <span className="tool-stats">
+              <span className="add">+{f.added}</span> <span className="del">−{f.removed}</span>
+            </span>
+          </p>
+          {f.rows.length > 0 && <Diff rows={f.rows} />}
+        </div>
+      ))}
+      {more > 0 && (
+        <p className="muted">
+          and {more} more file{more === 1 ? '' : 's'}
+        </p>
+      )}
     </div>
   )
 }

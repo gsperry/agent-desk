@@ -60,3 +60,31 @@ export function diffStats(rows: DiffRow[]): { added: number; removed: number } {
   }
   return { added, removed }
 }
+
+// BashFile is one file a shell command changed, as Claude Code recorded it
+// in the Bash result's bashEditDiff.
+export interface BashFile {
+  path: string
+  created: boolean
+  rows: DiffRow[]
+  added: number
+  removed: number
+}
+
+// bashFiles reads the files a Bash call changed, and how many more Claude
+// Code noticed without recording a patch. Malformed input yields none.
+export function bashFiles(detail: unknown): { files: BashFile[]; more: number } {
+  const d = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>) : {}
+  const diff = typeof d.bashEditDiff === 'object' && d.bashEditDiff !== null ? (d.bashEditDiff as Record<string, unknown>) : null
+  if (!diff) return { files: [], more: 0 }
+  const files: BashFile[] = []
+  for (const f of Array.isArray(diff.files) ? diff.files : []) {
+    if (typeof f !== 'object' || f === null) continue
+    const r = f as Record<string, unknown>
+    if (typeof r.filePath !== 'string' || !r.filePath) continue
+    const rows = patchRows(r.hunks)
+    files.push({ path: r.filePath, created: r.created === true, rows, ...diffStats(rows) })
+  }
+  const more = typeof diff.moreFiles === 'number' && diff.moreFiles > 0 ? diff.moreFiles : 0
+  return { files, more }
+}
