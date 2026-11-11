@@ -81,12 +81,16 @@ Experiments on the probe session:
 | (Observed, not sent) Workspace trust dialog | Default option is "No, exit". A `type` here would press Enter on it and quit Claude. |
 | (Observed, not sent) "Teach auto mode" dialog | Default option is "1. Yes". Status read `finished`. |
 
-Rules for Agent Desk:
+Rules Agent Desk follows (`internal/send`):
 
-- Pass text as one argv element. No shell, no escaping beyond what `exec.Command` does. Trim nothing beyond what `type` trims (leading and trailing whitespace).
-- Refuse to send when status is `waiting`, `starting` or `dead`. Show the live pane (M4) instead.
-- Before sending on any other status, capture the pane and check for a dialog footer (`Enter to confirm`, `Enter to select`, `Esc to cancel`). If found, block and show the live pane. This covers dialogs that read `finished`.
-- Treat exit 3 as "maybe sent": show the message as unconfirmed and let the transcript reconcile it.
+- Pass text as one argv element after a `--` separator: `type --json -- <id> <text>`. agent-manager reads flags anywhere before `--`, so a message starting with `--help` would otherwise be a flag.
+- Normalize line endings and strip control characters other than newline and tab. ESC matters: text holding `ESC[201~` would end the bracketed paste early and arrive as keystrokes.
+- Refuse to send when status is `waiting`, `starting` or `dead`.
+- Read the screen (`agent-manager read`) before every send. Refuse when one of the last 8 non-blank lines shows a dialog footer (`Enter to confirm`, `Enter to select`, `Esc to cancel`), which covers dialogs that read `finished`. Refuse when the composer between the last two horizontal rules holds text, since the paste would append to it. Claude pads the empty prompt with a no-break space, so the check trims Unicode whitespace.
+- Treat exit 3 as "maybe sent" and let the transcript reconcile it.
+- A dialog can appear in the ~200 ms between the screen check and the paste. Upstream gap 1 closes that window.
+
+A reply sent while the agent works is queued by Claude Code and recorded only as a `queued_command` attachment, never as a `user` record. The parser renders it as a prompt and the client reconciles against it.
 
 Caller pitfall: the CLI identifies its caller by process ancestry, then `TMUX_PANE`, then `AGENT_MANAGER_SESSION_ID` (`main.go`, `callerSession`). If Agent Desk is started from a shell inside an `am_*` pane (a `T` terminal or an agent), every `type` is refused. Agent Desk checks `self: true` in the snapshot at startup and shows a clear error.
 
