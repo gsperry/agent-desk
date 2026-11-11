@@ -10,7 +10,9 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -201,6 +203,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	res, err := s.cfg.Sender.Send(ctx, r.PathValue("id"), body.Text)
+	logOutcome("send", r.PathValue("id"), fmt.Sprintf("bytes=%d", len(body.Text)), res.Status, err)
 	if writeRefusal(w, err) {
 		return
 	}
@@ -225,10 +228,26 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	if writeRefusal(w, s.cfg.Panes.Answer(ctx, r.PathValue("id"), a)) {
+	err := s.cfg.Panes.Answer(ctx, r.PathValue("id"), a)
+	logOutcome("answer", r.PathValue("id"), fmt.Sprintf("action=%s index=%d key=%s", a.Action, a.Index, a.Key), "ok", err)
+	if writeRefusal(w, err) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// logOutcome records what a reply or answer did, so a failure the browser
+// saw leaves a trace. Message text is never logged.
+func logOutcome(what, id, detail, ok string, err error) {
+	var refused *send.Refused
+	switch {
+	case errors.As(err, &refused):
+		log.Printf("%s session=%s %s refused=%s", what, id, detail, refused.Reason)
+	case err != nil:
+		log.Printf("%s session=%s %s error=%q", what, id, detail, err.Error())
+	default:
+		log.Printf("%s session=%s %s result=%s", what, id, detail, ok)
+	}
 }
 
 // writeRefusal writes err as 409 for a refusal or 502 otherwise, and

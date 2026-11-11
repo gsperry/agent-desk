@@ -158,6 +158,9 @@ func TestHookWriteTriggersPoll(t *testing.T) {
 	}
 	waitFor(t, func() bool { return c.calls.Load() > before })
 
+	// Linux reports a new file as create then write, so the status write can
+	// trigger a second poll; let those settle before the baseline.
+	settle(c)
 	before = c.calls.Load()
 	if err := os.WriteFile(filepath.Join(dir, "a1b2c3d4.agent"), []byte("1"), 0o600); err != nil {
 		t.Fatal(err)
@@ -165,6 +168,16 @@ func TestHookWriteTriggersPoll(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if c.calls.Load() != before {
 		t.Fatal("non-status file triggered a poll")
+	}
+}
+
+func settle(c *fakeClient) {
+	for {
+		n := c.calls.Load()
+		time.Sleep(100 * time.Millisecond)
+		if c.calls.Load() == n {
+			return
+		}
 	}
 }
 
