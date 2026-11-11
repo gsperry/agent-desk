@@ -696,6 +696,12 @@ pre {
   text-decoration: line-through;
 }
 
+.questions-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--waiting);
+}
+
 .question-text {
   margin: 0 0 0.25rem;
   font-weight: 600;

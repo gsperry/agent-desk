@@ -123,7 +123,7 @@ function body(use: Item, result: Item | undefined, rows: DiffRow[]): ReactNode {
     case 'TodoWrite':
       return <Todos todos={input.todos} />
     case 'AskUserQuestion':
-      return <Questions input={input} answers={obj(detail.answers)} />
+      return <Questions input={input} answers={obj(detail.answers)} answered={res !== undefined} />
     case 'Task':
     case 'Agent':
       return (
@@ -189,10 +189,11 @@ function Todos({ todos }: { todos: unknown }) {
   )
 }
 
-function Questions({ input, answers }: { input: Obj; answers: Obj }) {
+function Questions({ input, answers, answered }: { input: Obj; answers: Obj; answered: boolean }) {
   const questions = Array.isArray(input.questions) ? input.questions.map(obj) : []
   return (
     <div className="questions">
+      {!answered && <p className="questions-hint">Not answered yet. Answer with the buttons in the Terminal panel below.</p>}
       {questions.map((q, i) => {
         const question = str(q.question)
         const answer = str(answers[question])
