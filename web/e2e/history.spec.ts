@@ -165,3 +165,32 @@ test('catch-up summaries are off by default, and say what they cost when on', as
   await panel.getByRole('button', { name: 'Close' }).click()
   await expect(panel).toHaveCount(0)
 })
+
+test('a session opened again returns to where the reader left it', async ({ page }) => {
+  await page.goto(`${base}/s/a0000002#t=${token}`)
+  const nav = page.getByRole('navigation', { name: 'Sessions' })
+  const scroller = page.locator('.transcript').first()
+  await expect(page.getByRole('main').locator('.turn').first()).toBeVisible()
+  // Read somewhere in the middle.
+  await scroller.evaluate((el) => {
+    el.scrollTop = Math.floor(el.scrollHeight / 3)
+    el.dispatchEvent(new Event('scroll'))
+  })
+  await page.waitForTimeout(200)
+  const before = await scroller.evaluate((el) => el.scrollTop)
+  await expect(page.getByRole('button', { name: /Jump to latest/ })).toBeVisible()
+  // Unblock something else, then come back.
+  await nav.getByRole('button', { name: /^reviewer/ }).click()
+  await expect(page.getByRole('main').getByRole('heading', { name: 'reviewer' })).toBeVisible()
+  await nav.getByRole('button', { name: /^web-compaction/ }).click()
+  await expect(page.getByRole('main').getByRole('heading', { name: 'web-compaction' })).toBeVisible()
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(before - 40)
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBeLessThan(before + 40)
+
+  // Following the latest output stays that way.
+  await page.getByRole('button', { name: /Jump to latest/ }).click()
+  await page.waitForTimeout(200)
+  await nav.getByRole('button', { name: /^reviewer/ }).click()
+  await nav.getByRole('button', { name: /^web-compaction/ }).click()
+  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(80)
+})
