@@ -45,7 +45,7 @@ func (f *fakeRemote) Status() RemoteStatus {
 const remoteHost = "desk.tail1234.ts.net"
 
 func remoteOn(level remote.Level) *fakeRemote {
-	return &fakeRemote{cur: remote.Settings{Enabled: true, Level: level, Host: remoteHost, Port: remote.DefaultPort, TailscaleLogins: []string{"guy@example.com"}}}
+	return &fakeRemote{cur: remote.Settings{Enabled: true, Level: level, Host: remoteHost, Port: remote.DefaultPort, TailscaleLogins: []string{"dev@example.com"}}}
 }
 
 type remoteReq struct {
@@ -79,28 +79,28 @@ func TestRemoteAdmission(t *testing.T) {
 		q    remoteReq
 		want int
 	}{
-		{"read", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost, "", "guy@example.com"}, 200},
-		{"app shell", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/", "", remoteHost, "", "guy@example.com"}, 200},
-		{"off", &fakeRemote{cur: remote.Defaults()}, remoteReq{"GET", "/api/sessions", "", remoteHost, "", "guy@example.com"}, 404},
-		{"wrong host", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", "127.0.0.1:7327", "", "guy@example.com"}, 403},
+		{"read", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost, "", "dev@example.com"}, 200},
+		{"app shell", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/", "", remoteHost, "", "dev@example.com"}, 200},
+		{"off", &fakeRemote{cur: remote.Defaults()}, remoteReq{"GET", "/api/sessions", "", remoteHost, "", "dev@example.com"}, 404},
+		{"wrong host", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", "127.0.0.1:7327", "", "dev@example.com"}, 403},
 		{"no identity", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost, "", ""}, 401},
 		{"login not allowed", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost, "", "eve@example.com"}, 401},
 		{"shell needs identity too", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/", "", remoteHost, "", ""}, 401},
-		{"foreign origin", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "https://evil.example", "guy@example.com"}, 403},
-		{"state change needs origin", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "", "guy@example.com"}, 403},
-		{"answer at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, origin, "guy@example.com"}, 200},
-		{"reply refused at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/send", `{"text":"hi"}`, remoteHost, origin, "guy@example.com"}, 403},
-		{"reply at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions/a1/send", `{"text":"hi"}`, remoteHost, origin, "guy@example.com"}, 200},
-		{"spawn refused at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "guy@example.com"}, 403},
-		{"spawn at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "guy@example.com"}, 200},
-		{"action at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/action", `{"action":"kill"}`, remoteHost, origin, "guy@example.com"}, 200},
-		{"paste never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/paste", "png", remoteHost, origin, "guy@example.com"}, 403},
-		{"open never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/open", `{"path":"x"}`, remoteHost, origin, "guy@example.com"}, 403},
-		{"summary never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/summary", `{"since":1,"model":"haiku"}`, remoteHost, origin, "guy@example.com"}, 403},
-		{"settings never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/remote", `{"enabled":false}`, remoteHost, origin, "guy@example.com"}, 403},
-		{"http origin refused", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "http://" + remoteHost, "guy@example.com"}, 403},
-		{"host with another port", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost + ":443", "", "guy@example.com"}, 403},
-		{"host in other case", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", "DESK.tail1234.ts.net", "", "guy@example.com"}, 403},
+		{"foreign origin", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "https://evil.example", "dev@example.com"}, 403},
+		{"state change needs origin", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "", "dev@example.com"}, 403},
+		{"answer at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, origin, "dev@example.com"}, 200},
+		{"reply refused at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/send", `{"text":"hi"}`, remoteHost, origin, "dev@example.com"}, 403},
+		{"reply at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions/a1/send", `{"text":"hi"}`, remoteHost, origin, "dev@example.com"}, 200},
+		{"spawn refused at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "dev@example.com"}, 403},
+		{"spawn at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "dev@example.com"}, 200},
+		{"action at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/action", `{"action":"kill"}`, remoteHost, origin, "dev@example.com"}, 200},
+		{"paste never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/paste", "png", remoteHost, origin, "dev@example.com"}, 403},
+		{"open never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/open", `{"path":"x"}`, remoteHost, origin, "dev@example.com"}, 403},
+		{"summary never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/summary", `{"since":1,"model":"haiku"}`, remoteHost, origin, "dev@example.com"}, 403},
+		{"settings never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/remote", `{"enabled":false}`, remoteHost, origin, "dev@example.com"}, 403},
+		{"http origin refused", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, "http://" + remoteHost, "dev@example.com"}, 403},
+		{"host with another port", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", remoteHost + ":443", "", "dev@example.com"}, 403},
+		{"host in other case", remoteOn(remote.LevelAnswer), remoteReq{"GET", "/api/sessions", "", "DESK.tail1234.ts.net", "", "dev@example.com"}, 403},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,16 +117,16 @@ func TestRemoteSettingsStayOnTheDesk(t *testing.T) {
 	rc := remoteOn(remote.LevelReply)
 	s := newTestServer(t, Config{Remote: rc})
 	// A remote client sees the level, not the allowed logins or host.
-	rec := doRemote(t, s, remoteReq{"GET", "/api/remote", "", remoteHost, "", "guy@example.com"})
-	if rec.Code != 200 || strings.Contains(rec.Body.String(), "guy@example.com") || !strings.Contains(rec.Body.String(), `"level":"reply"`) {
+	rec := doRemote(t, s, remoteReq{"GET", "/api/remote", "", remoteHost, "", "dev@example.com"})
+	if rec.Code != 200 || strings.Contains(rec.Body.String(), "dev@example.com") || !strings.Contains(rec.Body.String(), `"level":"reply"`) {
 		t.Fatalf("remote view: %d %s", rec.Code, rec.Body.String())
 	}
-	rec = doRemote(t, s, remoteReq{"GET", "/api/whoami", "", remoteHost, "", "guy@example.com"})
-	if !strings.Contains(rec.Body.String(), `"remote":true`) || !strings.Contains(rec.Body.String(), `"user":"guy@example.com"`) {
+	rec = doRemote(t, s, remoteReq{"GET", "/api/whoami", "", remoteHost, "", "dev@example.com"})
+	if !strings.Contains(rec.Body.String(), `"remote":true`) || !strings.Contains(rec.Body.String(), `"user":"dev@example.com"`) {
 		t.Fatalf("remote whoami: %s", rec.Body.String())
 	}
 	// The local client can change them, with its token and origin.
-	req := httptest.NewRequest("POST", "/api/remote", strings.NewReader(`{"enabled":true,"level":"manage","host":"`+remoteHost+`","tailscaleLogins":["guy@example.com"]}`))
+	req := httptest.NewRequest("POST", "/api/remote", strings.NewReader(`{"enabled":true,"level":"manage","host":"`+remoteHost+`","tailscaleLogins":["dev@example.com"]}`))
 	req.Host = "127.0.0.1:7317"
 	req.Header.Set("Origin", "http://127.0.0.1:7317")
 	req.Header.Set("Authorization", "Bearer "+testToken)
@@ -161,7 +161,7 @@ func TestRemoteIdentityDoesNotWorkLocally(t *testing.T) {
 	// The local listener ignores the Tailscale header: no token, no entry.
 	req := httptest.NewRequest("GET", "/api/sessions", nil)
 	req.Host = "127.0.0.1:7317"
-	req.Header.Set(remote.TailscaleHeader, "guy@example.com")
+	req.Header.Set(remote.TailscaleHeader, "dev@example.com")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != 401 {
@@ -205,7 +205,7 @@ func TestRemoteWebSocket(t *testing.T) {
 		t.Fatal("WebSocket opened without identity")
 	}
 	for _, origin := range []string{"", "https://evil.example", "http://" + remoteHost} {
-		h := http.Header{remote.TailscaleHeader: {"guy@example.com"}}
+		h := http.Header{remote.TailscaleHeader: {"dev@example.com"}}
 		if origin != "" {
 			h.Set("Origin", origin)
 		}
@@ -214,7 +214,7 @@ func TestRemoteWebSocket(t *testing.T) {
 			t.Fatalf("WebSocket opened with origin %q", origin)
 		}
 	}
-	conn, err := dial("guy@example.com")
+	conn, err := dial("dev@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,13 +252,13 @@ func TestRemoteWebSocket(t *testing.T) {
 func TestRemoteCannotChangeSettings(t *testing.T) {
 	rc := remoteOn(remote.LevelManage)
 	s := newTestServer(t, Config{Remote: rc})
-	rec := doRemote(t, s, remoteReq{"POST", "/api/remote", `{"enabled":false}`, remoteHost, "https://" + remoteHost, "guy@example.com"})
+	rec := doRemote(t, s, remoteReq{"POST", "/api/remote", `{"enabled":false}`, remoteHost, "https://" + remoteHost, "dev@example.com"})
 	if rec.Code != 403 || !rc.Get().Enabled {
 		t.Fatalf("status %d, settings %+v", rec.Code, rc.Get())
 	}
 	// The handler refuses a remote caller even if it were routed to it.
 	req := httptest.NewRequest("POST", "/api/remote", strings.NewReader(`{"enabled":false}`))
-	req = req.WithContext(context.WithValue(req.Context(), remoteKey{}, remoteCaller{id: remote.Identity{User: "guy@example.com"}}))
+	req = req.WithContext(context.WithValue(req.Context(), remoteKey{}, remoteCaller{id: remote.Identity{User: "dev@example.com"}}))
 	w := httptest.NewRecorder()
 	s.setRemoteSettings(w, req)
 	if w.Code != 403 || !rc.Get().Enabled {
@@ -324,7 +324,7 @@ func TestRouteNeeds(t *testing.T) {
 }
 
 func TestStillAllowed(t *testing.T) {
-	on := remote.Settings{Enabled: true, Host: remoteHost, TailscaleLogins: []string{"guy@example.com"}}
+	on := remote.Settings{Enabled: true, Host: remoteHost, TailscaleLogins: []string{"dev@example.com"}}
 	off := on
 	off.Enabled = false
 	moved := on
@@ -342,7 +342,7 @@ func TestStillAllowed(t *testing.T) {
 		{"login removed", removed, false},
 	}
 	for _, tt := range tests {
-		if got := stillAllowed(tt.st, "guy@example.com", remoteHost); got != tt.want {
+		if got := stillAllowed(tt.st, "dev@example.com", remoteHost); got != tt.want {
 			t.Errorf("%s: %v", tt.name, got)
 		}
 	}

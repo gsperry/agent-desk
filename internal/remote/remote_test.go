@@ -30,12 +30,12 @@ func TestAllows(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	ok := Settings{Enabled: true, Level: LevelReply, Host: " Desk.Tail1234.TS.net ", TailscaleLogins: []string{" Guy@Example.com", "guy@example.com", ""}}
+	ok := Settings{Enabled: true, Level: LevelReply, Host: " Desk.Tail1234.TS.net ", TailscaleLogins: []string{" Dev@Example.com", "dev@example.com", ""}}
 	got, err := ok.Validate()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Enabled: true, Level: LevelReply, Host: "desk.tail1234.ts.net", Port: DefaultPort, TailscaleLogins: []string{"guy@example.com"}}
+	want := Settings{Enabled: true, Level: LevelReply, Host: "desk.tail1234.ts.net", Port: DefaultPort, TailscaleLogins: []string{"dev@example.com"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v", got)
 	}
@@ -91,17 +91,17 @@ func TestStore(t *testing.T) {
 }
 
 func TestIdentify(t *testing.T) {
-	s := Settings{TailscaleLogins: []string{"guy@example.com"}}
+	s := Settings{TailscaleLogins: []string{"dev@example.com"}}
 	tests := []struct {
 		name   string
 		values []string
 		want   bool
 	}{
-		{"allowed", []string{"Guy@Example.com"}, true},
+		{"allowed", []string{"Dev@Example.com"}, true},
 		{"not allowed", []string{"eve@example.com"}, false},
 		{"missing", nil, false},
 		{"empty", []string{" "}, false},
-		{"two headers", []string{"guy@example.com", "eve@example.com"}, false},
+		{"two headers", []string{"dev@example.com", "eve@example.com"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,7 +110,7 @@ func TestIdentify(t *testing.T) {
 				r.Header.Add(TailscaleHeader, v)
 			}
 			id, ok := Identify(r, s)
-			if ok != tt.want || (ok && id.User != "guy@example.com") {
+			if ok != tt.want || (ok && id.User != "dev@example.com") {
 				t.Fatalf("got %+v %v", id, ok)
 			}
 		})
