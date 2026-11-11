@@ -3,6 +3,7 @@ import { diffStats, patchRows, replaceRows, type DiffRow } from '../model/diff'
 import { toolPathRef } from '../model/paths'
 import { toolLabel } from '../model/transcript'
 import { initiallyOpen } from '../model/viewprefs'
+import { useAgentLinks } from '../agents-context'
 import { useOpenPath } from '../session-context'
 import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
@@ -60,6 +61,8 @@ export function ToolCall({ use, result, live }: Props) {
   const [open, setOpen] = useState(() => initiallyOpen(name, prefs, { failed, diffRows: rows.length }))
   const state = result ? (failed ? 'error' : 'done') : live ? 'running' : 'none'
   const openPath = useOpenPath()
+  const links = useAgentLinks()
+  const subagent = links && use.tool?.id ? links.agentFor(use.tool.id) : undefined
   const fileRef = toolPathRef(obj(use.tool?.input), rows.find((r) => r.newNo !== undefined)?.newNo)
 
   return (
@@ -82,6 +85,18 @@ export function ToolCall({ use, result, live }: Props) {
         )}
         <span className="tool-state">{state === 'running' ? '…' : state === 'error' ? 'failed' : ''}</span>
       </button>
+      {subagent && links && (
+        <button
+          type="button"
+          className="tool-open tool-open-agent"
+          title="Read this subagent's transcript"
+          onClick={() => {
+            links.open(subagent)
+          }}
+        >
+          View transcript
+        </button>
+      )}
       {fileRef && openPath && (
         <button
           type="button"

@@ -27,6 +27,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/locate"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
+	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/search"
@@ -82,6 +83,7 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
+	poller.Activity = transcriptActivity(transcripts.Locator)
 	searcher := &search.Searcher{Sessions: poller, Locator: transcripts.Locator}
 	l, err := listen(o.port)
 	if err != nil {
@@ -102,6 +104,7 @@ func run(o options) error {
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},
+		Overview:    &overview.Overview{Sessions: poller, Locator: transcripts.Locator},
 	})
 	if err != nil {
 		return err
@@ -156,6 +159,25 @@ func newPoller(fixtures string) (*hub.Poller, backend, error) {
 	c := am.NewCLI()
 	p.Client, p.HooksDir = c, hooks
 	return p, c, nil
+}
+
+// transcriptActivity is the transcript's modification time, for Claude
+// sessions whose transcript exists.
+func transcriptActivity(l *locate.Locator) func(context.Context, am.Session) (time.Time, bool) {
+	return func(ctx context.Context, s am.Session) (time.Time, bool) {
+		if s.Tool != "claude" || s.AgentSessionID == "" {
+			return time.Time{}, false
+		}
+		path, err := l.Find(ctx, s.AgentSessionID, s.Environment)
+		if err != nil {
+			return time.Time{}, false
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return info.ModTime(), true
+	}
 }
 
 // newTranscripts reads Claude's transcripts, or <fixtures>/claude in

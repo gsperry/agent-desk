@@ -219,6 +219,40 @@ func TestLine(t *testing.T) {
 			line:  `{"type":"assistant","uuid":"nc","message":{"id":"m9","content":[{"type":"text","text":"(no content)"}]}}`,
 			kinds: nil,
 		},
+		{
+			name:  "usage lands once, on the last block",
+			line:  `{"type":"assistant","uuid":"us1","message":{"id":"mu","model":"claude-x","usage":{"input_tokens":10,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200,"output_tokens":55},"content":[{"type":"text","text":"a"},{"type":"tool_use","id":"t","name":"Bash","input":{}}]}}`,
+			kinds: []Kind{KindText, KindToolUse},
+			check: func(t *testing.T, it []Item) {
+				if it[0].Meta != nil {
+					t.Fatalf("usage on first block: %+v", it[0].Meta)
+				}
+				u, _ := it[1].Meta["usage"].(map[string]any)
+				if u["contextTokens"] != 1210.0 || u["outputTokens"] != 55.0 || u["model"] != "claude-x" {
+					t.Fatalf("usage %+v", u)
+				}
+			},
+		},
+		{
+			name:  "compaction size and trigger",
+			line:  `{"type":"system","uuid":"cb1","subtype":"compact_boundary","content":"Conversation compacted","compactMetadata":{"preTokens":967064,"trigger":"auto"}}`,
+			kinds: []Kind{KindCompact},
+			check: func(t *testing.T, it []Item) {
+				if it[0].Meta["preTokens"] != 967064.0 || it[0].Meta["trigger"] != "auto" {
+					t.Fatalf("meta %+v", it[0].Meta)
+				}
+			},
+		},
+		{
+			name:  "cost state",
+			line:  `{"type":"cost-state","sessionId":"s","totalCostUSD":1.5,"totalLinesAdded":10,"totalLinesRemoved":2,"totalDuration":60000,"modelUsage":{"m":{"inputTokens":5}}}`,
+			kinds: []Kind{KindMeta},
+			check: func(t *testing.T, it []Item) {
+				if it[0].Label != "cost-state" || it[0].Meta["totalCostUSD"] != 1.5 || it[0].Meta["modelUsage"] == nil {
+					t.Fatalf("%+v", it[0])
+				}
+			},
+		},
 		{"skipped bookkeeping", `{"type":"api-request-blob","hash":"h","message":{}}`, nil, nil},
 		{"malformed json", `{"type":"user",`, []Kind{KindRaw}, nil},
 		{"json array", `[1,2,3]`, []Kind{KindRaw}, nil},

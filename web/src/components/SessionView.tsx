@@ -6,7 +6,12 @@ import type { SessionView as Session } from '../types'
 import type { PathRef } from '../model/paths'
 import { OpenPathContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
+import { AgentLinksContext } from '../agents-context'
+import { agentCounts } from '../model/agents'
+import type { Item, SubAgent } from '../types'
+import { AgentsPanel } from './AgentsPanel'
 import { Composer } from './Composer'
+import { ContextMeter } from './ContextMeter'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
 import { SessionActions } from './SessionActions'
@@ -30,7 +35,14 @@ interface Props {
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
   act: (id: string, a: SessionAction) => Promise<string | null>
+  // seenMark is how far the reader had looked before opening this session.
+  seenMark?: { seq: number }
+  readAgents: (id: string) => Promise<SubAgent[] | null>
+  readAgentTranscript: (id: string, agentId: string) => Promise<Item[] | null>
 }
+
+// The subagent list refreshes this often while a session is open.
+const agentsRefreshMs = 5000
 
 export function SessionView(props: Props) {
   const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer, openPath } = props
@@ -42,6 +54,40 @@ export function SessionView(props: Props) {
   )
   const [sends, setSends] = useState(0)
   const [showPane, setShowPane] = useState(false)
+  // Captured once, so the divider stays put while the session is marked
+  // read underneath it.
+  const [markAtOpen] = useState(props.seenMark)
+  const [agents, setAgents] = useState<SubAgent[]>([])
+  const [agentsOpen, setAgentsOpen] = useState(false)
+  const [openAgent, setOpenAgent] = useState<string | null>(null)
+  const { readAgents } = props
+  const isClaude = session?.tool === 'claude'
+  useEffect(() => {
+    if (!isClaude) return
+    let live = true
+    const load = () => {
+      void readAgents(sessionId).then((list) => {
+        if (live && list) setAgents(list)
+      })
+    }
+    load()
+    const t = setInterval(load, agentsRefreshMs)
+    return () => {
+      live = false
+      clearInterval(t)
+    }
+  }, [readAgents, sessionId, isClaude])
+  const agentLinks = useMemo(() => {
+    const byToolUse = new Map(agents.map((a) => [a.toolUseId, a.id]))
+    return {
+      agentFor: (toolUseId: string) => byToolUse.get(toolUseId),
+      open: (id: string) => {
+        setOpenAgent(id)
+        setAgentsOpen(true)
+      },
+    }
+  }, [agents])
+  const counts = agentCounts(agents)
   const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>()
   useEffect(() => {
     follow(sessionId)
@@ -68,100 +114,131 @@ export function SessionView(props: Props) {
 
   return (
     <OpenPathContext.Provider value={openHere}>
-      <main className="main">
-        <header className="session-head">
-          <div className="session-title">
-            <span className={`glyph status-${session.status}`} aria-hidden>
-              {glyph(session.status)}
-            </span>
-            <h1>{session.name}</h1>
-            <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
-            {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
-            {session.running && (
+    <AgentLinksContext.Provider value={agentLinks}>
+        <main className="main">
+          <header className="session-head">
+            <div className="session-title">
+              <span className={`glyph status-${session.status}`} aria-hidden>
+                {glyph(session.status)}
+              </span>
+              <h1>{session.name}</h1>
+              <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
+              {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
+            <ContextMeter items={d.items} />
+            {counts.total > 0 && (
               <button
                 type="button"
-                className="chip chip-button terminal-toggle"
-                aria-pressed={paneOpen}
+                className="chip chip-button agents-toggle"
+                aria-pressed={agentsOpen}
                 onClick={() => {
-                  setShowPane(!showPane)
+                  setAgentsOpen(!agentsOpen)
+                  setOpenAgent(null)
                 }}
               >
-                Terminal
+                Agents {counts.running > 0 ? `${String(counts.running)} running · ` : ''}
+                {counts.total}
               </button>
             )}
-          </div>
-          <div className="session-sub">
-            {header.title && <span>{header.title}</span>}
-            <span className="muted" title={d.path ?? session.directory}>
-              {session.project.name}
-              {session.branch ? ` · ${session.branch}` : ''}
-            </span>
-            <SessionActions session={session} groups={props.groups} act={props.act} />
-          {header.prLinks.map((pr) => (
-              <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
-                PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
-              </a>
-            ))}
-          </div>
-        </header>
-        <StatusBanner session={session} doc={d} />
-        {d.items.length > 0 || pending.length > 0 ? (
-          <Transcript
-            sessionId={sessionId}
-            items={d.items}
-            hasMore={d.hasMore}
-            loadingOlder={d.loadingOlder}
-            live={session.running}
-            followKey={sends}
-            onLoadOlder={() => {
-              loadOlder(sessionId)
+              {session.running && (
+                <button
+                  type="button"
+                  className="chip chip-button terminal-toggle"
+                  aria-pressed={paneOpen}
+                  onClick={() => {
+                    setShowPane(!showPane)
+                  }}
+                >
+                  Terminal
+                </button>
+              )}
+            </div>
+            <div className="session-sub">
+              {header.title && <span>{header.title}</span>}
+              <span className="muted" title={d.path ?? session.directory}>
+                {session.project.name}
+                {session.branch ? ` · ${session.branch}` : ''}
+              </span>
+              <SessionActions session={session} groups={props.groups} act={props.act} />
+            {header.prLinks.map((pr) => (
+                <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
+                  PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
+                </a>
+              ))}
+            </div>
+          </header>
+          <StatusBanner session={session} doc={d} />
+          {d.items.length > 0 || pending.length > 0 ? (
+            <Transcript
+              sessionId={sessionId}
+              items={d.items}
+              hasMore={d.hasMore}
+              loadingOlder={d.loadingOlder}
+              live={session.running}
+              followKey={sends}
+            markAtOpen={markAtOpen}
+              onLoadOlder={() => {
+                loadOlder(sessionId)
+              }}
+              trailing={
+                <PendingReplies
+                  pending={pending}
+                  onRetry={(p) => {
+                    dismiss(sessionId, p.clientId)
+                    send(sessionId, p.text)
+                  }}
+                  onEdit={(p) => {
+                    dismiss(sessionId, p.clientId)
+                    setRestore({ text: p.text, nonce: Date.now() })
+                  }}
+                  onDismiss={(p) => {
+                    dismiss(sessionId, p.clientId)
+                  }}
+                />
+              }
+            />
+          ) : (
+            <div className="empty">{emptyText(session, d)}</div>
+          )}
+          {paneOpen && (
+            <LivePane
+              sessionId={sessionId}
+              read={readScreen}
+              answer={answer}
+              onClose={
+                showPane
+                  ? () => {
+                      setShowPane(false)
+                    }
+                  : undefined
+              }
+            />
+          )}
+          <Composer
+            key={sessionId}
+            session={session}
+            connected={connected}
+            insideSession={insideSession}
+            restore={restore}
+            onSend={(text) => {
+              send(sessionId, text)
+              setSends((n) => n + 1)
             }}
-            trailing={
-              <PendingReplies
-                pending={pending}
-                onRetry={(p) => {
-                  dismiss(sessionId, p.clientId)
-                  send(sessionId, p.text)
-                }}
-                onEdit={(p) => {
-                  dismiss(sessionId, p.clientId)
-                  setRestore({ text: p.text, nonce: Date.now() })
-                }}
-                onDismiss={(p) => {
-                  dismiss(sessionId, p.clientId)
-                }}
-              />
-            }
           />
-        ) : (
-          <div className="empty">{emptyText(session, d)}</div>
-        )}
-        {paneOpen && (
-          <LivePane
-            sessionId={sessionId}
-            read={readScreen}
-            answer={answer}
-            onClose={
-              showPane
-                ? () => {
-                    setShowPane(false)
-                  }
-                : undefined
-            }
-          />
-        )}
-        <Composer
-          key={sessionId}
-          session={session}
-          connected={connected}
-          insideSession={insideSession}
-          restore={restore}
-          onSend={(text) => {
-            send(sessionId, text)
-            setSends((n) => n + 1)
-          }}
-        />
-      </main>
+          {agentsOpen && (
+            <AgentsPanel
+              sessionId={sessionId}
+              agents={agents}
+              openAgent={openAgent}
+              onOpen={setOpenAgent}
+              onClose={() => {
+                setAgentsOpen(false)
+                setOpenAgent(null)
+              }}
+              readTranscript={props.readAgentTranscript}
+            />
+          )}
+        </main>
+    </AgentLinksContext.Provider>
     </OpenPathContext.Provider>
   )
 }

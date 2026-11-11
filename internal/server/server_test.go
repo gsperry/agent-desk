@@ -16,10 +16,12 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
+	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
@@ -68,6 +70,20 @@ func (f *fakeTranscripts) Window(_ context.Context, id string, before, limit int
 
 func (f *fakeTranscripts) Around(_ context.Context, id, uuid string, _ int) hub.Page {
 	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 3, Kind: transcript.KindUser, UUID: uuid}}}
+}
+
+func (f *fakeTranscripts) Agents(_ context.Context, id string) ([]agents.Agent, error) {
+	if id == "broken" {
+		return nil, errors.New("boom")
+	}
+	return []agents.Agent{{ID: "aaa", Status: agents.StatusRunning}}, nil
+}
+
+func (f *fakeTranscripts) AgentTranscript(_ context.Context, _, agentID string) ([]transcript.Item, error) {
+	if agentID != "aaa" {
+		return nil, agents.ErrNotFound
+	}
+	return []transcript.Item{{Seq: 0, Kind: transcript.KindText, Text: "sub"}}, nil
 }
 
 func (f *fakeTranscripts) Subscribe(_ context.Context, id string) (hub.Page, <-chan hub.Event, func()) {
@@ -147,6 +163,12 @@ func (f *fakeLifecycle) DeleteGroup(_ context.Context, path string) error {
 	return f.err
 }
 
+type fakeOverview struct{}
+
+func (fakeOverview) Summaries(context.Context) map[string]overview.Summary {
+	return map[string]overview.Summary{"a1": {Activity: "Bash: go test"}}
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -183,6 +205,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Lifecycle == nil {
 		cfg.Lifecycle = &fakeLifecycle{}
 	}
+	if cfg.Overview == nil {
+		cfg.Overview = fakeOverview{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +216,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -233,6 +258,13 @@ func TestRequestChecks(t *testing.T) {
 		{"search", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
 		{"search without token", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "", 401},
 		{"transcript around a hit", "GET", "/api/sessions/a1/transcript?around=u-1", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"overview", "GET", "/api/overview", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"overview without token", "GET", "/api/overview", "127.0.0.1:7317", "", "", 401},
+		{"agents", "GET", "/api/sessions/a1/agents", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"agents failure", "GET", "/api/sessions/broken/agents", "127.0.0.1:7317", "", "Bearer " + testToken, 502},
+		{"agent transcript", "GET", "/api/sessions/a1/agents/aaa/transcript", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"missing agent transcript", "GET", "/api/sessions/a1/agents/zzz/transcript", "127.0.0.1:7317", "", "Bearer " + testToken, 404},
+		{"agents without token", "GET", "/api/sessions/a1/agents", "127.0.0.1:7317", "", "", 401},
 		{"transcript window without token", "GET", "/api/sessions/a1/transcript", "127.0.0.1:7317", "", "", 401},
 		{"unknown api route without token", "GET", "/api/anything", "127.0.0.1:7317", "", "", 401},
 		{"static without token", "GET", "/", "127.0.0.1:7317", "", "", 200},

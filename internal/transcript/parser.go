@@ -20,7 +20,7 @@ const (
 var skipped = map[string]bool{
 	"api-request": true, "api-request-blob": true, "api-request-shape": true,
 	"queue-operation": true, "file-history-snapshot": true, "file-history-delta": true,
-	"atis-latch": true, "tools-used": true, "cost-state": true, "last-prompt": true,
+	"atis-latch": true, "tools-used": true, "last-prompt": true,
 }
 
 // metaFields maps metadata record types to the fields the header reads.
@@ -33,6 +33,8 @@ var metaFields = map[string][]string{
 	"pr-link":         {"prNumber", "prUrl", "prRepository"},
 	"continued-in":    {"continuedInSessionId"},
 	"agent-setting":   {"agentSetting"},
+	"cost-state": {"totalCostUSD", "totalDuration", "totalAPIDuration", "totalToolDuration",
+		"totalLinesAdded", "totalLinesRemoved", "modelUsage", "hasUnknownModelCost"},
 }
 
 // Parser turns lines into items. It keeps state across lines (sequence
@@ -69,13 +71,25 @@ type record struct {
 	Level            string          `json:"level"`
 	Error            json.RawMessage `json:"error"`
 	DurationMs       *float64        `json:"durationMs"`
-	ThinkingMs       *float64        `json:"thinkingDurationMs"`
+	CompactMetadata  *struct {
+		PreTokens *float64 `json:"preTokens"`
+		Trigger   string   `json:"trigger"`
+	} `json:"compactMetadata"`
+	ThinkingMs *float64 `json:"thinkingDurationMs"`
 }
 
 type message struct {
 	ID      string          `json:"id"`
 	Model   string          `json:"model"`
 	Content json.RawMessage `json:"content"`
+	Usage   *usage          `json:"usage"`
+}
+
+type usage struct {
+	Input         float64 `json:"input_tokens"`
+	CacheRead     float64 `json:"cache_read_input_tokens"`
+	CacheCreation float64 `json:"cache_creation_input_tokens"`
+	Output        float64 `json:"output_tokens"`
 }
 
 type block struct {
@@ -376,7 +390,26 @@ func (p *Parser) assistant(base Item, r record, line []byte) []Item {
 		}
 		items = append(items, it)
 	}
+	attachUsage(items, m)
 	return items
+}
+
+// attachUsage puts the turn's token usage on the record's last item, once.
+// Context tokens are what the model read for this turn: fresh input plus
+// cache reads and writes.
+func attachUsage(items []Item, m message) {
+	if m.Usage == nil || len(items) == 0 {
+		return
+	}
+	last := &items[len(items)-1]
+	if last.Meta == nil {
+		last.Meta = map[string]any{}
+	}
+	last.Meta["usage"] = map[string]any{
+		"model":         m.Model,
+		"contextTokens": m.Usage.Input + m.Usage.CacheRead + m.Usage.CacheCreation,
+		"outputTokens":  m.Usage.Output,
+	}
 }
 
 func toolResult(b block, detail json.RawMessage) *ToolResult {
@@ -477,6 +510,14 @@ func system(base Item, r record) Item {
 	}
 	if r.Level != "" {
 		m["level"] = r.Level
+	}
+	if c := r.CompactMetadata; c != nil {
+		if c.PreTokens != nil {
+			m["preTokens"] = *c.PreTokens
+		}
+		if c.Trigger != "" {
+			m["trigger"] = c.Trigger
+		}
 	}
 	if len(r.Error) > 0 && string(r.Error) != "null" {
 		var e any

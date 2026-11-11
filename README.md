@@ -44,6 +44,13 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 | `--port` | `7317` | Port on 127.0.0.1. A busy port falls back to a free one. |
 | `--no-open` | off | Print the URL without opening a browser. |
 
+## Oversight
+
+- **Overview:** the home screen (click "Agent Desk" in the sidebar) shows a card per session: what it is doing now, its last reply and your last prompt, context use, and when it last changed. Sessions that need you come first.
+- **Subagents:** the Agents button in a session's header lists the subagents its conversation spawned, running first, with type, description and duration. Click one to read its transcript, live while it runs. Agent tool calls link to their subagent.
+- **Since you last looked:** sidebar rows with new activity get a dot, and opening the session shows a divider before what arrived since your last visit.
+- **Context meter:** the session header shows how much context the latest turn used and, once that model has auto-compacted in a transcript Agent Desk has read, how close it is to compacting again.
+
 ## Replying
 
 Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.

@@ -212,8 +212,12 @@ pre {
 }
 
 .brand {
+  padding: 0;
+  border: 0;
+  background: none;
   font-weight: 650;
   letter-spacing: 0.01em;
+  cursor: pointer;
 }
 
 .conn {
@@ -1658,4 +1662,273 @@ mark {
 
 .form .link-button {
   align-self: flex-start;
+}
+
+/* Since you last looked */
+
+.unread {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.new-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.new-divider::before,
+.new-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--accent);
+}
+
+/* Context meter */
+
+.context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.context-bar {
+  display: inline-block;
+  width: 3.5rem;
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: 0.2rem;
+  background: var(--surface-2);
+}
+
+.context-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.context-meter.high {
+  color: var(--warn);
+}
+
+.context-meter.high .context-bar > span {
+  background: var(--warn);
+}
+
+/* Subagents */
+
+.main {
+  position: relative;
+}
+
+.agents-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: min(34rem, 100%);
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 12%);
+}
+
+.agents-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.agent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-row:hover {
+  background: var(--surface);
+}
+
+.agent-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.agent-type {
+  font-weight: 600;
+}
+
+.agent-time {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.agent-status {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--subtle);
+}
+
+.agent-running .agent-status,
+.agent-status.agent-running {
+  color: var(--working);
+}
+
+.agent-failed .agent-status,
+.agent-status.agent-failed {
+  color: var(--error);
+}
+
+.agent-completed .agent-status,
+.agent-status.agent-completed {
+  color: var(--finished);
+}
+
+.agent-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--dim);
+}
+
+.subagent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.subagent-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.subagent-meta .agent-desc {
+  flex-basis: 100%;
+}
+
+.subagent .reading {
+  padding: 1rem;
+}
+
+.tool-open-agent {
+  opacity: 1;
+}
+
+/* Overview */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 0.9rem;
+  padding: 1.25rem 1.5rem 2rem;
+}
+
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  border: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.session-card:hover {
+  border-color: var(--accent);
+}
+
+.session-card.status-waiting,
+.session-card.status-errored {
+  border-left: 3px solid var(--waiting);
+}
+
+.card-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-line .status-chip {
+  margin-left: auto;
+}
+
+.card-where,
+.card-prompt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.card-activity {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.card-reply {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  color: var(--dim);
+  line-height: 1.45;
+}
+
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 0.3rem;
+  font-size: 0.75rem;
+}
+
+.overview-stopped {
+  margin-left: auto;
+  font-size: 0.8rem;
 }

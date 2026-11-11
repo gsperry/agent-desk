@@ -5,6 +5,7 @@ import { Sidebar, type ViewOptions } from './components/Sidebar'
 import { ConfirmDialog } from './components/Dialog'
 import { NewGroup } from './components/NewGroup'
 import { NewSession } from './components/NewSession'
+import { Overview } from './components/Overview'
 import { SearchView } from './components/SearchView'
 import { Settings } from './components/Settings'
 import { Switcher } from './components/Switcher'
@@ -39,7 +40,7 @@ function isTyping(target: EventTarget | null): boolean {
 function Desk({ token }: { token: string }) {
   const store = useMemo(() => new Store(token), [token])
   useEffect(() => store.start(), [store])
-  const { conn, data, pending, acks, prefs, permission, toast } = useStore(store)
+  const { conn, data, pending, acks, prefs, permission, toast, seen } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
   const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
   const [switcher, setSwitcher] = useState(false)
@@ -108,6 +109,16 @@ function Desk({ token }: { token: string }) {
     store.setViewing(selected, visible)
   }, [store, select, selected, visible])
 
+  // The open session counts as read while the page is visible.
+  const selectedSession = sessions.find((s) => s.id === selected)
+  const lastSeq = selected ? data.docs[selected]?.items.at(-1)?.seq : undefined
+  useEffect(() => {
+    const conv = selectedSession?.agentSessionId
+    const at = selectedSession?.lastActivity
+    if (!visible || !conv || !at || lastSeq === undefined) return
+    store.markViewed(conv, at, lastSeq)
+  }, [store, visible, selectedSession?.agentSessionId, selectedSession?.lastActivity, lastSeq])
+
   useEffect(() => {
     document.title = attention > 0 ? `(${String(attention)}) Agent Desk` : 'Agent Desk'
   }, [attention])
@@ -157,6 +168,15 @@ function Desk({ token }: { token: string }) {
   const readScreen = useCallback((id: string) => store.screen(id), [store])
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
   const loadOptions = useCallback(() => store.spawnOptions(), [store])
+  const readAgents = useCallback((id: string) => store.agents(id), [store])
+  const loadOverview = useCallback(() => store.overview(), [store])
+  const goHome = useCallback(() => {
+    history.pushState(null, '', '/')
+    setSelected(null)
+    setSearchText('')
+    setSearchQuery(null)
+  }, [])
+  const readAgentTranscript = useCallback((id: string, agentId: string) => store.agentTranscript(id, agentId), [store])
   const spawn = useCallback((r: SpawnRequest) => store.spawn(r), [store])
   const act = useCallback((id: string, a: SessionAction) => store.act(id, a), [store])
   const openSpawn = useCallback((project: Project | null) => {
@@ -191,6 +211,7 @@ function Desk({ token }: { token: string }) {
           conn={conn}
           groups={groups}
           acks={acks}
+          seen={seen}
           attention={attention}
           view={view}
           onView={setView}
@@ -217,6 +238,7 @@ function Desk({ token }: { token: string }) {
           onDeleteGroup={(path) => {
             setModal({ kind: 'deleteGroup', path, busy: false, error: null })
           }}
+          onHome={goHome}
         />
         {searchQuery ? (
           <SearchView
@@ -252,6 +274,9 @@ function Desk({ token }: { token: string }) {
               openPath={openPath}
               groups={amGroups}
               act={act}
+              seenMark={session?.agentSessionId ? seen[session.agentSessionId] : undefined}
+              readAgents={readAgents}
+              readAgentTranscript={readAgentTranscript}
             />
           ) : (
             <main className="main">
@@ -259,11 +284,7 @@ function Desk({ token }: { token: string }) {
             </main>
           )
         ) : (
-          <main className="main">
-            <div className="empty">
-              {attention > 0 ? `${String(attention)} session${attention === 1 ? ' needs' : 's need'} you. Press j to go to the first.` : 'Pick a session on the left, or press ⌘K.'}
-            </div>
-          </main>
+          <Overview sessions={sessions} acks={acks} seen={seen} load={loadOverview} onOpen={select} />
         )}
         {modal?.kind === 'spawn' && (
           <NewSession

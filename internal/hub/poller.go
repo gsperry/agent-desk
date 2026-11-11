@@ -24,6 +24,9 @@ type Poller struct {
 	Interval time.Duration
 	// HooksDir is watched for *.status writes. Empty disables the watcher.
 	HooksDir string
+	// Activity reports when a session's transcript last changed. Nil leaves
+	// LastActivity empty.
+	Activity func(ctx context.Context, s am.Session) (time.Time, bool)
 
 	mu      sync.Mutex
 	state   State
@@ -162,7 +165,13 @@ func (p *Poller) build(ctx context.Context) State {
 		if s.Self {
 			st.InsideSession = true
 		}
-		st.Sessions = append(st.Sessions, viewOf(s, p.Resolver.Resolve(ctx, s)))
+		v := viewOf(s, p.Resolver.Resolve(ctx, s))
+		if p.Activity != nil {
+			if t, ok := p.Activity(ctx, s); ok {
+				v.LastActivity = t.UTC().Format(time.RFC3339)
+			}
+		}
+		st.Sessions = append(st.Sessions, v)
 	}
 	return st
 }

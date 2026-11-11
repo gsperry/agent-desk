@@ -191,3 +191,17 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestActivity(t *testing.T) {
+	c := &fakeClient{snap: snapshot("idle", "working")}
+	p := newPoller(c)
+	stamp := time.Date(2026, 11, 10, 12, 0, 0, 0, time.FixedZone("x", 3600))
+	p.Activity = func(_ context.Context, s am.Session) (time.Time, bool) {
+		return stamp, s.ID == "a"
+	}
+	p.Poll(context.Background())
+	st := p.State()
+	if st.Sessions[0].LastActivity != "2026-11-10T11:00:00Z" || st.Sessions[1].LastActivity != "" {
+		t.Fatalf("activity %q %q", st.Sessions[0].LastActivity, st.Sessions[1].LastActivity)
+	}
+}

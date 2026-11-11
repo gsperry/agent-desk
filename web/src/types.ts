@@ -22,6 +22,7 @@ export interface SessionView {
   environment?: string
   agentSessionId?: string
   project: Project
+  lastActivity?: string
 }
 
 export interface GroupView {
@@ -144,3 +145,26 @@ export interface SpawnRequest {
 }
 
 export type SessionAction = { action: 'kill' | 'revive' | 'archive' | 'restore' } | { action: 'move'; group: string }
+
+export interface SubAgent {
+  id: string
+  toolUseId: string
+  type: string
+  description: string
+  depth: number
+  model?: string
+  status: 'running' | 'completed' | 'failed' | 'stopped' | (string & {})
+  started?: string
+  lastActivity?: string
+}
+
+export interface Summary {
+  activity?: string
+  activityKind?: 'tool' | 'reply' | 'prompt' | (string & {})
+  lastReply?: string
+  lastPrompt?: string
+  promptAt?: string
+  contextTokens?: number
+  model?: string
+  updated?: string
+}

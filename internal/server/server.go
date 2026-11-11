@@ -19,13 +19,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
+	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
+	"github.com/gsperry/agent-desk/internal/transcript"
 )
 
 // WSProtocol is the WebSocket subprotocol the server speaks. Browsers cannot
@@ -61,6 +64,12 @@ type Config struct {
 	Searcher Searcher
 	// Lifecycle starts, stops and files sessions.
 	Lifecycle Lifecycle
+	// Overview summarizes every session for the home screen.
+	Overview Overview
+}
+
+type Overview interface {
+	Summaries(ctx context.Context) map[string]overview.Summary
 }
 
 type Lifecycle interface {
@@ -92,6 +101,8 @@ type Panes interface {
 type TranscriptSource interface {
 	Window(ctx context.Context, sessionID string, before, limit int) hub.Page
 	Around(ctx context.Context, sessionID, uuid string, radius int) hub.Page
+	Agents(ctx context.Context, sessionID string) ([]agents.Agent, error)
+	AgentTranscript(ctx context.Context, sessionID, agentID string) ([]transcript.Item, error)
 	Subscribe(ctx context.Context, sessionID string) (hub.Page, <-chan hub.Event, func())
 }
 
@@ -113,8 +124,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil {
-		return nil, errors.New("sessions, manager, transcripts, sender, panes, opener, searcher and lifecycle are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil {
+		return nil, errors.New("sessions, manager, transcripts, sender, panes, opener, searcher, lifecycle and overview are required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -140,6 +151,9 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
 	s.mux.Handle("GET /api/sessions/{id}/pane", s.requireToken(http.HandlerFunc(s.screen)))
 	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
+	s.mux.Handle("GET /api/sessions/{id}/agents", s.requireToken(http.HandlerFunc(s.listAgents)))
+	s.mux.Handle("GET /api/sessions/{id}/agents/{agent}/transcript", s.requireToken(http.HandlerFunc(s.agentTranscript)))
+	s.mux.Handle("GET /api/overview", s.requireToken(http.HandlerFunc(s.overview)))
 	s.mux.Handle("GET /api/spawn-options", s.requireToken(http.HandlerFunc(s.spawnOptions)))
 	s.mux.Handle("POST /api/sessions", s.requireToken(http.HandlerFunc(s.spawn)))
 	s.mux.Handle("POST /api/sessions/{id}/action", s.requireToken(http.HandlerFunc(s.action)))
@@ -271,6 +285,33 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, map[string]any{"summaries": s.cfg.Overview.Summaries(ctx)})
+}
+
+func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
+	list, err := s.cfg.Transcripts.Agents(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agents": list})
+}
+
+func (s *Server) agentTranscript(w http.ResponseWriter, r *http.Request) {
+	items, err := s.cfg.Transcripts.AgentTranscript(r.Context(), r.PathValue("id"), r.PathValue("agent"))
+	switch {
+	case errors.Is(err, agents.ErrNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "subagent not found"})
+	case err != nil:
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	}
 }
 
 // spawnTimeout covers agent-manager registering its MCP server with a new

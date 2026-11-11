@@ -3,8 +3,9 @@ import { apiFetch, connect, type Connection, type ConnectionState } from './api'
 import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Transition } from './model/attention'
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
+import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest } from './types'
+import type { Answer, Item, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -22,6 +23,7 @@ export interface StoreState {
   // toast is a short message about an action that failed, such as opening
   // a file.
   toast: { message: string; id: number } | null
+  seen: Seen
 }
 
 const acksKey = 'agent-desk:acks'
@@ -71,7 +73,20 @@ export class Store {
       prefs: readJSON<Prefs>(prefsKey, { notify: true, notifyOnFinish: false }),
       permission: notifier.permission(),
       toast: null,
+      seen: loadSeen(localStorage),
     }
+  }
+
+  // markViewed records that the reader has looked at a conversation up to
+  // its current activity and the last item on screen.
+  markViewed(conv: string, at: string, seq: number) {
+    this.setSeen(markSeen(this.state.seen, conv, at, seq))
+  }
+
+  private setSeen(seen: Seen) {
+    if (seen === this.state.seen) return
+    saveSeen(localStorage, seen)
+    this.set({ ...this.state, seen })
   }
 
   // setOnOpen sets what a notification click does.
@@ -149,6 +164,7 @@ export class Store {
     if (data === this.state.data) return
     this.set({ ...this.state, data, pending: this.reconciled(data) })
     if (msg.type === 'sessions') {
+      this.setSeen(baseline(this.state.seen, msg.state.sessions))
       this.notifyTransitions(transitions(this.prevStatuses, msg.state.sessions))
       this.prevStatuses = statusMap(msg.state.sessions)
       this.refreshAcks()
@@ -280,6 +296,26 @@ export class Store {
 
   async deleteGroup(path: string): Promise<string | null> {
     return (await this.post('/api/groups/delete', { path })).error ?? null
+  }
+
+  async overview(): Promise<Record<string, Summary> | null> {
+    const res = await apiFetch(this.token, '/api/overview').catch(() => null)
+    if (!res?.ok) return null
+    return ((await res.json()) as { summaries: Record<string, Summary> }).summaries
+  }
+
+  async agents(sessionId: string): Promise<SubAgent[] | null> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/agents`).catch(() => null)
+    if (!res?.ok) return null
+    return ((await res.json()) as { agents: SubAgent[] }).agents
+  }
+
+  async agentTranscript(sessionId: string, agentId: string): Promise<Item[] | null> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/transcript`).catch(
+      () => null,
+    )
+    if (!res?.ok) return null
+    return ((await res.json()) as { items: Item[] }).items
   }
 
   async search(query: string, archived: boolean): Promise<{ result?: SearchResult; error?: string }> {

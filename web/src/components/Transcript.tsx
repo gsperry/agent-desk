@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { blockSeqs } from '../model/highlight'
+import { dividerSeq } from '../model/seen'
 import { buildBlocks } from '../model/transcript'
 import { BlockView } from '../render/Blocks'
 import type { Item } from '../types'
@@ -15,12 +17,13 @@ interface Props {
   // followKey changes when the reader acts (sends a reply), which brings
   // the view back to the latest output.
   followKey?: number
+  markAtOpen?: { seq: number }
 }
 
 // Within this many pixels of the bottom counts as following the latest.
 const followSlack = 80
 
-export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLoadOlder, trailing, followKey }: Props) {
+export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLoadOlder, trailing, followKey, markAtOpen }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const following = useRef(true)
@@ -31,6 +34,18 @@ export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLo
   const prev = useRef({ sessionId, firstSeq, lastSeq, height: 0, count: items.length })
 
   const blocks = useMemo(() => buildBlocks(items), [items])
+  const newFrom = useMemo(
+    () =>
+      dividerSeq(
+        markAtOpen,
+        items.map((i) => i.seq),
+      ),
+    [markAtOpen, items],
+  )
+  const dividerKey = useMemo(() => {
+    if (newFrom === null) return null
+    return blocks.find((b) => blockSeqs(b).some((s) => s >= newFrom))?.key ?? null
+  }, [blocks, newFrom])
 
   const scrollToBottom = () => {
     const el = scroller.current
@@ -106,7 +121,14 @@ export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLo
         <div className="reading" ref={content}>
           {hasMore && <p className="muted center">{loadingOlder ? 'Loading earlier messages…' : 'Scroll up for earlier messages'}</p>}
           {blocks.map((b) => (
-            <BlockView key={b.key} block={b} live={live} />
+            <Fragment key={b.key}>
+              {b.key === dividerKey && (
+                <div className="new-divider" role="separator">
+                  <span>New since you last looked</span>
+                </div>
+              )}
+              <BlockView block={b} live={live} />
+            </Fragment>
           ))}
           {trailing}
         </div>
