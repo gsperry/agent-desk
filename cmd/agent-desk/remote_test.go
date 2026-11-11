@@ -106,3 +106,29 @@ func TestRemoteListenerRefusesToReplaceAFile(t *testing.T) {
 		t.Fatal("a regular file was replaced")
 	}
 }
+
+func TestRemoteListenerLeavesALiveSocket(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "ad-remote-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	store := &remote.Store{Path: filepath.Join(dir, "remote.json")}
+	first := newRemoteListener(store, "")
+	first.handler = http.NotFoundHandler()
+	on := remote.Settings{Enabled: true, Host: "desk.ts.net", TailscaleLogins: []string{"a@b.c"}}
+	if _, err := first.Set(on); err != nil || !first.Status().Listening {
+		t.Fatalf("first: %v %+v", err, first.Status())
+	}
+	defer first.stop()
+	second := newRemoteListener(&remote.Store{Path: store.Path}, "")
+	second.handler = http.NotFoundHandler()
+	if err := second.apply(on); err == nil || second.Status().Listening {
+		t.Fatalf("second took over a live socket: %v %+v", err, second.Status())
+	}
+	if c, err := net.Dial("unix", first.socket); err != nil {
+		t.Fatalf("first listener lost its socket: %v", err)
+	} else {
+		_ = c.Close()
+	}
+}

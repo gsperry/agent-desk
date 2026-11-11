@@ -322,3 +322,28 @@ func TestRouteNeeds(t *testing.T) {
 		}
 	}
 }
+
+func TestStillAllowed(t *testing.T) {
+	on := remote.Settings{Enabled: true, Host: remoteHost, TailscaleLogins: []string{"guy@example.com"}}
+	off := on
+	off.Enabled = false
+	moved := on
+	moved.Host = "other.ts.net"
+	removed := on
+	removed.TailscaleLogins = []string{"someone@example.com"}
+	tests := []struct {
+		name string
+		st   remote.Settings
+		want bool
+	}{
+		{"unchanged", on, true},
+		{"turned off", off, false},
+		{"host changed", moved, false},
+		{"login removed", removed, false},
+	}
+	for _, tt := range tests {
+		if got := stillAllowed(tt.st, "guy@example.com", remoteHost); got != tt.want {
+			t.Errorf("%s: %v", tt.name, got)
+		}
+	}
+}

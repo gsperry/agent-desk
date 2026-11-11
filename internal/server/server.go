@@ -197,7 +197,7 @@ type Server struct {
 	needs map[string]remote.Need
 
 	remoteMu    sync.Mutex
-	remoteConns map[*websocket.Conn]string
+	remoteConns map[*websocket.Conn]remoteConn
 }
 
 func New(cfg Config) (*Server, error) {
@@ -220,7 +220,7 @@ func New(cfg Config) (*Server, error) {
 		mux:         http.NewServeMux(),
 		remoteMux:   http.NewServeMux(),
 		needs:       map[string]remote.Need{},
-		remoteConns: map[*websocket.Conn]string{},
+		remoteConns: map[*websocket.Conn]remoteConn{},
 	}
 	for _, o := range cfg.DevOrigins {
 		s.origins[strings.TrimRight(o, "/")] = true

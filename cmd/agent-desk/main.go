@@ -349,10 +349,18 @@ func (r *remoteListener) listen(s remote.Settings) (net.Listener, error) {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return nil, err
 	}
-	// A socket left by an earlier run is removed; anything else is not.
+	// A socket left by an earlier run is removed; a live one (another
+	// Agent Desk) or anything else is not.
+	if len(r.socket) > 100 {
+		return nil, fmt.Errorf("the socket path %s is too long for a Unix socket", r.socket)
+	}
 	if info, err := os.Lstat(r.socket); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return nil, fmt.Errorf("%s exists and is not a socket", r.socket)
+		}
+		if c, err := net.DialTimeout("unix", r.socket, time.Second); err == nil {
+			_ = c.Close()
+			return nil, fmt.Errorf("another Agent Desk is already serving remote access at %s", r.socket)
 		}
 		if err := os.Remove(r.socket); err != nil {
 			return nil, err

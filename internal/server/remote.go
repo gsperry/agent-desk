@@ -129,9 +129,9 @@ func (s *Server) setRemoteSettings(w http.ResponseWriter, r *http.Request) {
 
 // trackRemote records a remote WebSocket so a settings change can close
 // it; the returned function forgets it.
-func (s *Server) trackRemote(c *websocket.Conn, user string) func() {
+func (s *Server) trackRemote(c *websocket.Conn, user, host string) func() {
 	s.remoteMu.Lock()
-	s.remoteConns[c] = user
+	s.remoteConns[c] = remoteConn{user: user, host: host}
 	s.remoteMu.Unlock()
 	return func() {
 		s.remoteMu.Lock()
@@ -140,14 +140,23 @@ func (s *Server) trackRemote(c *websocket.Conn, user string) func() {
 	}
 }
 
+// remoteConn is who opened a remote WebSocket, and through which host.
+type remoteConn struct{ user, host string }
+
+// stillAllowed reports whether settings still admit a remote user on host.
+func stillAllowed(st remote.Settings, user, host string) bool {
+	return st.Enabled && st.Host == host && slices.Contains(st.TailscaleLogins, user)
+}
+
 // DropRemote closes remote WebSockets the settings no longer allow: all of
-// them when remote access is off, else those whose login was removed.
+// them when remote access is off, else those whose login was removed or
+// whose host name changed.
 // Closing the listener does not end connections that were upgraded.
 func (s *Server) DropRemote(st remote.Settings) {
 	s.remoteMu.Lock()
 	var drop []*websocket.Conn
-	for c, user := range s.remoteConns {
-		if !st.Enabled || !slices.Contains(st.TailscaleLogins, user) {
+	for c, rc := range s.remoteConns {
+		if !stillAllowed(st, rc.user, rc.host) {
 			drop = append(drop, c)
 		}
 	}
