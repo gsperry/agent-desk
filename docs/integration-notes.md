@@ -58,7 +58,7 @@ Failure modes:
 - **Status only advances while a manager runs.** `manager_awake` is false when no TUI or `agent-manager serve` holds a fresh poller heartbeat. Agent Desk shows a banner and offers `agent-manager serve --background` (supported, headless, macOS and Linux).
 - **`finished` clears to `idle` only in the TUI** (entering the session or the `mark_idle` key). There is no CLI or MCP path. Agent Desk keeps its own per-session "seen" mark. Upstream gap, see below.
 - **Not every dialog reads as `waiting`.** The workspace trust dialog read `waiting`. Claude's "Teach auto mode about your environment?" dialog read `finished`.
-- **Latency.** Worst case is the 2 s poller interval plus Agent Desk's own poll. Watching `hooks/<id>.status` with fsnotify gives an earlier signal for hook-driven transitions.
+- **Latency.** Agent Desk polls on every `hooks/<id>.status` write and every second, but the stored status changes only on agent-manager's 2 s poll. Measured on the probe (M1): hook write to Agent Desk took 2.25 s for `working` and 2.30 s for `finished`. Upstream gap 3 removes the wait.
 
 ## 3. Sending text
 
