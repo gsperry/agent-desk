@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { buildBlocks } from '../model/transcript'
 import { BlockView } from '../render/Blocks'
 import type { Item } from '../types'
@@ -10,12 +10,17 @@ interface Props {
   loadingOlder: boolean
   live: boolean
   onLoadOlder: () => void
+  // trailing renders after the transcript, such as replies not yet recorded.
+  trailing?: ReactNode
+  // followKey changes when the reader acts (sends a reply), which brings
+  // the view back to the latest output.
+  followKey?: number
 }
 
 // Within this many pixels of the bottom counts as following the latest.
 const followSlack = 80
 
-export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLoadOlder }: Props) {
+export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLoadOlder, trailing, followKey }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const following = useRef(true)
@@ -65,6 +70,19 @@ export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLo
     }
   }, [])
 
+  // A send brings the reader back to the latest output.
+  const [seenFollowKey, setSeenFollowKey] = useState(followKey)
+  if (followKey !== seenFollowKey) {
+    setSeenFollowKey(followKey)
+    setAtBottom(true)
+    setUnseen(0)
+  }
+  useLayoutEffect(() => {
+    if (followKey === undefined) return
+    following.current = true
+    scrollToBottom()
+  }, [followKey])
+
   const onScroll = () => {
     const el = scroller.current
     if (!el) return
@@ -90,6 +108,7 @@ export function Transcript({ sessionId, items, hasMore, loadingOlder, live, onLo
           {blocks.map((b) => (
             <BlockView key={b.key} block={b} live={live} />
           ))}
+          {trailing}
         </div>
       </div>
       {!atBottom && (

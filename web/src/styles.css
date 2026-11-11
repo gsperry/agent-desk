@@ -899,3 +899,104 @@ pre.code-body,
   padding: 0.6rem 0.75rem;
   background: transparent !important;
 }
+
+/* Composer */
+
+.composer {
+  padding: 0.5rem 1.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.composer > * {
+  max-width: var(--reading-width);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.composer-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.composer textarea {
+  flex: 1;
+  min-height: 2.6rem;
+  max-height: 40vh;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  resize: none;
+  overflow-y: auto;
+}
+
+.composer textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.send {
+  padding: 0.55rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.composer-hint {
+  margin-top: 0.3rem;
+  margin-bottom: 0;
+  font-size: 0.72rem;
+  color: var(--subtle);
+}
+
+.composer-blocked {
+  margin-top: 0;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--warn);
+}
+
+.pending {
+  opacity: 0.85;
+  border: 1px dashed var(--border);
+}
+
+.pending-failed {
+  border-color: var(--error);
+  opacity: 1;
+}
+
+.pending-failed .chip {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.pending-message {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  color: var(--error);
+}
+
+.pending-unconfirmed .pending-message,
+.pending-unconfirmed .chip {
+  color: var(--warn);
+}
+
+.pending-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.4rem;
+}
