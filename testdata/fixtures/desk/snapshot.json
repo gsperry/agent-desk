@@ -97,6 +97,18 @@
       "archived": false,
       "agent_session_id": "e392f4f9-1ea2-4338-af11-af32d1ef84da",
       "self": false
+    },
+    {
+      "id": "a0000009",
+      "name": "files-demo",
+      "tool": "claude",
+      "group": "",
+      "directory": "/home/dev/src/files",
+      "status": "idle",
+      "running": true,
+      "archived": false,
+      "agent_session_id": "99999999-9999-4999-8999-999999999999",
+      "self": false
     }
   ],
   "terminals": [],

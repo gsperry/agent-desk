@@ -1,0 +1,8 @@
+{"type":"user","uuid":"f-1","timestamp":"2026-11-10T09:00:00.000Z","promptSource":"typed","origin":{"kind":"human"},"message":{"role":"user","content":"Find the unique-search-phrase in the hosts file."}}
+{"type":"assistant","uuid":"f-2","timestamp":"2026-11-10T09:00:05.000Z","message":{"id":"msg_f1","role":"assistant","content":[{"type":"text","text":"Reading `/etc/hosts` first. The missing one is `/nonexistent/missing.go`."}]}}
+{"type":"assistant","uuid":"f-3","timestamp":"2026-11-10T09:00:06.000Z","message":{"id":"msg_f1","role":"assistant","content":[{"type":"tool_use","id":"toolu_f1","name":"Read","input":{"file_path":"/etc/hosts","offset":3}}]}}
+{"type":"user","uuid":"f-4","timestamp":"2026-11-10T09:00:07.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_f1","content":"127.0.0.1 localhost"}]}}
+{"type":"assistant","uuid":"f-5","timestamp":"2026-11-10T09:00:08.000Z","message":{"id":"msg_f2","role":"assistant","content":[{"type":"tool_use","id":"toolu_f2","name":"Bash","input":{"command":"echo hello-from-bash","description":"Say hello"}}]}}
+{"type":"user","uuid":"f-6","timestamp":"2026-11-10T09:00:09.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_f2","content":"hello-from-bash"}]},"toolUseResult":{"stdout":"hello-from-bash","stderr":""}}
+{"type":"assistant","uuid":"f-7","timestamp":"2026-11-10T09:00:10.000Z","message":{"id":"msg_f3","role":"assistant","content":[{"type":"text","text":"Done."}]}}
+{"type":"system","uuid":"f-8","subtype":"turn_duration","durationMs":10000}
