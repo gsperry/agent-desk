@@ -14,6 +14,13 @@ type State struct {
 	InsideSession bool          `json:"insideSession"`
 	Error         *StateError   `json:"error,omitempty"`
 	Sessions      []SessionView `json:"sessions"`
+	Groups        []GroupView   `json:"groups"`
+}
+
+// GroupView is an agent-manager group a session can be filed under.
+type GroupView struct {
+	Path      string `json:"path"`
+	Directory string `json:"directory,omitempty"`
 }
 
 type ErrorKind string

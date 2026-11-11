@@ -19,7 +19,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
@@ -57,6 +59,16 @@ type Config struct {
 	Opener Opener
 	// Searcher searches transcripts.
 	Searcher Searcher
+	// Lifecycle starts, stops and files sessions.
+	Lifecycle Lifecycle
+}
+
+type Lifecycle interface {
+	Options(ctx context.Context) (manage.Options, error)
+	Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, error)
+	Act(ctx context.Context, id string, a manage.Action) error
+	CreateGroup(ctx context.Context, g manage.Group) error
+	DeleteGroup(ctx context.Context, path string) error
 }
 
 type Searcher interface {
@@ -101,8 +113,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil {
-		return nil, errors.New("sessions, manager, transcripts, sender, panes, opener and searcher are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil {
+		return nil, errors.New("sessions, manager, transcripts, sender, panes, opener, searcher and lifecycle are required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -126,6 +138,11 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
 	s.mux.Handle("GET /api/sessions/{id}/pane", s.requireToken(http.HandlerFunc(s.screen)))
 	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
+	s.mux.Handle("GET /api/spawn-options", s.requireToken(http.HandlerFunc(s.spawnOptions)))
+	s.mux.Handle("POST /api/sessions", s.requireToken(http.HandlerFunc(s.spawn)))
+	s.mux.Handle("POST /api/sessions/{id}/action", s.requireToken(http.HandlerFunc(s.action)))
+	s.mux.Handle("POST /api/groups", s.requireToken(http.HandlerFunc(s.createGroup)))
+	s.mux.Handle("POST /api/groups/delete", s.requireToken(http.HandlerFunc(s.deleteGroup)))
 	s.mux.Handle("GET /api/search", s.requireToken(http.HandlerFunc(s.search)))
 	s.mux.Handle("POST /api/open", s.requireToken(http.HandlerFunc(s.open)))
 	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
@@ -249,6 +266,84 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	err := s.cfg.Panes.Answer(ctx, r.PathValue("id"), a)
 	logOutcome("answer", r.PathValue("id"), fmt.Sprintf("action=%s index=%d key=%s", a.Action, a.Index, a.Key), "ok", err)
 	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// spawnTimeout covers agent-manager registering its MCP server with a new
+// CLI, which it allows two minutes.
+const spawnTimeout = 150 * time.Second
+
+func decode(w http.ResponseWriter, r *http.Request, limit int64, v any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(v); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON"})
+		return false
+	}
+	return true
+}
+
+func (s *Server) spawnOptions(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	opts, err := s.cfg.Lifecycle.Options(ctx)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, opts)
+}
+
+func (s *Server) spawn(w http.ResponseWriter, r *http.Request) {
+	var req am.SpawnRequest
+	if !decode(w, r, 1<<20, &req) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), spawnTimeout)
+	defer cancel()
+	sess, err := s.cfg.Lifecycle.Spawn(ctx, req)
+	logOutcome("spawn", sess.ID, fmt.Sprintf("tool=%s worktree=%v", req.Tool, req.Worktree), "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, sess)
+}
+
+func (s *Server) action(w http.ResponseWriter, r *http.Request) {
+	var a manage.Action
+	if !decode(w, r, 4096, &a) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), spawnTimeout)
+	defer cancel()
+	err := s.cfg.Lifecycle.Act(ctx, r.PathValue("id"), a)
+	logOutcome("action", r.PathValue("id"), "action="+a.Action, "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
+	var g manage.Group
+	if !decode(w, r, 4096, &g) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if writeRefusal(w, s.cfg.Lifecycle.CreateGroup(ctx, g)) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	var g manage.Group
+	if !decode(w, r, 4096, &g) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if writeRefusal(w, s.cfg.Lifecycle.DeleteGroup(ctx, g.Path)) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
