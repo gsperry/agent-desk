@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { filterItems, type ActivityFilter } from '../model/filter'
 import { blockSeqs } from '../model/highlight'
+import { anchorFor, loadPosition, savePosition } from '../model/scroll'
 import { dividerSeq } from '../model/seen'
 import { buildBlocks } from '../model/transcript'
 import { BlockView } from '../render/Blocks'
@@ -23,6 +24,10 @@ interface Props {
   filterable?: boolean
 }
 
+// maxRestorePages is how many earlier pages a returning reader's position
+// may load before giving up and showing the latest.
+const maxRestorePages = 5
+
 // Within this many pixels of the bottom counts as following the latest.
 const followSlack = 80
 
@@ -31,8 +36,12 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
   const items = useMemo(() => filterItems(allItems, filter), [allItems, filter])
   const scroller = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
-  const following = useRef(true)
-  const [atBottom, setAtBottom] = useState(true)
+  // A session opened again returns to where the reader left it, unless
+  // they were following the latest output.
+  const [restore] = useState(() => loadPosition(sessionStorage, sessionId))
+  const restoring = useRef({ done: restore === null, attempts: 0 })
+  const following = useRef(restore === null)
+  const [atBottom, setAtBottom] = useState(restore === null)
   const [unseen, setUnseen] = useState(0)
   const firstSeq = items[0]?.seq
   const lastSeq = items.at(-1)?.seq
@@ -52,9 +61,15 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
     return blocks.find((b) => blockSeqs(b).some((s) => s >= newFrom))?.key ?? null
   }, [blocks, newFrom])
 
+  // pinned is where the view last put itself at the bottom, so a scroll
+  // event from content growing below is not mistaken for the reader
+  // scrolling up.
+  const pinned = useRef(0)
   const scrollToBottom = () => {
     const el = scroller.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    pinned.current = el.scrollTop
   }
 
   // Keep the reader anchored: follow appends at the bottom, hold position
@@ -76,6 +91,65 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
     prev.current = { sessionId, firstSeq, lastSeq, height: el.scrollHeight, count: items.length }
   }, [sessionId, firstSeq, lastSeq, items.length])
 
+  // A session the reader was following opens at the latest output.
+  useLayoutEffect(() => {
+    if (restore === null) scrollToBottom()
+  }, [restore])
+
+  // Bring the saved reading position back once its block is loaded,
+  // loading earlier pages a few times if it is older than the window.
+  useLayoutEffect(() => {
+    const r = restoring.current
+    const el = scroller.current
+    if (r.done || !restore || !el || items.length === 0) return
+    const node = content.current?.querySelector(`[data-block="${CSS.escape(restore.key)}"]`)
+    if (node) {
+      el.scrollTop += node.getBoundingClientRect().top - el.getBoundingClientRect().top - restore.offset
+      prev.current.height = el.scrollHeight
+      r.done = true
+      return
+    }
+    if (hasMore && r.attempts < maxRestorePages) {
+      if (!loadingOlder) {
+        r.attempts++
+        onLoadOlder()
+      }
+      return
+    }
+    r.done = true
+    following.current = true
+    setAtBottom(true)
+    scrollToBottom()
+  }, [restore, items.length, firstSeq, hasMore, loadingOlder, onLoadOlder])
+
+  // remember saves the reading position, at most once a frame.
+  const frame = useRef(0)
+  const remember = () => {
+    if (!restoring.current.done || frame.current) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0
+      const el = scroller.current
+      const box = content.current
+      if (!el || !box) return
+      if (following.current) {
+        savePosition(sessionStorage, sessionId, null)
+        return
+      }
+      const top = el.getBoundingClientRect().top
+      const blocks = [...box.querySelectorAll<HTMLElement>('[data-block]')].map((n) => {
+        const r = n.getBoundingClientRect()
+        return { key: n.dataset.block ?? '', top: r.top - top, bottom: r.bottom - top }
+      })
+      savePosition(sessionStorage, sessionId, anchorFor(blocks))
+    })
+  }
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(frame.current)
+    },
+    [],
+  )
+
   // Highlighting and expanding change heights after render.
   useEffect(() => {
     const el = content.current
@@ -85,6 +159,8 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
       prev.current.height = scroller.current?.scrollHeight ?? 0
     })
     ro.observe(el)
+    // The view itself shrinks when the terminal panel opens below it.
+    if (scroller.current) ro.observe(scroller.current)
     return () => {
       ro.disconnect()
     }
@@ -97,8 +173,11 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
     setAtBottom(true)
     setUnseen(0)
   }
+  // Only an actual send moves the view, not opening the session.
+  const followKeyAtOpen = useRef(followKey)
   useLayoutEffect(() => {
-    if (followKey === undefined) return
+    if (followKey === undefined || followKey === followKeyAtOpen.current) return
+    followKeyAtOpen.current = undefined
     following.current = true
     scrollToBottom()
   }, [followKey])
@@ -107,13 +186,20 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
     const el = scroller.current
     if (!el) return
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < followSlack
+    if (following.current && !near && el.scrollTop >= pinned.current - 2) {
+      // The content grew below while following; the reader did not move.
+      scrollToBottom()
+      return
+    }
     following.current = near
     setAtBottom(near)
     if (near) setUnseen(0)
-    if (el.scrollTop < 400 && hasMore && !loadingOlder) onLoadOlder()
+    remember()
+    if (el.scrollTop < 400 && hasMore && !loadingOlder && restoring.current.done) onLoadOlder()
   }
 
   const jump = () => {
+    savePosition(sessionStorage, sessionId, null)
     following.current = true
     setAtBottom(true)
     setUnseen(0)
@@ -160,7 +246,9 @@ export function Transcript({ sessionId, items: allItems, hasMore, loadingOlder, 
                   <span>New since you last looked</span>
                 </div>
               )}
-              <BlockView block={b} live={live} />
+              <div data-block={b.key}>
+                <BlockView block={b} live={live} />
+              </div>
             </Fragment>
           ))}
           {trailing}

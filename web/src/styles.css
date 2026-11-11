@@ -2647,3 +2647,129 @@ mark {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* Files a shell command changed */
+
+.shell-files {
+  margin-top: 0.6rem;
+}
+
+.shell-file + .shell-file {
+  margin-top: 0.6rem;
+}
+
+.shell-file-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+}
+
+.shell-file-head code {
+  overflow-wrap: anywhere;
+}
+
+/* Catch-up summaries */
+
+.catchup {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  max-width: var(--reading-width);
+  width: calc(100% - 3rem);
+  margin: 0.75rem auto 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.catchup > :first-child {
+  flex: 1;
+}
+
+.catchup-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.catchup-cost {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+}
+
+.catchup-error {
+  flex: 1;
+  margin: 0;
+  color: var(--error, #c0392b);
+}
+
+.summary-model input {
+  max-width: 14rem;
+}
+
+/* Typed answers in the terminal panel */
+
+.live-typed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.live-typed input {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+/* Remote devices */
+
+.remote-badge {
+  margin: 0.4rem 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.remote-no-reply {
+  margin: 0;
+  padding: 0.8rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.remote-levels {
+  margin: 0.6rem 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+
+.remote-levels legend {
+  padding: 0 0.3rem;
+  font-size: 0.85rem;
+}
+
+.remote-port input {
+  max-width: 7rem;
+}
+
+.remote-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0.5rem 0;
+}
+
+.remote-levels .check {
+  display: block;
+  margin: 0.3rem 0;
+}

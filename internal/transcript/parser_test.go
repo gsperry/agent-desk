@@ -411,6 +411,27 @@ func TestSamples(t *testing.T) {
 					t.Errorf("raw item: %s: %.200s", it.Label, it.Raw)
 				}
 			}
+			if filepath.Base(path) == "bash-edit-diff.jsonl" {
+				// The viewer shows the files a shell command changed from
+				// bashEditDiff, so the slimmed detail must keep it.
+				var detail struct {
+					BashEditDiff struct {
+						Files []struct {
+							FilePath string            `json:"filePath"`
+							Hunks    []json.RawMessage `json:"hunks"`
+						} `json:"files"`
+					} `json:"bashEditDiff"`
+				}
+				for _, it := range items {
+					if it.Kind == KindToolResult && it.Result != nil {
+						_ = json.Unmarshal(it.Result.Detail, &detail)
+					}
+				}
+				if n := len(detail.BashEditDiff.Files); n != 3 || len(detail.BashEditDiff.Files[0].Hunks) == 0 {
+					t.Fatalf("bashEditDiff files = %d, want 3 with hunks", n)
+				}
+				return
+			}
 			if counts[KindUser] == 0 || counts[KindText] == 0 {
 				t.Fatalf("no conversation parsed: %v", counts)
 			}

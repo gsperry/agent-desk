@@ -34,7 +34,9 @@ type clientMessage struct {
 }
 
 func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
-	if !s.wsTokenOK(r) {
+	// A remote request was admitted by requireRemote; a local one needs the
+	// token.
+	if _, remote := remoteFrom(r.Context()); !remote && !s.wsTokenOK(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -53,6 +55,13 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn.SetReadLimit(64 << 10)
+	if c, ok := remoteFrom(r.Context()); ok {
+		defer s.trackRemote(conn, c.id.User, c.settings.Host)()
+		// Settings may have changed between admission and tracking.
+		if !stillAllowed(s.remoteSettingsNow(), c.id.User, c.settings.Host) {
+			return
+		}
+	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 

@@ -18,18 +18,40 @@ import { conversationTitle, sessionsByConversation } from './model/history'
 import type { PathRef } from './model/paths'
 import { loadSnippets, saveSnippets, type Snippet } from './model/snippets'
 import { loadTemplates, saveTemplates, upsertTemplate, type Template } from './model/templates'
+import { loadSummaries, saveSummaries, type SummarySettings } from './model/summaries'
 import { directorySuggestions, resumeDefaults, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
 import type { Answer, Conversation, Project, SessionAction, SpawnRequest } from './types'
 import { SnippetsContext } from './snippets-context'
+import { RemoteContext, localInfo, type RemoteInfo, type RemoteLevel } from './remote-context'
+import type { RemoteSettings } from './components/RemoteAccess'
 import { ViewPrefsContext } from './viewprefs-context'
 
 const token = takeToken()
 
 export default function App() {
-  if (!token) return <NoToken />
-  return <Desk token={token} />
+  // With no token, this may be a remote device behind a proxy that proves
+  // who it is; the server says so through whoami.
+  const [boot, setBoot] = useState<{ token: string; remote: RemoteInfo } | 'none' | null>(token ? { token, remote: localInfo } : null)
+  useEffect(() => {
+    if (token) return
+    void fetch('/api/whoami')
+      .then((r) => (r.ok ? (r.json() as Promise<{ remote?: boolean; level?: RemoteLevel; user?: string }>) : null))
+      .then((w) => {
+        setBoot(w?.remote && w.level ? { token: '', remote: { remote: true, level: w.level, user: w.user } } : 'none')
+      })
+      .catch(() => {
+        setBoot('none')
+      })
+  }, [])
+  if (boot === null) return null
+  if (boot === 'none') return <NoToken />
+  return (
+    <RemoteContext.Provider value={boot.remote}>
+      <Desk token={boot.token} />
+    </RemoteContext.Provider>
+  )
 }
 
 function sessionFromPath(): string | null {
@@ -74,6 +96,10 @@ function Desk({ token }: { token: string }) {
   useEffect(() => {
     saveSnippets(localStorage, snippets)
   }, [snippets])
+  const [summaries, setSummaries] = useState<SummarySettings>(() => loadSummaries(localStorage))
+  useEffect(() => {
+    saveSummaries(localStorage, summaries)
+  }, [summaries])
   const [templates, setTemplates] = useState<Template[]>(() => loadTemplates(localStorage))
   useEffect(() => {
     saveTemplates(localStorage, templates)
@@ -247,6 +273,9 @@ function Desk({ token }: { token: string }) {
     if (r.data) setConversations(r.data)
     return r
   }, [store])
+  const loadRemote = useCallback(() => store.remoteSettings(), [store])
+  const saveRemote = useCallback((s: RemoteSettings) => store.setRemoteSettings(s), [store])
+  const catchUp = useCallback((id: string, since: number) => store.catchUp(id, since, summaries.model), [store, summaries.model])
   const dismissSuggestion = useCallback((id: string) => {
     store.dismissSuggestion(id)
   }, [store])
@@ -415,6 +444,7 @@ function Desk({ token }: { token: string }) {
                 pasteImage={pasteImage}
                 exportConversation={exportConversation}
                 suggestion={suggestions[selected]}
+                catchUp={summaries.enabled ? catchUp : undefined}
                 dismissSuggestion={dismissSuggestion}
               />
             ) : (
@@ -486,6 +516,10 @@ function Desk({ token }: { token: string }) {
               onSnippets={setSnippets}
               templates={templates}
               onTemplates={setTemplates}
+              summaries={summaries}
+              onSummaries={setSummaries}
+              loadRemote={loadRemote}
+              saveRemote={saveRemote}
               rules={rules}
               onRules={(r) => {
                 store.setRules(r)

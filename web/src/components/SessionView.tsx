@@ -8,16 +8,18 @@ import { OpenPathContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
-import type { Changes, Item, SubAgent } from '../types'
+import type { CatchUp, Changes, Item, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
 import { NotesPanel } from './NotesPanel'
 import { togglePin } from '../model/pins'
 import type { Suggestion } from '../model/rules'
+import { costLine } from '../model/summaries'
 import { PinsContext, pinsFor, useNotebook } from '../pins-context'
 import { ChangesPanel } from './ChangesPanel'
 import { blockedReason } from '../model/compose'
 import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
+import { can, useRemote } from '../remote-context'
 import { ContextMeter } from './ContextMeter'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
@@ -54,6 +56,8 @@ interface Props {
   exportConversation: (conversationId: string) => void
   suggestion?: Suggestion
   dismissSuggestion: (sessionId: string) => void
+  // catchUp is set when catch-up summaries are turned on in Settings.
+  catchUp?: (sessionId: string, since: number) => Promise<{ data?: CatchUp; error?: string }>
 }
 
 // The subagent list refreshes this often while a session is open.
@@ -61,6 +65,8 @@ const agentsRefreshMs = 5000
 
 export function SessionView(props: Props) {
   const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer, openPath } = props
+  const remoteInfo = useRemote()
+  const mayReply = can(remoteInfo, 'reply')
   const openHere = useCallback(
     (ref: PathRef) => {
       openPath(sessionId, ref)
@@ -76,6 +82,7 @@ export function SessionView(props: Props) {
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [changesOpen, setChangesOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
+  const [catchUpState, setCatchUpState] = useState<{ busy: boolean; data?: CatchUp; error?: string } | null>(null)
   const [notebook, setNotebook] = useNotebook(props.session?.agentSessionId)
   const pins = pinsFor(notebook, setNotebook, togglePin)
   const [openAgent, setOpenAgent] = useState<string | null>(null)
@@ -132,7 +139,7 @@ export function SessionView(props: Props) {
   }
 
   return (
-    <OpenPathContext.Provider value={openHere}>
+    <OpenPathContext.Provider value={can(remoteInfo, 'local') ? openHere : null}>
     <AgentLinksContext.Provider value={agentLinks}>
     <PinsContext.Provider value={session.agentSessionId ? pins : null}>
         <main className="main">
@@ -177,6 +184,28 @@ export function SessionView(props: Props) {
                 {counts.total}
               </button>
             )}
+              {props.catchUp && can(remoteInfo, 'local') && isClaude && session.agentSessionId && (
+                <button
+                  type="button"
+                  className="chip chip-button catchup-toggle"
+                  disabled={catchUpState?.busy}
+                  title="Summarize what happened since you last looked. Costs tokens on your Claude Code provider."
+                  onClick={() => {
+                    const run = props.catchUp
+                    if (!run) return
+                    setCatchUpState({ busy: true })
+                    // Since the last look when something is new, else the most
+                    // recent part of the transcript.
+                    const latest = d.items.at(-1)?.seq
+                    const since = markAtOpen && latest !== undefined && markAtOpen.seq < latest ? markAtOpen.seq : -1
+                    void run(sessionId, since).then((r) => {
+                      setCatchUpState({ busy: false, ...r })
+                    })
+                  }}
+                >
+                  {catchUpState?.busy ? 'Summarizing…' : 'Catch me up'}
+                </button>
+              )}
               {session.agentSessionId && (
                 <button
                   type="button"
@@ -210,7 +239,7 @@ export function SessionView(props: Props) {
                 {session.project.name}
                 {session.branch ? ` · ${session.branch}` : ''}
               </span>
-              <SessionActions session={session} groups={props.groups} act={props.act} />
+              {can(remoteInfo, 'manage') && <SessionActions session={session} groups={props.groups} act={props.act} />}
               {isClaude && session.agentSessionId && d.items.length > 0 && (
                 <button
                   type="button"
@@ -230,6 +259,27 @@ export function SessionView(props: Props) {
             </div>
           </header>
           <StatusBanner session={session} doc={d} />
+          {catchUpState && !catchUpState.busy && (
+            <section className="catchup" aria-label="Catch-up summary">
+              {catchUpState.data ? (
+                <div>
+                  <p className="catchup-text">{catchUpState.data.text}</p>
+                  <p className="muted catchup-cost">{costLine(catchUpState.data)}</p>
+                </div>
+              ) : (
+                <p className="catchup-error">{catchUpState.error ?? 'The summary failed.'}</p>
+              )}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setCatchUpState(null)
+                }}
+              >
+                Close
+              </button>
+            </section>
+          )}
           {d.items.length > 0 || pending.length > 0 ? (
             <Transcript
               sessionId={sessionId}
@@ -278,7 +328,7 @@ export function SessionView(props: Props) {
               }
             />
           )}
-          {props.suggestion && (
+          {props.suggestion && mayReply && (
             <div className="suggestion" role="status" aria-label="Suggested reply">
               <div className="suggestion-text">
                 <span className="muted">Rule “{props.suggestion.ruleName}” suggests replying:</span>
@@ -322,22 +372,26 @@ export function SessionView(props: Props) {
               </div>
             </div>
           )}
-          <Composer
-            key={sessionId}
-            session={session}
-            connected={connected}
-            insideSession={insideSession}
-            restore={restore}
-          pasteImage={props.pasteImage}
-            onSend={(text) => {
-              send(sessionId, text)
-              setSends((n) => n + 1)
-            }}
-          />
+          {mayReply ? (
+            <Composer
+              key={sessionId}
+              session={session}
+              connected={connected}
+              insideSession={insideSession}
+              restore={restore}
+              pasteImage={can(remoteInfo, 'local') ? props.pasteImage : undefined}
+              onSend={(text) => {
+                send(sessionId, text)
+                setSends((n) => n + 1)
+              }}
+            />
+          ) : (
+            <p className="muted remote-no-reply">Replies are off for remote devices at this level. Waiting prompts can still be answered in the Terminal panel.</p>
+          )}
           {changesOpen && (
           <ChangesPanel
             sessionId={sessionId}
-            canSend={blockedReason(session, connected, insideSession)}
+            canSend={mayReply ? blockedReason(session, connected, insideSession) : 'Replies are off for remote devices at this level.'}
             load={props.readChanges}
             onSend={(text) => {
               send(sessionId, text)

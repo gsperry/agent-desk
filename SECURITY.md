@@ -24,6 +24,15 @@ Agent Desk can type into agent sessions and start new ones, so access to its API
 
 - The browser opens through an owner-only launcher file, so the token never appears in a process's arguments, which other accounts can read.
 
+Remote access, off by default:
+
+- Remote devices reach a second listener: a Unix socket in an owner-only directory (`remote.sock` beside the settings file), which `tailscale serve`, running as root, forwards to and which no other account on the machine can connect to. Tailscale removes any client-supplied identity headers and sets `Tailscale-User-Login`; only logins listed in the settings get in. The local token is never accepted there, and the identity header is never accepted on the local listener.
+- Every remote request must name the configured host; state-changing requests and WebSocket upgrades must come from that host's HTTPS origin.
+- Each route declares the level it needs (read and answer, reply, start and stop), pinned by a test. Read and answer includes typing an answer into a question's "Type something" field. Settings, rules, catch-up summaries, opening files and pasting images are refused remotely at every level.
+- Turning remote access off, or removing a login, closes that device's open connections at once.
+- The settings live in an owner-only file and change only through the local listener.
+- A process running as your own account (or root) can still connect to the socket and claim an identity; it could already drive agent-manager directly, so that stays out of scope, as below.
+
 Known limits:
 
 - The URL with the token is printed when Agent Desk starts. Do not redirect that output to a file other accounts can read.

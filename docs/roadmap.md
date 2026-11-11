@@ -50,6 +50,7 @@ Goal: supervise and correct work, not only chat.
 | --- | --- | --- | --- |
 | 10.1 | Live terminal (read-only, done) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Whether to allow typing later |
 | 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |
-| 10.3 | Catch-up summaries | Proposal in [design/catch-up-summaries.md](design/catch-up-summaries.md); not built | Approval to spend tokens and amend the CLI hard rule; model choice |
+| 10.3 | Catch-up summaries (done, off by default) | [design/catch-up-summaries.md](design/catch-up-summaries.md) | Decided: opt-in, labelled as costing tokens |
 | 10.4 | Desktop app | Design in [design/desktop-app.md](design/desktop-app.md); not built (Tauri 2 needs a newer Rust than the installed 1.82) | Rust update, signing and distribution, repository layout |
-| 10.5 | Away from the desk | Design in [design/away-from-desk.md](design/away-from-desk.md); not built | All of it; nothing is built without a decision |
+| 10.5 | Away from the desk | Tailscale built (R0 groundwork, R1); next Cloudflare Tunnel and Access (R2), then a hosted relay (R3) as its own decision. [design/away-from-desk.md](design/away-from-desk.md) | R3 |
+| 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Revisit after remote access |

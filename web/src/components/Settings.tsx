@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { defaultSnippets, validName, type Snippet } from '../model/snippets'
 import { newRule, ruleStatuses, type Rule, type RuleStatus } from '../model/rules'
+import type { SummarySettings } from '../model/summaries'
+import { useRemote } from '../remote-context'
+import { RemoteAccess, type RemoteSettings, type RemoteStatus } from './RemoteAccess'
 import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 
@@ -13,6 +16,10 @@ interface Props {
   onTemplates: (t: Template[]) => void
   rules: Rule[]
   onRules: (r: Rule[]) => void
+  summaries: SummarySettings
+  onSummaries: (s: SummarySettings) => void
+  loadRemote: () => Promise<{ data?: RemoteSettings; status?: RemoteStatus; available: boolean; error?: string }>
+  saveRemote: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; status?: RemoteStatus; error?: string }>
   onClose: () => void
 }
 
@@ -45,7 +52,8 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onClose }: Props) {
+  const onDesk = !useRemote().remote
   const setRule = (id: string, p: Partial<Rule>) => {
     onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
   }
@@ -182,6 +190,8 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
           />
           <p className="muted setting-note">Failed tool calls always start expanded. Changes apply to blocks as they appear.</p>
         </Section>
+        {onDesk && (
+          <>
         <Section title="Reply snippets">
           <p className="muted setting-note">
             Insert from the composer's ⋯ menu, or type /name and press Tab. {'{session}'}, {'{branch}'}, {'{project}'} and {'{directory}'} are filled in.
@@ -324,6 +334,32 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             Add rule
           </button>
         </Section>
+        <Section title="Catch-up summaries">
+          <p className="muted setting-note">
+            Adds a “Catch me up” button to sessions. It runs your own Claude Code CLI (<code>claude -p</code>) on what happened since you last looked, with no tools.{' '}
+            <strong>Each summary costs tokens on your Claude Code provider.</strong> Nothing runs until you press the button.
+          </p>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={summaries.enabled}
+              onChange={(e) => {
+                onSummaries({ ...summaries, enabled: e.target.checked })
+              }}
+            />{' '}
+            Allow catch-up summaries
+          </label>
+          <label className="field summary-model">
+            <span>Model</span>
+            <input
+              value={summaries.model}
+              placeholder="haiku"
+              onChange={(e) => {
+                onSummaries({ ...summaries, model: e.target.value })
+              }}
+            />
+          </label>
+        </Section>
         <Section title="Session templates">
           <p className="muted setting-note">Save one from the new session form with “Save as template”; pick it at the top of the form next time.</p>
           {templates.length === 0 && <p className="muted setting-note">No templates yet.</p>}
@@ -346,6 +382,11 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             ))}
           </ul>
         </Section>
+            <Section title="Remote access">
+              <RemoteAccess load={loadRemote} save={saveRemote} />
+            </Section>
+          </>
+        )}
       </div>
     </div>
   )

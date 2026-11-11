@@ -82,6 +82,97 @@ func TestAnswer(t *testing.T) {
 	}
 }
 
+// seqReader returns its screens in turn, then repeats the last.
+type seqReader struct {
+	screens []string
+	n       int
+}
+
+func (r *seqReader) Read(context.Context, string) (string, error) {
+	s := r.screens[min(r.n, len(r.screens)-1)]
+	r.n++
+	return s, nil
+}
+func (r *seqReader) ReadStyled(ctx context.Context, id string) (string, error) {
+	return r.Read(ctx, id)
+}
+
+type recordTyper struct{ got []string }
+
+func (r *recordTyper) Type(_ context.Context, _ string, text string) error {
+	r.got = append(r.got, text)
+	return nil
+}
+
+func TestAnswerText(t *testing.T) {
+	initial := read(t, "askq-free-initial.txt")
+	selected := read(t, "askq-free-selected.txt")
+	perm := read(t, "permission.txt")
+	text := func(label, s string) Answer { return Answer{Action: "text", Index: 2, Label: label, Text: s} }
+	tests := []struct {
+		name     string
+		screens  []string
+		ans      Answer
+		typer    bool
+		wantKeys []string
+		wantText []string
+		reason   send.Reason
+	}{
+		{"moves to the field, confirms it, types", []string{initial, selected}, text("Type something.", "  Green, with teal  "), true, []string{"Down", "Down"}, []string{"Green, with teal"}, ""},
+		{"already on the field", []string{selected, selected}, text("Type something.", "Green"), true, nil, []string{"Green"}, ""},
+		{"field did not become active", []string{initial, initial}, text("Type something.", "Green"), true, []string{"Down", "Down"}, nil, reasonChanged},
+		{"label changed", []string{initial}, text("Something else", "Green"), true, nil, nil, reasonChanged},
+		{"not a text option", []string{perm}, Answer{Action: "text", Index: 0, Label: "Yes", Text: "x"}, true, nil, nil, reasonChanged},
+		{"empty text", []string{initial}, text("Type something.", "  "), true, nil, nil, reasonBadText},
+		{"multi-line text", []string{initial}, text("Type something.", "a\nb"), true, nil, nil, reasonBadText},
+		{"escape sequence", []string{initial}, text("Type something.", "a\x1b[2Jb"), true, nil, nil, reasonBadText},
+		{"too long", []string{initial}, text("Type something.", strings.Repeat("x", maxAnswerText+1)), true, nil, nil, reasonBadText},
+		{"no typer", []string{initial}, text("Type something.", "Green"), false, nil, nil, reasonBadText},
+		{"dialog gone", []string{read(t, "idle.txt")}, text("Type something.", "Green"), true, nil, nil, reasonNoDialog},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keys := &recordKeys{}
+			typer := &recordTyper{}
+			a := &Answerer{
+				Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+				Reader:   &seqReader{screens: tt.screens},
+				Keys:     keys,
+			}
+			if tt.typer {
+				a.Typer = typer
+			}
+			err := a.Answer(context.Background(), "s1", tt.ans)
+			if tt.reason != "" {
+				var refused *send.Refused
+				if !errors.As(err, &refused) || refused.Reason != tt.reason {
+					t.Fatalf("err = %v, want %s", err, tt.reason)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(keys.got, tt.wantKeys) || !reflect.DeepEqual(typer.got, tt.wantText) {
+				t.Fatalf("keys = %v, typed = %q; want %v, %q", keys.got, typer.got, tt.wantKeys, tt.wantText)
+			}
+		})
+	}
+}
+
+func TestChatAboutThisIsAButton(t *testing.T) {
+	keys := &recordKeys{}
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+		Reader:   fakeReader{screen: read(t, "askq-free-initial.txt")},
+		Keys:     keys,
+	}
+	if err := a.Answer(context.Background(), "s1", Answer{Action: "choose", Index: 3, Label: "Chat about this"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(keys.got, []string{"Down", "Down", "Down", "Enter"}) {
+		t.Fatalf("keys = %v", keys.got)
+	}
+}
+
 func TestScreen(t *testing.T) {
 	a := &Answerer{
 		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},

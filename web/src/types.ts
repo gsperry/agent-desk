@@ -105,7 +105,10 @@ export interface Screen {
   dialog?: Dialog
 }
 
-export type Answer = { action: 'choose'; index: number; label: string } | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }
+export type Answer =
+  | { action: 'choose'; index: number; label: string }
+  | { action: 'text'; index: number; label: string; text: string }
+  | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }
 
 export interface SearchHit {
   sessionId: string
@@ -226,4 +229,15 @@ export interface UsageReport {
   models: (UsageTokens & { model: string })[]
   conversations: (UsageBucket & { id: string; subagentTokens: number; last?: string })[]
   files: number
+}
+
+// CatchUp is a catch-up summary written by the user's Claude Code CLI.
+export interface CatchUp {
+  text: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  costUSD: number
+  items: number
+  cached?: boolean
 }

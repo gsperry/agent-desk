@@ -11,7 +11,8 @@ export type ConnectionState =
 
 export function apiFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${token}`)
+  // A remote client has no token; the proxy in front proves who it is.
+  if (token) headers.set('Authorization', `Bearer ${token}`)
   return fetch(path, { ...init, headers })
 }
 
@@ -44,7 +45,7 @@ export function connect(
 
   const open = () => {
     onState({ kind: 'connecting' })
-    socket = new WebSocket(socketURL(window.location), [wsProtocol, tokenProtocolPrefix + token])
+    socket = new WebSocket(socketURL(window.location), token ? [wsProtocol, tokenProtocolPrefix + token] : [wsProtocol])
     socket.onmessage = (ev) => {
       const msg = JSON.parse(String(ev.data)) as ServerMessage
       if (msg.type === 'hello') {

@@ -1,6 +1,6 @@
 # Away from the desk
 
-Status: design only. Nothing is built without the owner's decisions.
+Status: R0 (groundwork) and R1 (Tailscale) built. Decided: three remote permission levels, changeable only locally; phone push deferred; reach in order Tailscale, then Cloudflare Tunnel and Access, then a hosted relay as its own decision.
 
 ## Goal
 
@@ -10,22 +10,40 @@ Check on sessions and answer a waiting one from a phone or another machine.
 
 Agent Desk listens on 127.0.0.1 with a token that changes on every start, travels in the URL fragment, and lives in one tab's session storage. Host and Origin checks pin it to that loopback address. That is right for one desk and wrong for a phone: there is no route to the server, no lasting credential, and no TLS.
 
-## Options
+## Reach
 
-| Option | How | Gains | Costs |
-| --- | --- | --- | --- |
-| A. Tailscale | `tailscale serve` proxies a tailnet HTTPS name to the loopback port; Agent Desk trusts Tailscale's identity headers only from the local proxy and only for an allow-listed login | TLS and device identity come from the tailnet; no open port | Needs Tailscale on both ends; a second auth path to test |
-| B. Device pairing | A "Pair a device" screen shows a QR code with a one-time code; the device gets a long-lived key (or registers a passkey); the server listens on a LAN or tailnet address with its own TLS certificate | Works without Tailscale | Certificates, key storage, revocation, a LAN listener |
-| C. Read-only remote | Either A or B, but remote clients may only read and answer dialogs; sending replies stays local | Smaller blast radius | Less useful |
+Every option keeps the loopback listener and the local token exactly as they are. Remote traffic arrives through a second path that Agent Desk can tell apart from local use, and whose identity it checks itself rather than trusting the network.
 
-Push notifications to a phone would need a network service (APNs, ntfy or similar), which breaks "no network calls beyond localhost". Leave them out, or make them a separate opt-in.
+| Option | How | Who can read the traffic | Gains | Costs |
+| --- | --- | --- | --- | --- |
+| A. Tailscale | `tailscale serve` proxies a tailnet HTTPS name to an owner-only Unix socket (built: other accounts cannot connect; tailscaled runs as root). Agent Desk accepts remote requests only with Tailscale's identity header, for allow-listed logins. | Nobody but the two devices (WireGuard end to end) | No open port, no account beyond Tailscale, device identity built in | Tailscale on the phone and the desk |
+| B. Cloudflare Tunnel and Access | `cloudflared` opens an outbound tunnel from the desk to a name such as `desk.agent-desk.app`. Cloudflare Access puts a login (email code, GitHub or Google) in front of it. Agent Desk verifies the Access JWT on every remote request. | Cloudflare (TLS ends at its edge) | Any browser, no app on the phone, uses the zone already owned, free tier | Trusts Cloudflare with session content; verifying the JWT means fetching Cloudflare's signing keys |
+| C. Hosted end-to-end relay, as Nabu Casa does for Home Assistant | The desk keeps an outbound connection to a relay. The relay routes by name (SNI) without decrypting; TLS ends on the desk, with a certificate the desk obtains through a DNS challenge. A pairing flow links a phone to the desk. | Nobody but the two ends | Any browser, no app, the relay cannot read sessions; the best shape for other users of a public project | Someone runs and pays for the relay, certificate issuance, accounts, abuse handling. A product, not a feature |
+| D. Self-hosted relay | Same shape as C on a small VPS the user runs (for example frp with TLS passthrough). | Nobody but the two ends, if TLS passes through | No third party | A server to run and patch |
+| E. Peer to peer | WebRTC between phone and desk, with a small signaling service to introduce them. | Nobody but the two ends | No relay for the data itself | Signaling service, NAT traversal, the most code |
 
-## Recommendation
+Recommendation for now: A for personal use, B as the alternative that needs no app on the phone (it fits the agent-desk.app zone). Design the remote path so it is reach-agnostic: an identity check per option (Tailscale headers, an Access JWT, later a pairing key), then the same permission levels below. C is the right long-term answer if Agent Desk grows other users who want remote access without running anything; treat it as a separate project with its own decision.
 
-A first, with C's limits at the start: remote clients can read, see attention, and answer dialogs, and replies come later. Keep the loopback listener and token exactly as they are for local use.
+## Remote permissions (decided)
+
+A setting with three levels, cumulative:
+
+| Level | A remote client can |
+| --- | --- |
+| Read and answer | Read sessions, transcripts, changes, history and usage; answer a waiting prompt or dialog |
+| Reply | The above, and send replies through the normal reply gate |
+| Start and stop | The above, and start, stop, revive, archive and move sessions |
+
+- The setting is changed only from a local client (loopback, local token). A remote client can see the level but never change it, and the server rejects the change from a remote request regardless of what the UI shows.
+- Default: Read and answer. Remote access as a whole stays off until turned on locally.
+- Enforced in the server per route, not in the UI: every state-changing route declares the level it needs.
+- Never remote, at any level: changing settings, rules, catch-up summaries (they spend tokens), opening files in the editor, pasting images.
+
+## Phone push notifications (deferred)
+
+Not built for now: they need an outside service (APNs, ntfy or similar), which breaks "no network calls beyond localhost". The roadmap keeps a row to revisit, likely as a separate opt-in.
 
 ## Decisions needed
 
-1. Build this at all, and on which option.
-2. What remote clients may do: read, answer dialogs, send replies, manage sessions.
-3. Whether phone push is wanted, given it needs an outside service.
+1. Which reach option to build first (A, B or both).
+2. For B: which login methods Access should allow.

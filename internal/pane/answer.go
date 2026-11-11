@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/run"
@@ -84,25 +85,38 @@ type Screen struct {
 }
 
 // Answer is a reply to a dialog: choose an option by index, confirming its
-// label still matches, or press one allowed key.
+// label still matches; answer a text option with text; or press one
+// allowed key.
 type Answer struct {
 	Action string `json:"action"`
 	Index  int    `json:"index"`
 	Label  string `json:"label"`
 	Key    string `json:"key"`
+	Text   string `json:"text,omitempty"`
 }
+
+// Typer submits text in a session's pane. It is agent-manager type.
+type Typer interface {
+	Type(ctx context.Context, id, text string) error
+}
+
+// maxAnswerText bounds a typed answer.
+const maxAnswerText = 2000
 
 const (
 	reasonNoDialog send.Reason = "no_dialog"
 	reasonChanged  send.Reason = "changed"
 	reasonFree     send.Reason = "free_option"
 	reasonBadKey   send.Reason = "bad_key"
+	reasonBadText  send.Reason = "bad_text"
 )
 
 type Answerer struct {
 	Sessions Sessions
 	Reader   Reader
 	Keys     Keys
+	// Typer enters text answers; nil refuses them.
+	Typer Typer
 }
 
 // screenLines is how much of the screen the live pane shows.
@@ -154,15 +168,72 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 			return &send.Refused{Reason: reasonChanged, Message: "The choice on screen changed. Check it again before answering."}
 		}
 		if d.Options[ans.Index].Free {
-			return &send.Refused{Reason: reasonFree, Message: "That option needs typing in the terminal. Answer it in agent-manager."}
+			return &send.Refused{Reason: reasonFree, Message: "That option takes text. Type your answer and send it."}
 		}
 		keys = d.Moves(ans.Index)
+	case "text":
+		err := a.answerText(ctx, id, ans)
+		a.Sessions.Trigger()
+		return err
 	default:
 		return &send.Refused{Reason: reasonBadKey, Message: "Unknown answer."}
 	}
 	err := a.Keys.Send(ctx, id, keys...)
 	a.Sessions.Trigger()
 	return err
+}
+
+// answerText answers a text option: it moves the selection onto the option,
+// which makes it Claude Code's text field, confirms on a fresh screen that
+// the field is selected, then submits the text with agent-manager type.
+// Each step reads the screen again and stops if the dialog changed.
+func (a *Answerer) answerText(ctx context.Context, id string, ans Answer) error {
+	if a.Typer == nil {
+		return &send.Refused{Reason: reasonBadText, Message: "Typed answers are not available."}
+	}
+	text := strings.TrimSpace(ans.Text)
+	switch {
+	case text == "":
+		return &send.Refused{Reason: reasonBadText, Message: "Type an answer first."}
+	case len(text) > maxAnswerText:
+		return &send.Refused{Reason: reasonBadText, Message: fmt.Sprintf("Answers are limited to %d characters.", maxAnswerText)}
+	case strings.ContainsFunc(text, unicode.IsControl):
+		return &send.Refused{Reason: reasonBadText, Message: "A typed answer is one line, without control characters."}
+	}
+	d, err := a.dialog(ctx, id)
+	if err != nil {
+		return err
+	}
+	if ans.Index < 0 || ans.Index >= len(d.Options) || d.Options[ans.Index].Label != ans.Label || !d.Options[ans.Index].Free {
+		return &send.Refused{Reason: reasonChanged, Message: "The choice on screen changed. Check it again before answering."}
+	}
+	moves := d.Moves(ans.Index)
+	if moves = moves[:len(moves)-1]; len(moves) > 0 {
+		if err := a.Keys.Send(ctx, id, moves...); err != nil {
+			return err
+		}
+	}
+	after, err := a.dialog(ctx, id)
+	if err != nil {
+		return err
+	}
+	if ans.Index >= len(after.Options) || !after.Options[ans.Index].Selected || !after.Options[ans.Index].Free || after.Options[ans.Index].Label != ans.Label {
+		return &send.Refused{Reason: reasonChanged, Message: "The text field did not become active, so nothing was typed. Check the terminal."}
+	}
+	return a.Typer.Type(ctx, id, text)
+}
+
+// dialog reads the screen and parses the dialog on it.
+func (a *Answerer) dialog(ctx context.Context, id string) (*Dialog, error) {
+	text, err := a.Reader.Read(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("could not read the session's screen, so nothing was entered: %w", err)
+	}
+	d := Parse(text)
+	if d == nil || len(d.Options) == 0 {
+		return nil, &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a choice."}
+	}
+	return d, nil
 }
 
 func (a *Answerer) check(id string) *send.Refused {

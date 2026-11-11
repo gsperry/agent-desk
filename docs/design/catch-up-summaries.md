@@ -1,6 +1,6 @@
 # Catch-up summaries
 
-Status: proposal, not built. Needs the owner's decisions below.
+Status: built, off by default (decided: opt-in setting, labelled as costing tokens; default model `haiku`; prompts, replies and tool call lines only). The rest of this page is the design as proposed.
 
 ## What
 

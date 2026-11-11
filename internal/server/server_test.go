@@ -29,6 +29,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
+	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/transcript"
 	"github.com/gsperry/agent-desk/internal/usage"
 )
@@ -206,6 +207,15 @@ func (fakeUsage) Report(_ context.Context, days int) (usage.Report, error) {
 	return usage.Report{From: strconv.Itoa(days)}, nil
 }
 
+type fakeSummaries struct{}
+
+func (fakeSummaries) Summarize(_ context.Context, id string, since int, model string) (summary.Result, error) {
+	if id == "none" {
+		return summary.Result{}, &send.Refused{Reason: "nothing_new", Message: "Nothing new"}
+	}
+	return summary.Result{Text: "since " + strconv.Itoa(since), Model: model}, nil
+}
+
 type fakePastes struct{}
 
 func (fakePastes) Save(data []byte) (string, error) {
@@ -281,6 +291,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Usage == nil {
 		cfg.Usage = fakeUsage{}
 	}
+	if cfg.Summaries == nil {
+		cfg.Summaries = fakeSummaries{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -289,7 +302,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}, Changes: fakeChanges{}, Conflicts: fakeConflicts{}, Pastes: fakePastes{}, History: fakeHistory{}, Usage: fakeUsage{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}, Changes: fakeChanges{}, Conflicts: fakeConflicts{}, Pastes: fakePastes{}, History: fakeHistory{}, Usage: fakeUsage{}, Summaries: fakeSummaries{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -673,6 +686,36 @@ func TestConversationRoutes(t *testing.T) {
 			}
 			if tt.name == "export" && rec.Header().Get("Content-Disposition") != `attachment; filename="old-work.md"` {
 				t.Fatalf("disposition %q", rec.Header().Get("Content-Disposition"))
+			}
+		})
+	}
+}
+
+func TestSummaryRoute(t *testing.T) {
+	tests := []struct {
+		name, id, body, origin string
+		want                   int
+		wantBody               string
+	}{
+		{"summary", "a1", `{"since":7,"model":"haiku"}`, "http://127.0.0.1:7317", 200, `"text":"since 7"`},
+		{"nothing new", "none", `{"since":7,"model":"haiku"}`, "http://127.0.0.1:7317", 409, "nothing_new"},
+		{"bad body", "a1", `nope`, "http://127.0.0.1:7317", 400, "JSON"},
+		{"needs origin", "a1", `{"since":7,"model":"haiku"}`, "", 403, ""},
+		{"wrong origin", "a1", `{"since":7,"model":"haiku"}`, "https://evil.example", 403, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{})
+			req := httptest.NewRequest("POST", "/api/sessions/"+tt.id+"/summary", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 			}
 		})
 	}

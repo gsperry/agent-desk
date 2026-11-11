@@ -86,7 +86,7 @@ Rename, delete, restart with a fresh context, and fork have no agent-manager com
 
 ## Answering prompts
 
-When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. Options that need typing, such as "Type something", are left to agent-manager.
+When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step.
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 
@@ -97,6 +97,20 @@ Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -
 - **Search:** the box at the top of the sidebar (or `/`) searches every Claude session's transcript: prompts, replies, thinking, tool input and tool output. Click a result to see it in context, then open the session.
 - **Files:** inline code that names a file, and the Open button on file tools, open the file in VS Code at the right line (`code -g path:line`). Relative paths resolve against the session's directory. If `code` is not on your PATH, run "Shell Command: Install 'code' command in PATH" in VS Code.
 - **Settings** (gear in the sidebar): theme (system, light or dark), font size, reading width, and whether each kind of tool call and thinking starts expanded or collapsed.
+
+## Remote access
+
+Off by default. Settings → Remote access lets your phone or another computer reach this desk through [Tailscale](https://tailscale.com): turn it on, list the Tailscale logins allowed in, set the host name devices use (your Mac's tailnet name), save, then run the command Settings shows, once, on the Mac. It points Tailscale at Agent Desk's owner-only socket:
+
+```sh
+tailscale serve --bg --https=443 "unix:$HOME/Library/Application Support/agent-desk/remote.sock"
+```
+
+Open `https://<your-mac>.<tailnet>.ts.net/` on a device signed in to your tailnet. Remote devices never use the local link; Tailscale vouches for who they are. Choose what they may do: **Read and answer** (read everything, answer waiting prompts, including typed answers to questions), **Reply** (also send replies) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
+
+## Catch-up summaries
+
+Off by default. Settings → Catch-up summaries adds a "Catch me up" button to sessions: it runs your own Claude Code CLI (`claude -p`) on what happened since you last looked, with no tools, no MCP servers and nothing saved, and shows the summary with the tokens and cost it used. **Each summary spends tokens on your Claude Code provider**, about $0.002 of fixed overhead on the default `haiku` model plus the excerpt. Nothing runs until you press the button; repeating the same request is answered from cache.
 
 ## Rules
 
@@ -137,7 +151,7 @@ go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl
 - Listens on 127.0.0.1 only.
 - A random token is generated at startup and required on every API request and WebSocket. It travels in the URL fragment, which never reaches the server, and the page moves it into session storage.
 - Every request must name the server's own host, which blocks DNS rebinding. State-changing requests and WebSocket upgrades must come from the app's own origin.
-- No telemetry and no network calls beyond localhost. Agent Desk never calls a model API and never asks for an API key.
+- No telemetry and no network calls beyond localhost. Agent Desk never calls a model API and never asks for an API key. The optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.
 - Read-only toward Claude Code's data: nothing is written under `~/.claude`.
 
 Report security problems privately; see [SECURITY.md](SECURITY.md).

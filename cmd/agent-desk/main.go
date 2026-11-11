@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,10 +35,12 @@ import (
 	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/paste"
+	"github.com/gsperry/agent-desk/internal/remote"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
+	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
 )
@@ -94,6 +98,11 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
+	remoteStore, err := remoteSettingsStore(o.fixtures)
+	if err != nil {
+		return err
+	}
+	remoteAccess := newRemoteListener(remoteStore, o.fixtures)
 	l, err := listen(o.port)
 	if err != nil {
 		return err
@@ -109,7 +118,7 @@ func run(o options) error {
 		Manager:     client,
 		Transcripts: transcripts,
 		Sender:      &send.Sender{Sessions: poller, Pane: client},
-		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures)},
+		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures), Typer: client},
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},
@@ -118,6 +127,10 @@ func run(o options) error {
 		Pastes:      pastes,
 		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
+		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
+		Remote:      remoteAccess,
+		// Browser tests reach the remote listener over plain HTTP.
+		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
 			Timeout: 15 * time.Second,
 			Env:     changes.Env(procrun.Environ()),
@@ -127,6 +140,12 @@ func run(o options) error {
 		return err
 	}
 	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	remoteAccess.handler = s.RemoteHandler()
+	remoteAccess.onChange = s.DropRemote
+	if err := remoteAccess.apply(remoteStore.Get()); err != nil {
+		log.Printf("remote access: %v", err)
+	}
+	defer remoteAccess.stop()
 
 	base := "http://" + addr
 	if o.openBase != "" {
@@ -212,6 +231,179 @@ func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*h
 		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
 		Sessions: sessions,
 	}, nil
+}
+
+// remoteSettingsStore keeps remote access settings in the user config
+// directory, or the fixture directory in fixture mode.
+func remoteSettingsStore(fixtures string) (*remote.Store, error) {
+	if fixtures != "" {
+		return &remote.Store{Path: filepath.Join(fixtures, "remote.json")}, nil
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	return &remote.Store{Path: filepath.Join(dir, "agent-desk", "remote.json")}, nil
+}
+
+// newRemoteListener serves remote clients on a Unix socket in an
+// owner-only directory, so no other account on the machine can connect;
+// tailscale serve (run by root) forwards to it. Fixture mode listens on a
+// 127.0.0.1 TCP port instead, so browser tests can reach it.
+func newRemoteListener(store *remote.Store, fixtures string) *remoteListener {
+	r := &remoteListener{store: store, tcp: fixtures != ""}
+	if !r.tcp {
+		r.socket = filepath.Join(filepath.Dir(store.Path), "remote.sock")
+	}
+	return r
+}
+
+type remoteListener struct {
+	store   *remote.Store
+	handler http.Handler
+	// onChange closes remote connections the new settings no longer allow.
+	onChange func(remote.Settings)
+	socket   string
+	tcp      bool
+
+	mu     sync.Mutex
+	srv    *http.Server
+	addr   string
+	status server.RemoteStatus
+}
+
+func (r *remoteListener) Get() remote.Settings { return r.store.Get() }
+
+// Status reports the listener and, when it is not running, the address it
+// would use, so the settings screen can show the tailscale serve command.
+func (r *remoteListener) Status() server.RemoteStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	st := r.status
+	if st.Address == "" {
+		st.Address = r.address(r.store.Get())
+	}
+	return st
+}
+
+// Set saves the settings, then starts, moves or stops the listener to
+// match. A listener that fails to start is reported in Status.
+func (r *remoteListener) Set(s remote.Settings) (remote.Settings, error) {
+	saved, err := r.store.Set(s)
+	if err != nil {
+		return remote.Settings{}, err
+	}
+	if err := r.apply(saved); err != nil {
+		log.Printf("remote access: %v", err)
+	}
+	if r.onChange != nil {
+		r.onChange(saved)
+	}
+	return saved, nil
+}
+
+func (r *remoteListener) address(s remote.Settings) string {
+	if r.tcp {
+		return fmt.Sprintf("127.0.0.1:%d", s.Port)
+	}
+	return "unix:" + r.socket
+}
+
+func (r *remoteListener) apply(s remote.Settings) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	want := r.address(s)
+	if r.srv != nil && (!s.Enabled || want != r.addr) {
+		_ = r.srv.Close()
+		r.srv = nil
+		log.Printf("remote access stopped")
+	}
+	if !s.Enabled {
+		r.status = server.RemoteStatus{}
+		return nil
+	}
+	if r.srv != nil || r.handler == nil {
+		return nil
+	}
+	l, err := r.listen(s)
+	if err != nil {
+		r.status = server.RemoteStatus{Address: want, Error: err.Error()}
+		return err
+	}
+	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second}
+	r.addr = want
+	r.status = server.RemoteStatus{Listening: true, Address: want}
+	go func(srv *http.Server) { _ = srv.Serve(l) }(r.srv)
+	log.Printf("remote access on %s for https://%s (level %s)", want, s.Host, s.Level)
+	return nil
+}
+
+func (r *remoteListener) listen(s remote.Settings) (net.Listener, error) {
+	if r.tcp {
+		return net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.Port))
+	}
+	dir := filepath.Dir(r.socket)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil, err
+	}
+	// A socket left by an earlier run is removed; a live one (another
+	// Agent Desk) or anything else is not.
+	if len(r.socket) > 100 {
+		return nil, fmt.Errorf("the socket path %s is too long for a Unix socket", r.socket)
+	}
+	if info, err := os.Lstat(r.socket); err == nil {
+		if info.Mode()&os.ModeSocket == 0 {
+			return nil, fmt.Errorf("%s exists and is not a socket", r.socket)
+		}
+		if c, err := net.DialTimeout("unix", r.socket, time.Second); err == nil {
+			_ = c.Close()
+			return nil, fmt.Errorf("another Agent Desk is already serving remote access at %s", r.socket)
+		}
+		if err := os.Remove(r.socket); err != nil {
+			return nil, err
+		}
+	}
+	l, err := net.Listen("unix", r.socket)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(r.socket, 0o600); err != nil {
+		_ = l.Close()
+		return nil, err
+	}
+	return l, nil
+}
+
+func (r *remoteListener) stop() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.srv != nil {
+		_ = r.srv.Close()
+	}
+}
+
+// summaryRunner runs the user's Claude Code CLI for catch-up summaries. In
+// fixture mode it answers with a canned result, so tests never call a model.
+func summaryRunner(fixtures string) summary.Runner {
+	if fixtures != "" {
+		return fixtureSummaries{}
+	}
+	return procrun.Exec{Timeout: 3 * time.Minute}
+}
+
+type fixtureSummaries struct{}
+
+func (fixtureSummaries) RunInput(_ context.Context, _ string, input []byte, _ string, _ ...string) ([]byte, error) {
+	turns := strings.Count(string(input), "\n## ")
+	return json.Marshal(map[string]any{
+		"type": "result", "is_error": false,
+		"result":         fmt.Sprintf("- Fixture summary of %d sections.\n- No model was called.", turns),
+		"total_cost_usd": 0.0012,
+		"usage":          map[string]int{"input_tokens": 1500, "output_tokens": 30},
+	})
 }
 
 // pasteStore keeps pasted images under the user cache directory, or the

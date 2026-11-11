@@ -147,3 +147,50 @@ test('usage shows totals, a daily chart with a table view, and switches range', 
   await expect(main.locator('.usage-section').first().locator('tbody tr')).toHaveCount(7)
   await expect(main.getByRole('heading', { name: 'Models' })).toBeVisible()
 })
+
+test('catch-up summaries are off by default, and say what they cost when on', async ({ page }) => {
+  await page.goto(`${base}/s/a0000011#t=${token}`)
+  const main = page.getByRole('main')
+  await expect(main.getByRole('heading', { name: 'reviewer' })).toBeVisible()
+  await expect(main.getByRole('button', { name: 'Catch me up' })).toHaveCount(0)
+  await page.getByRole('navigation', { name: 'Sessions' }).getByRole('button', { name: 'Settings' }).click()
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await expect(settings).toContainText('Each summary costs tokens on your Claude Code provider.')
+  await settings.getByLabel('Allow catch-up summaries').check()
+  await page.keyboard.press('Escape')
+  await main.getByRole('button', { name: 'Catch me up' }).click()
+  const panel = main.getByRole('region', { name: 'Catch-up summary' })
+  await expect(panel).toContainText('No model was called.')
+  await expect(panel).toContainText('haiku · 1,500 in, 30 out tokens · $0.0012')
+  await panel.getByRole('button', { name: 'Close' }).click()
+  await expect(panel).toHaveCount(0)
+})
+
+test('a session opened again returns to where the reader left it', async ({ page }) => {
+  await page.goto(`${base}/s/a0000002#t=${token}`)
+  const nav = page.getByRole('navigation', { name: 'Sessions' })
+  const scroller = page.locator('.transcript').first()
+  await expect(page.getByRole('main').locator('.turn').first()).toBeVisible()
+  // Read somewhere in the middle.
+  await scroller.evaluate((el) => {
+    el.scrollTop = Math.floor(el.scrollHeight / 3)
+    el.dispatchEvent(new Event('scroll'))
+  })
+  await page.waitForTimeout(200)
+  const before = await scroller.evaluate((el) => el.scrollTop)
+  await expect(page.getByRole('button', { name: /Jump to latest/ })).toBeVisible()
+  // Unblock something else, then come back.
+  await nav.getByRole('button', { name: /^reviewer/ }).click()
+  await expect(page.getByRole('main').getByRole('heading', { name: 'reviewer' })).toBeVisible()
+  await nav.getByRole('button', { name: /^web-compaction/ }).click()
+  await expect(page.getByRole('main').getByRole('heading', { name: 'web-compaction' })).toBeVisible()
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(before - 40)
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBeLessThan(before + 40)
+
+  // Following the latest output stays that way.
+  await page.getByRole('button', { name: /Jump to latest/ }).click()
+  await page.waitForTimeout(200)
+  await nav.getByRole('button', { name: /^reviewer/ }).click()
+  await nav.getByRole('button', { name: /^web-compaction/ }).click()
+  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(80)
+})

@@ -42,6 +42,12 @@ type Exec struct {
 }
 
 func (x Exec) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return x.RunInput(ctx, "", nil, name, args...)
+}
+
+// RunInput runs a command in dir (the current directory when empty) with
+// input on its stdin.
+func (x Exec) RunInput(ctx context.Context, dir string, input []byte, name string, args ...string) ([]byte, error) {
 	timeout := x.Timeout
 	if timeout == 0 {
 		timeout = 10 * time.Second
@@ -49,6 +55,10 @@ func (x Exec) Run(ctx context.Context, name string, args ...string) ([]byte, err
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	if input != nil {
+		cmd.Stdin = bytes.NewReader(input)
+	}
 	cmd.Env = x.Env
 	if cmd.Env == nil {
 		cmd.Env = Environ()

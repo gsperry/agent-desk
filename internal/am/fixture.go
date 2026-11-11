@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -54,7 +55,65 @@ func (f Fixture) Read(_ context.Context, id string) (string, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return idleScreen, nil
 	}
-	return string(data), err
+	if err != nil {
+		return "", err
+	}
+	return moveSelection(string(data), f.pendingMoves(id)), nil
+}
+
+// pendingMoves is how far Up and Down presses recorded in keys.log moved a
+// session's selection since its last Enter or Escape, so a fixture pane
+// follows key presses the way a real dialog does.
+func (f Fixture) pendingMoves(id string) int {
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(f.Path), "keys.log"))
+	if err != nil {
+		return 0
+	}
+	moves := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || fields[0] != id {
+			continue
+		}
+		for _, k := range fields[1:] {
+			switch k {
+			case "Down":
+				moves++
+			case "Up":
+				moves--
+			case "Enter", "Escape":
+				moves = 0
+			}
+		}
+	}
+	return moves
+}
+
+var optionLine = regexp.MustCompile(`^(❯ |  )(\s*)(\d{1,2})\.\s`)
+
+// moveSelection moves the ❯ marker of a numbered dialog by moves options.
+func moveSelection(screen string, moves int) string {
+	if moves == 0 {
+		return screen
+	}
+	lines := strings.Split(screen, "\n")
+	var options []int
+	current := -1
+	for i, l := range lines {
+		if m := optionLine.FindStringSubmatch(l); m != nil {
+			if m[1] == "❯ " {
+				current = len(options)
+			}
+			options = append(options, i)
+		}
+	}
+	if current < 0 {
+		return screen
+	}
+	target := min(max(current+moves, 0), len(options)-1)
+	lines[options[current]] = "  " + strings.TrimPrefix(lines[options[current]], "❯ ")
+	lines[options[target]] = "❯ " + strings.TrimPrefix(lines[options[target]], "  ")
+	return strings.Join(lines, "\n")
 }
 
 // ReadStyled serves panes/<id>.ansi, or the plain screen when there is none.
