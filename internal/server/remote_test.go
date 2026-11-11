@@ -347,3 +347,40 @@ func TestStillAllowed(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteHostThroughSocket(t *testing.T) {
+	tests := []struct {
+		name     string
+		onSocket bool
+		host     string
+		forward  []string
+		want     int
+	}{
+		{"socket, as tailscale serve sends it", true, "localhost", []string{remoteHost}, 200},
+		{"socket, named directly", true, remoteHost, nil, 200},
+		{"socket, wrong forwarded host", true, "localhost", []string{"evil.example"}, 403},
+		{"socket, no forwarded host", true, "localhost", nil, 403},
+		{"socket, two forwarded hosts", true, "localhost", []string{remoteHost, remoteHost}, 403},
+		{"not the socket, forwarded host ignored", false, "localhost", []string{remoteHost}, 403},
+		{"socket, forwarded host ignored when Host is not localhost", true, "127.0.0.1", []string{remoteHost}, 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Remote: remoteOn(remote.LevelAnswer)})
+			req := httptest.NewRequest("GET", "/api/sessions", nil)
+			req.Host = tt.host
+			for _, f := range tt.forward {
+				req.Header.Add("X-Forwarded-Host", f)
+			}
+			req.Header.Set(remote.TailscaleHeader, "dev@example.com")
+			if tt.onSocket {
+				req = req.WithContext(OnSocket(req.Context()))
+			}
+			rec := httptest.NewRecorder()
+			s.RemoteHandler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d: %s", rec.Code, tt.want, rec.Body.String())
+			}
+		})
+	}
+}

@@ -13,6 +13,29 @@ import (
 
 type remoteKey struct{}
 
+type socketKey struct{}
+
+// OnSocket marks a connection's context as arriving on the remote Unix
+// socket, which only this account and root (tailscaled) can connect to.
+func OnSocket(ctx context.Context) context.Context {
+	return context.WithValue(ctx, socketKey{}, true)
+}
+
+// requestHost is the host a remote request names. tailscale serve sends
+// requests for a Unix socket with Host "localhost" and the tailnet name in
+// X-Forwarded-Host, which it always overwrites. That header is trusted only
+// on the socket, and only in that shape.
+func requestHost(r *http.Request) string {
+	onSocket, _ := r.Context().Value(socketKey{}).(bool)
+	if !onSocket || r.Host != "localhost" {
+		return r.Host
+	}
+	if v := r.Header.Values("X-Forwarded-Host"); len(v) == 1 {
+		return v[0]
+	}
+	return ""
+}
+
 // remoteCaller is the identity and settings of a remote request, set by
 // requireRemote. Local requests have none.
 type remoteCaller struct {
@@ -43,7 +66,7 @@ func (s *Server) requireRemote(need remote.Need, next http.HandlerFunc) http.Han
 			http.Error(w, "remote access is off", http.StatusNotFound)
 			return
 		}
-		if r.Host != st.Host {
+		if requestHost(r) != st.Host {
 			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}

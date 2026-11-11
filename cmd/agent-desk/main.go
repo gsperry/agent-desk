@@ -331,6 +331,9 @@ func (r *remoteListener) apply(s remote.Settings) error {
 		return err
 	}
 	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second}
+	if !r.tcp {
+		r.srv.ConnContext = func(ctx context.Context, _ net.Conn) context.Context { return server.OnSocket(ctx) }
+	}
 	r.addr = want
 	r.status = server.RemoteStatus{Listening: true, Address: want}
 	go func(srv *http.Server) { _ = srv.Serve(l) }(r.srv)
