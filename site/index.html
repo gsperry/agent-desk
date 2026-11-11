@@ -98,7 +98,7 @@
         <div class="feature-text">
           <h3>History and usage</h3>
           <p>Browse every conversation on disk, not only the running ones, export any of them to Markdown, or resume one as a new agent-manager session. Usage shows tokens, agent working time and time spent waiting on you, by day, model, project and conversation.</p>
-          <p class="small">Cost is what Claude Code reports, at list price. Agent Desk never calls a model itself.</p>
+          <p class="small">Cost is what Claude Code reports, at list price.</p>
         </div>
         <figure class="shot">
           <figcaption><span class="fig">Fig. 5</span> Usage over 30 days</figcaption>
@@ -114,6 +114,8 @@
         <li><strong>Pins and notes</strong> per conversation, kept in your browser.</li>
         <li><strong>Image paste</strong> into the composer, stored owner-only and cleaned after a week.</li>
         <li><strong>Color terminal</strong> view of any session, read-only.</li>
+        <li><strong>Shell edits shown:</strong> files a command changed, with line counts and diffs.</li>
+        <li><strong>Catch-up summaries</strong> of what happened while you were away, opt-in, through your own Claude Code CLI. They cost tokens.</li>
         <li><strong>Session management:</strong> start, stop, revive, archive and move sessions, with templates for new ones.</li>
       </ul>
     </section>
@@ -134,7 +136,7 @@
       <div class="grid">
         <div class="card"><h3>Loopback only</h3><p>Listens on 127.0.0.1. Every request needs a token that changes on each start, and must name the server's own host; state-changing requests must come from its own origin.</p></div>
         <div class="card"><h3>No telemetry</h3><p>No analytics, no network calls beyond localhost. This page has none either.</p></div>
-        <div class="card"><h3>No API keys</h3><p>Agent Desk never asks for a key and never calls a model API. Your agents run on whatever provider your CLI already uses.</p></div>
+        <div class="card"><h3>No API keys</h3><p>Agent Desk never asks for a key and never calls a model API. Optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.</p></div>
         <div class="card"><h3>Read-only transcripts</h3><p>Nothing is ever written under <code>~/.claude</code>. Agent Desk reads Claude Code's files and runs local CLIs, nothing more.</p></div>
       </div>
     </section>
