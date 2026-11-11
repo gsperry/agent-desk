@@ -7,7 +7,7 @@ import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
-import type { Answer, CatchUp, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -406,6 +406,21 @@ export class Store {
     const r = await this.post('/api/remote', s)
     const body = r.data as { settings?: RemoteSettings; status?: RemoteStatus } | undefined
     return { data: body?.settings, status: body?.status, error: r.error }
+  }
+
+  private commandCache = new Map<string, Promise<SlashCommand[]>>()
+
+  // commands lists the slash commands a session accepts, fetched once per
+  // session per page load.
+  commands(sessionId: string): Promise<SlashCommand[]> {
+    let p = this.commandCache.get(sessionId)
+    if (!p) {
+      p = apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/commands`)
+        .then(async (res) => (res.ok ? ((await res.json()) as { commands: SlashCommand[] }).commands : []))
+        .catch(() => [])
+      this.commandCache.set(sessionId, p)
+    }
+    return p
   }
 
   // catchUp asks the user's Claude Code CLI for a summary of what happened

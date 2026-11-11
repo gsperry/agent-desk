@@ -25,6 +25,7 @@ make lint    # gofmt, go vet, staticcheck, eslint, tsc
 make e2e     # Playwright smoke test on testdata/fixtures/desk
 go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl   # raw-item report on real data
 go run ./tools/anonymize in.jsonl > testdata/transcripts/x.jsonl   # new sample
+go run ./tools/claudecommands "$(readlink -f "$(command -v claude)")" > internal/commands/builtin.go   # after a Claude Code upgrade
 ```
 
 Check every new sample for leaks before committing: grep it for names, hosts and paths.
@@ -50,6 +51,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
 - `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
 - `internal/remote`: remote access levels, settings (owner-only file) and the Tailscale identity check
+- `internal/commands`: slash commands for autocomplete: built-ins generated from the Claude Code binary, custom commands, skills and enabled plugins (read-only)
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
 - `internal/pane`: dialog parser, answers (allow-listed keys through `tmux -L agentmgr send-keys`) and the styled screen for the read-only color view

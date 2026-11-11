@@ -25,6 +25,7 @@ import (
 
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/commands"
 	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/history"
@@ -129,6 +130,7 @@ func run(o options) error {
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
 		Remote:      remoteAccess,
+		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{

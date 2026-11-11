@@ -97,3 +97,34 @@ test('a pasted image is stored and its path inserted', async ({ page }) => {
   })
   await expect(box).toHaveValue(/^Look at this: \/.*\/pastes\/paste-[^/]+\.png$/)
 })
+
+test('slash autocomplete offers Claude Code commands, skills and snippets', async ({ page }) => {
+  await page.goto(`${base}/s/a0000011#t=${token}`)
+  const box = page.getByRole('textbox', { name: 'Reply to reviewer' })
+  await box.fill('/comp')
+  const menu = page.getByRole('listbox', { name: 'Commands' })
+  await expect(menu.getByRole('option').first()).toContainText('/compact')
+  await expect(menu.getByRole('option').first()).toContainText('Claude Code')
+  await box.press('Enter')
+  await expect(box).toHaveValue('/compact ')
+  await expect(menu).toHaveCount(0)
+
+  await box.fill('/tri')
+  await expect(menu.getByRole('option', { name: /\/triage/ })).toContainText('skill · user')
+  await box.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(box).toHaveValue('/tri')
+
+  await box.fill('/sh')
+  await expect(menu.getByRole('option').first()).toContainText('/ship')
+  await expect(menu.getByRole('option').first()).toContainText('<version>')
+
+  // Arrow keys move; Tab picks. A snippet expands to its text.
+  await box.fill('/cont')
+  await expect(menu.getByRole('option').first()).toContainText('/continue')
+  await expect(menu.getByRole('option').first()).toContainText('snippet')
+  await box.press('ArrowDown')
+  await box.press('ArrowUp')
+  await box.press('Tab')
+  await expect(box).toHaveValue('Continue.')
+})

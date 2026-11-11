@@ -8,7 +8,7 @@ import { OpenPathContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
-import type { CatchUp, Changes, Item, SubAgent } from '../types'
+import type { CatchUp, Changes, Item, SlashCommand, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
 import { NotesPanel } from './NotesPanel'
 import { togglePin } from '../model/pins'
@@ -56,6 +56,7 @@ interface Props {
   exportConversation: (conversationId: string) => void
   suggestion?: Suggestion
   dismissSuggestion: (sessionId: string) => void
+  loadCommands: (sessionId: string) => Promise<SlashCommand[]>
   // catchUp is set when catch-up summaries are turned on in Settings.
   catchUp?: (sessionId: string, since: number) => Promise<{ data?: CatchUp; error?: string }>
 }
@@ -380,6 +381,7 @@ export function SessionView(props: Props) {
               insideSession={insideSession}
               restore={restore}
               pasteImage={can(remoteInfo, 'local') ? props.pasteImage : undefined}
+              loadCommands={props.loadCommands}
               onSend={(text) => {
                 send(sessionId, text)
                 setSends((n) => n + 1)

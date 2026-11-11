@@ -13,6 +13,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/gsperry/agent-desk/internal/commands"
+	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/remote"
 )
 
@@ -281,6 +283,7 @@ func TestRouteNeeds(t *testing.T) {
 		"GET /api/sessions/{id}/agents":                    remote.NeedRead,
 		"GET /api/sessions/{id}/agents/{agent}/transcript": remote.NeedRead,
 		"GET /api/sessions/{id}/changes":                   remote.NeedRead,
+		"GET /api/sessions/{id}/commands":                  remote.NeedRead,
 		"POST /api/paste":                                  remote.NeedLocal,
 		"GET /api/conflicts":                               remote.NeedRead,
 		"GET /api/conversations":                           remote.NeedRead,
@@ -382,5 +385,39 @@ func TestRemoteHostThroughSocket(t *testing.T) {
 				t.Fatalf("status %d, want %d: %s", rec.Code, tt.want, rec.Body.String())
 			}
 		})
+	}
+}
+
+type fakeCommands struct{}
+
+func (fakeCommands) List(dir string) []commands.Command {
+	return []commands.Command{{Name: "compact", Kind: commands.KindBuiltin}, {Name: "in:" + dir, Kind: commands.KindCommand}}
+}
+
+func TestSessionCommandsRoute(t *testing.T) {
+	src := newFakeSource()
+	src.state.Sessions = []hub.SessionView{
+		{ID: "c1", Tool: "claude", Directory: "/src/web"},
+		{ID: "x1", Tool: "codex", Directory: "/src/api"},
+	}
+	s := newTestServer(t, Config{Sessions: src, Commands: fakeCommands{}})
+	tests := []struct {
+		path     string
+		want     int
+		wantBody string
+	}{
+		{"/api/sessions/c1/commands", 200, `"name":"in:/src/web"`},
+		{"/api/sessions/x1/commands", 200, `"commands":[]`},
+		{"/api/sessions/zz/commands", 404, "unknown session"},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", tt.path, nil)
+		req.Host = "127.0.0.1:7317"
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
+			t.Errorf("%s: status %d body %s", tt.path, rec.Code, rec.Body.String())
+		}
 	}
 }

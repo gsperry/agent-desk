@@ -54,3 +54,11 @@ Goal: supervise and correct work, not only chat.
 | 10.4 | Desktop app | Design in [design/desktop-app.md](design/desktop-app.md); not built (Tauri 2 needs a newer Rust than the installed 1.82) | Rust update, signing and distribution, repository layout |
 | 10.5 | Away from the desk | Tailscale built (R0 groundwork, R1); next Cloudflare Tunnel and Access (R2), then a hosted relay (R3) as its own decision. [design/away-from-desk.md](design/away-from-desk.md) | R3 |
 | 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Revisit after remote access |
+
+## After M10
+
+| Step | Feature | Notes |
+| --- | --- | --- |
+| A1 | Slash command autocomplete (done) | Built-ins from the Claude Code binary (`tools/claudecommands`), custom commands, skills and enabled plugins; snippets in the same menu |
+| A2 | Desktop app | Tauri shell around the Go binary; see [design/desktop-app.md](design/desktop-app.md) |
+| A3 | Remote access over Cloudflare Tunnel (R2) | To discuss; see [design/away-from-desk.md](design/away-from-desk.md) |

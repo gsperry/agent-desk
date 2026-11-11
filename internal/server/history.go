@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gsperry/agent-desk/internal/commands"
 	"github.com/gsperry/agent-desk/internal/history"
 )
 
@@ -57,6 +58,25 @@ func (s *Server) exportConversation(w http.ResponseWriter, r *http.Request) {
 	// The name comes from export.Filename, which keeps only [a-z0-9-].
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	_, _ = w.Write([]byte(body))
+}
+
+// sessionCommands lists the slash commands a session's CLI accepts: Claude
+// Code's built-ins and the custom commands and skills its project and user
+// define. Other CLIs get none.
+func (s *Server) sessionCommands(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	for _, sess := range s.cfg.Sessions.State().Sessions {
+		if sess.ID != id {
+			continue
+		}
+		list := []commands.Command{}
+		if sess.Tool == "claude" && s.cfg.Commands != nil {
+			list = s.cfg.Commands.List(sess.Directory)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"commands": list, "builtinVersion": commands.BuiltinVersion})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown session"})
 }
 
 // usage totals tokens, time and reported cost over the last days days.
