@@ -86,7 +86,7 @@ Rename, delete, restart with a fresh context, and fork have no agent-manager com
 
 ## Answering prompts
 
-When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. Options that need typing, such as "Type something", are left to agent-manager.
+When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step.
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 

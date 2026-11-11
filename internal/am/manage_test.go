@@ -61,3 +61,21 @@ func TestOfferedTools(t *testing.T) {
 		t.Fatalf("default %q", def)
 	}
 }
+
+func TestMoveSelection(t *testing.T) {
+	screen := "Pick\n❯ 1. Red\n     red\n  2. Blue\n  3. Type something.\nEnter to select"
+	tests := []struct {
+		moves int
+		want  string
+	}{
+		{0, screen},
+		{2, "Pick\n  1. Red\n     red\n  2. Blue\n❯ 3. Type something.\nEnter to select"},
+		{9, "Pick\n  1. Red\n     red\n  2. Blue\n❯ 3. Type something.\nEnter to select"},
+		{-3, screen},
+	}
+	for _, tt := range tests {
+		if got := moveSelection(screen, tt.moves); got != tt.want {
+			t.Errorf("moves %d:\n%s\nwant\n%s", tt.moves, got, tt.want)
+		}
+	}
+}

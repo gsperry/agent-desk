@@ -12,7 +12,7 @@ Background: [docs/integration-notes.md](docs/integration-notes.md) (how agent-ma
 - **Do not fork or vendor agent-manager.** Integrate through its CLI. Gaps that need upstream changes go in `docs/upstream/` as PR proposals.
 - **Every tmux call names the socket**: `tmux -L agentmgr`. A bare `tmux` hits the user's own server.
 - **The JSONL parser is tolerant.** Unknown or malformed records become raw items. Never crash on input, never silently drop a record. New record shapes get an anonymized sample in `testdata/` with the Claude Code version it came from.
-- **Send through `agent-manager type`**, gated on status and on a dialog check of the pane. Never `send`, which labels text as coming from another agent.
+- **Send through `agent-manager type`**, gated on status and on a dialog check of the pane. Never `send`, which labels text as coming from another agent. A typed answer to a dialog's text option goes through `agent-manager type` too, only after a fresh read of the pane confirms that option is selected.
 - Keep the server's checks: loopback bind, token on every API request and WebSocket, Host check on every request, Origin check on state-changing requests and upgrades.
 
 ## Commands

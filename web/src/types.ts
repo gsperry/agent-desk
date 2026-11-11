@@ -105,7 +105,10 @@ export interface Screen {
   dialog?: Dialog
 }
 
-export type Answer = { action: 'choose'; index: number; label: string } | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }
+export type Answer =
+  | { action: 'choose'; index: number; label: string }
+  | { action: 'text'; index: number; label: string; text: string }
+  | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }
 
 export interface SearchHit {
   sessionId: string

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { port, token } from '../playwright.config'
@@ -71,4 +71,24 @@ test('the terminal shows the screen in color, read-only, and keeps the answer bu
   await expect(page.getByRole('region', { name: 'Terminal' }).locator('.xterm-rows')).toContainText('Do you want to proceed?')
   await page.getByRole('region', { name: 'Terminal' }).getByRole('button', { name: 'Plain text' }).click()
   await expect(page.getByRole('region', { name: 'Terminal' }).locator('.live-screen')).toContainText('Do you want to proceed?')
+})
+
+test('a "Type something" option takes a typed answer, and "Chat about this" is a button', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-free-initial.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await expect(pane.getByRole('button', { name: /^4 Chat about this/ })).toBeEnabled()
+    await pane.getByRole('button', { name: /^3 Type something/ }).click()
+    await pane.getByRole('textbox', { name: 'Your answer' }).fill('Green, with a hint of teal')
+    await pane.getByRole('button', { name: 'Send answer' }).click()
+    await expect(pane.getByRole('textbox', { name: 'Your answer' })).toHaveCount(0)
+    // Two moves onto the text field, then the text through agent-manager type.
+    await expect.poll(keys).toBe('a0000002 Down Down\n')
+    await expect(page.getByRole('main').locator('.card.user').filter({ hasText: 'Green, with a hint of teal' })).toBeVisible()
+  } finally {
+    writeFileSync(panePath, original)
+  }
 })

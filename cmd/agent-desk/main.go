@@ -111,7 +111,7 @@ func run(o options) error {
 		Manager:     client,
 		Transcripts: transcripts,
 		Sender:      &send.Sender{Sessions: poller, Pane: client},
-		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures)},
+		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures), Typer: client},
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},

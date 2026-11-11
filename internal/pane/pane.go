@@ -21,8 +21,8 @@ type Option struct {
 	Index    int    `json:"index"`
 	Label    string `json:"label"`
 	Selected bool   `json:"selected"`
-	// Free options open a text field in the terminal, which a button
-	// cannot fill in.
+	// Free options are a text field in the dialog ("Type something."):
+	// they are answered with text, not a key press.
 	Free bool `json:"free,omitempty"`
 }
 
@@ -30,7 +30,9 @@ var (
 	footerPattern = regexp.MustCompile(`Enter to (?:confirm|select)|Esc to cancel`)
 	numbered      = regexp.MustCompile(`^(\s*)(❯)?\s*(\d{1,2})\.\s+(.+?)\s*$`)
 	separator     = regexp.MustCompile(`^\s*[─╌━-]{10,}\s*$`)
-	freeLabel     = regexp.MustCompile(`^(?:Type something|Chat about this)`)
+	// freeLabel is an option that is a text field. "Chat about this" is not
+	// one: choosing it declines the question and returns to the prompt.
+	freeLabel = regexp.MustCompile(`^Type something`)
 )
 
 // footerLines is how far up from the bottom the footer is looked for, the
@@ -50,11 +52,18 @@ func Parse(screen string) *Dialog {
 			break
 		}
 	}
-	if footer < 0 {
+	footerText := ""
+	if footer >= 0 {
+		footerText = strings.TrimSpace(lines[footer])
+	} else if reviewScreen(lines) {
+		// Claude Code's last step of a multi-question prompt has no
+		// footer; the options end the screen.
+		footer = len(lines)
+	} else {
 		return nil
 	}
 	top := max(footer-maxScan, 0)
-	d := &Dialog{Footer: strings.TrimSpace(lines[footer])}
+	d := &Dialog{Footer: footerText}
 	first := numberedOptions(lines, top, footer, d)
 	if first < 0 {
 		first = markedOptions(lines, top, footer, d)
@@ -64,6 +73,25 @@ func Parse(screen string) *Dialog {
 	}
 	d.Question = question(lines, top, first)
 	return d
+}
+
+// reviewPrompt is the question on Claude Code's review step for a prompt
+// with several questions.
+var reviewPrompt = regexp.MustCompile(`^Ready to submit your answers\?$`)
+
+// reviewScreen reports a review step: the prompt line just above the
+// numbered options that end the screen.
+func reviewScreen(lines []string) bool {
+	for i := len(lines) - 1; i >= max(len(lines)-footerLines, 0); i-- {
+		l := strings.TrimSpace(lines[i])
+		if reviewPrompt.MatchString(l) {
+			return true
+		}
+		if !numbered.MatchString(lines[i]) {
+			return false
+		}
+	}
+	return false
 }
 
 // numberedOptions walks up from the footer collecting "N. label" lines down

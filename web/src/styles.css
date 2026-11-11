@@ -2708,3 +2708,22 @@ mark {
 .summary-model input {
   max-width: 14rem;
 }
+
+/* Typed answers in the terminal panel */
+
+.live-typed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.live-typed input {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}

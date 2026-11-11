@@ -22,6 +22,8 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
   const [screen, setScreen] = useState<Screen | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // typing is the text option being answered, and its draft.
+  const [typing, setTyping] = useState<{ index: number; label: string; text: string } | null>(null)
   const [tick, setTick] = useState(0)
   const pre = useRef<HTMLPreElement>(null)
 
@@ -50,6 +52,7 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
     void answer(sessionId, a).then((err) => {
       setBusy(false)
       setMessage(err)
+      if (!err) setTyping(null)
       setTick((n) => n + 1)
     })
   }
@@ -93,16 +96,55 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
                 key={o.index}
                 type="button"
                 className={o.selected ? 'live-option selected' : 'live-option'}
-                disabled={busy || o.free === true}
-                title={o.free ? 'This option needs typing in the terminal. Answer it in agent-manager.' : undefined}
+                disabled={busy}
+                title={o.free ? 'Answer in your own words' : undefined}
                 onClick={() => {
-                  send({ action: 'choose', index: o.index, label: o.label })
+                  if (o.free) setTyping({ index: o.index, label: o.label, text: typing?.index === o.index ? typing.text : '' })
+                  else send({ action: 'choose', index: o.index, label: o.label })
                 }}
               >
                 <span className="live-option-index">{o.index + 1}</span> {o.label}
               </button>
             ))}
           </div>
+          {typing && (
+            <form
+              className="live-typed"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (typing.text.trim()) send({ action: 'text', index: typing.index, label: typing.label, text: typing.text })
+              }}
+            >
+              <input
+                aria-label="Your answer"
+                placeholder="Your answer, one line"
+                autoFocus
+                maxLength={2000}
+                value={typing.text}
+                onChange={(e) => {
+                  setTyping({ ...typing, text: e.target.value.replace(/[\r\n]+/g, ' ') })
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation()
+                    setTyping(null)
+                  }
+                }}
+              />
+              <button type="submit" className="send" disabled={busy || !typing.text.trim()}>
+                Send answer
+              </button>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setTyping(null)
+                }}
+              >
+                Cancel
+              </button>
+            </form>
+          )}
           <button
             type="button"
             className="live-cancel"
