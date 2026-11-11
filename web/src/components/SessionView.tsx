@@ -1,7 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { loadingDoc, type Doc } from '../model/docs'
+import type { Pending } from '../model/pending'
 import { buildHeader } from '../model/transcript'
 import type { SessionView as Session } from '../types'
+import { Composer } from './Composer'
+import { PendingReplies } from './PendingReplies'
 import { glyph } from './status'
 import { Transcript } from './Transcript'
 
@@ -9,12 +12,19 @@ interface Props {
   session: Session | undefined
   sessionId: string
   doc: Doc | undefined
+  pending: Pending[]
+  connected: boolean
+  insideSession: boolean
   follow: (id: string) => void
   unfollow: (id: string) => void
   loadOlder: (id: string) => void
+  send: (id: string, text: string) => void
+  dismiss: (id: string, clientId: string) => void
 }
 
-export function SessionView({ session, sessionId, doc, follow, unfollow, loadOlder }: Props) {
+export function SessionView({ session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss }: Props) {
+  const [sends, setSends] = useState(0)
+  const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>()
   useEffect(() => {
     follow(sessionId)
     return () => {
@@ -58,20 +68,48 @@ export function SessionView({ session, sessionId, doc, follow, unfollow, loadOld
         </div>
       </header>
       <StatusBanner session={session} doc={d} />
-      {d.items.length > 0 ? (
+      {d.items.length > 0 || pending.length > 0 ? (
         <Transcript
           sessionId={sessionId}
           items={d.items}
           hasMore={d.hasMore}
           loadingOlder={d.loadingOlder}
           live={session.running}
+          followKey={sends}
           onLoadOlder={() => {
             loadOlder(sessionId)
           }}
+          trailing={
+            <PendingReplies
+              pending={pending}
+              onRetry={(p) => {
+                dismiss(sessionId, p.clientId)
+                send(sessionId, p.text)
+              }}
+              onEdit={(p) => {
+                dismiss(sessionId, p.clientId)
+                setRestore({ text: p.text, nonce: Date.now() })
+              }}
+              onDismiss={(p) => {
+                dismiss(sessionId, p.clientId)
+              }}
+            />
+          }
         />
       ) : (
         <div className="empty">{emptyText(session, d)}</div>
       )}
+      <Composer
+        key={sessionId}
+        session={session}
+        connected={connected}
+        insideSession={insideSession}
+        restore={restore}
+        onSend={(text) => {
+          send(sessionId, text)
+          setSends((n) => n + 1)
+        }}
+      />
     </main>
   )
 }

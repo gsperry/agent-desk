@@ -13,6 +13,7 @@ test('sidebar groups sessions by project with status', async ({ page }) => {
   await expect(nav.getByText('api-orchestrator')).toBeVisible()
   await expect(nav.getByText('web-compaction')).toBeVisible()
   await expect(nav.getByRole('heading', { name: 'lab' })).toBeVisible()
+  await expect(nav.getByText('dialog-demo')).toBeVisible()
   await expect(nav.getByText('old-spike')).toBeHidden()
   await nav.getByText('Show archived (1)').click()
   await expect(nav.getByText('old-spike')).toBeVisible()

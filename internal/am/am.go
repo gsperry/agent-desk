@@ -48,10 +48,21 @@ type Client interface {
 	// ProfileVar is one variable of an environment profile, or "" when the
 	// profile does not set it.
 	ProfileVar(ctx context.Context, profile, key string) (string, error)
+	// Type submits text at the session's prompt as the user.
+	Type(ctx context.Context, id, text string) error
+	// Read returns the session's visible screen as plain text.
+	Read(ctx context.Context, id string) (string, error)
 }
 
 // ErrNotInstalled reports agent-manager missing from PATH.
 var ErrNotInstalled = errors.New("agent-manager is not installed or not on PATH")
+
+// ErrMaybeSent is a type that failed after the paste started, so the text
+// may sit in the pane. It must not be retried automatically.
+var ErrMaybeSent = errors.New("the message may have reached the session")
+
+// exitMaybeSent is agent-manager's exit status for ErrMaybeSent.
+const exitMaybeSent = 3
 
 type CLI struct {
 	Runner run.Runner
@@ -110,6 +121,31 @@ func (c *CLI) ProfileVar(ctx context.Context, profile, key string) (string, erro
 		return "", fmt.Errorf("agent-manager env show: %w", err)
 	}
 	return rec.Vars[key], nil
+}
+
+// Type runs `agent-manager type`. The separator keeps text that starts with
+// a dash, such as "--help", from being read as a flag.
+func (c *CLI) Type(ctx context.Context, id, text string) error {
+	_, err := c.run(ctx, "type", "--json", "--", id, text)
+	var exitErr *run.ExitError
+	if errors.As(err, &exitErr) && exitErr.Code == exitMaybeSent {
+		return fmt.Errorf("%w: %s", ErrMaybeSent, exitErr.Stderr)
+	}
+	return err
+}
+
+func (c *CLI) Read(ctx context.Context, id string) (string, error) {
+	out, err := c.run(ctx, "read", "--json", "--", id)
+	if err != nil {
+		return "", err
+	}
+	var screen struct {
+		Output string `json:"output"`
+	}
+	if err := json.Unmarshal(out, &screen); err != nil {
+		return "", fmt.Errorf("agent-manager read: %w", err)
+	}
+	return screen.Output, nil
 }
 
 // ConfigDir is agent-manager's state directory, resolved the way

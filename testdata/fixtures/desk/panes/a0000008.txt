@@ -1,0 +1,4 @@
+  Teach auto mode about your environment?
+  ❯ 1. Yes
+    2. Not now
+  Enter to confirm · Esc to cancel

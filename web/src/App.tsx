@@ -11,6 +11,8 @@ export default function App() {
   return <Desk token={token} />
 }
 
+const noPending: never[] = []
+
 function sessionFromPath(): string | null {
   const m = /^\/s\/([^/]+)/.exec(window.location.pathname)
   return m?.[1] ? decodeURIComponent(m[1]) : null
@@ -19,7 +21,7 @@ function sessionFromPath(): string | null {
 function Desk({ token }: { token: string }) {
   const store = useMemo(() => new Store(token), [token])
   useEffect(() => store.start(), [store])
-  const { conn, data } = useStore(store)
+  const { conn, data, pending } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
 
   useEffect(() => {
@@ -45,6 +47,12 @@ function Desk({ token }: { token: string }) {
   const loadOlder = useCallback((id: string) => {
     void store.loadOlder(id)
   }, [store])
+  const send = useCallback((id: string, text: string) => {
+    void store.send(id, text)
+  }, [store])
+  const dismiss = useCallback((id: string, clientId: string) => {
+    store.dismiss(id, clientId)
+  }, [store])
 
   if (conn.kind === 'unauthorized') return <NoToken />
 
@@ -65,9 +73,14 @@ function Desk({ token }: { token: string }) {
             session={session}
             sessionId={selected}
             doc={data.docs[selected]}
+            pending={pending[selected] ?? noPending}
+            connected={conn.kind === 'open'}
+            insideSession={data.sessions.insideSession}
             follow={follow}
             unfollow={unfollow}
             loadOlder={loadOlder}
+            send={send}
+            dismiss={dismiss}
           />
         ) : (
           <main className="main">

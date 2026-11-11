@@ -104,6 +104,48 @@ func TestProfileVar(t *testing.T) {
 	}
 }
 
+func TestType(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantErr error
+	}{
+		{"sent", nil, nil},
+		{"maybe sent", &run.ExitError{Name: "agent-manager", Code: 3, Stderr: "prompt may have reached"}, ErrMaybeSent},
+		{"not installed", fmt.Errorf("x: %w", run.ErrNotFound), ErrNotInstalled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &fakeRunner{err: tt.err}
+			c := &CLI{Runner: r, Bin: "agent-manager"}
+			err := c.Type(context.Background(), "a1b2", "--help me")
+			if got := strings.Join(r.args, "|"); got != "agent-manager|type|--json|--|a1b2|--help me" {
+				t.Fatalf("args = %q", got)
+			}
+			if tt.wantErr == nil && err != nil || tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+	other := &run.ExitError{Name: "agent-manager", Code: 1, Stderr: "session is not running"}
+	c := &CLI{Runner: &fakeRunner{err: other}, Bin: "agent-manager"}
+	if err := c.Type(context.Background(), "a", "b"); errors.Is(err, ErrMaybeSent) || !strings.Contains(err.Error(), "not running") {
+		t.Fatalf("exit 1: %v", err)
+	}
+}
+
+func TestRead(t *testing.T) {
+	r := &fakeRunner{out: []byte(`{"session":{"id":"a1"},"output":"line one\nline two"}`)}
+	c := &CLI{Runner: r, Bin: "agent-manager"}
+	got, err := c.Read(context.Background(), "a1")
+	if err != nil || got != "line one\nline two" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if strings.Join(r.args, " ") != "agent-manager read --json -- a1" {
+		t.Fatalf("args = %v", r.args)
+	}
+}
+
 func TestConfigDir(t *testing.T) {
 	tests := []struct {
 		name, amDir, xdg, want string

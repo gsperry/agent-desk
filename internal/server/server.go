@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/send"
 )
 
 // WSProtocol is the WebSocket subprotocol the server speaks. Browsers cannot
@@ -42,6 +43,12 @@ type Config struct {
 	Manager ManagerStarter
 	// Transcripts serves session transcripts.
 	Transcripts TranscriptSource
+	// Sender delivers replies to sessions.
+	Sender Sender
+}
+
+type Sender interface {
+	Send(ctx context.Context, sessionID, text string) (send.Result, error)
 }
 
 type TranscriptSource interface {
@@ -67,8 +74,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil {
-		return nil, errors.New("sessions, manager and transcripts are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil {
+		return nil, errors.New("sessions, manager, transcripts and sender are required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -89,6 +96,7 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("GET /api/health", s.requireToken(http.HandlerFunc(s.health)))
 	s.mux.Handle("GET /api/sessions", s.requireToken(http.HandlerFunc(s.sessions)))
 	s.mux.Handle("GET /api/sessions/{id}/transcript", s.requireToken(http.HandlerFunc(s.transcriptWindow)))
+	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
 	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
 	s.mux.HandleFunc("GET /api/ws", s.websocket)
 	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
@@ -166,6 +174,31 @@ func (s *Server) startManager(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Sessions.Trigger()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// maxSendBody bounds the request; the sender's own cap is lower.
+const maxSendBody = 1 << 20
+
+func (s *Server) send(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSendBody)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON with a text field"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	res, err := s.cfg.Sender.Send(ctx, r.PathValue("id"), body.Text)
+	var refused *send.Refused
+	switch {
+	case errors.As(err, &refused):
+		writeJSON(w, http.StatusConflict, refused)
+	case err != nil:
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+	default:
+		writeJSON(w, http.StatusOK, res)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
