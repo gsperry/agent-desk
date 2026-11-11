@@ -18,14 +18,26 @@ Status: early. Built and used on macOS (Apple Silicon); CI also builds and tests
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - Go 1.27 and Node 24 or later, to build
 
-## Build and run
+## Install
+
+There are no prebuilt binaries yet. Build from source:
 
 ```sh
+git clone https://github.com/gsperry/agent-desk
+cd agent-desk
 make build
-./bin/agent-desk
+install -m 0755 bin/agent-desk ~/.local/bin/agent-desk   # or any directory on your PATH
 ```
 
-The binary prints a URL and opens it in your browser. The URL carries a token that changes on every start.
+To update, pull and repeat the last two commands.
+
+## Run
+
+```sh
+agent-desk
+```
+
+It opens Agent Desk in your browser. The link carries a token that changes on every start; the terminal prints it too, in case the browser does not open. Closing the terminal stops Agent Desk and leaves every agent running.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
