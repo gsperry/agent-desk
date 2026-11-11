@@ -1,0 +1,14 @@
+Agent Desk
+Copyright 2026 Guy Sperry
+
+Licensed under the Apache License, Version 2.0.
+
+Agent Desk is a client of agent-manager (https://github.com/YoanWai/agent-manager),
+Copyright 2026 Yoan Wai and the agent-manager contributors, licensed under the
+Apache License, Version 2.0. Agent Desk invokes the agent-manager CLI and
+contains no agent-manager source code.
+
+Third-party logic ported into this repository is listed below with its
+origin and license.
+
+(none yet)
