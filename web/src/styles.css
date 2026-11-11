@@ -2940,3 +2940,78 @@ mark {
     opacity: 0.4;
   }
 }
+
+/* Slash command autocomplete */
+
+.slash-menu {
+  max-width: var(--reading-width);
+  margin: 0 auto 0.4rem;
+  padding: 0.25rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 15%);
+}
+
+/* Rows share one set of columns, so names, hints and labels line up. */
+.slash-menu {
+  display: grid;
+  grid-template-columns: max-content fit-content(11rem) minmax(0, 1fr) max-content;
+}
+
+.slash-menu li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.slash-menu li.active {
+  background: var(--surface);
+}
+
+.slash-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.slash-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--subtle);
+}
+
+.slash-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+}
+
+.slash-kind {
+  font-size: 0.72rem;
+  color: var(--subtle);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .slash-menu {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .slash-hint,
+  .slash-kind {
+    display: none;
+  }
+}

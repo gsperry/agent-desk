@@ -241,3 +241,13 @@ export interface CatchUp {
   items: number
   cached?: boolean
 }
+
+// SlashCommand is a slash command a session's CLI accepts.
+export interface SlashCommand {
+  name: string
+  description?: string
+  argumentHint?: string
+  aliases?: string[]
+  kind: 'builtin' | 'command' | 'skill'
+  source?: string
+}

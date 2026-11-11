@@ -26,6 +26,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/commands"
 	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
@@ -91,9 +92,15 @@ type Config struct {
 	Summaries SummarySource
 	// Remote holds the remote access settings. Nil turns remote access off.
 	Remote RemoteControl
+	// Commands lists the slash commands a session accepts, for autocomplete.
+	Commands CommandSource
 	// RemoteHTTPOrigin also accepts an http:// origin for the remote host.
 	// Only fixture mode sets it, for browser tests without TLS.
 	RemoteHTTPOrigin bool
+}
+
+type CommandSource interface {
+	List(dir string) []commands.Command
 }
 
 // RemoteControl reads and changes the remote access settings. Set applies
@@ -250,6 +257,7 @@ func (s *Server) routes() {
 	s.route("GET /api/sessions/{id}/agents", remote.NeedRead, s.listAgents)
 	s.route("GET /api/sessions/{id}/agents/{agent}/transcript", remote.NeedRead, s.agentTranscript)
 	s.route("GET /api/sessions/{id}/changes", remote.NeedRead, s.changes)
+	s.route("GET /api/sessions/{id}/commands", remote.NeedRead, s.sessionCommands)
 	s.route("POST /api/paste", remote.NeedLocal, s.paste)
 	s.route("GET /api/conflicts", remote.NeedRead, s.conflicts)
 	s.route("GET /api/conversations", remote.NeedRead, s.conversations)

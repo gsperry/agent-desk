@@ -74,6 +74,8 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 
 Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.
 
+Type `/` to autocomplete: Claude Code's built-in commands, your and the project's custom commands and skills, enabled plugins' commands and skills, and your snippets. Arrow keys move, Tab or Enter picks, Esc closes. A slash command is sent as typed and runs as it would in the terminal.
+
 A reply is refused, with the reason, when it would land somewhere other than the agent's prompt: the session is waiting on a question or permission prompt, a dialog is on screen, or text is already typed into the agent's own prompt in the terminal. Prompts and dialogs open the Terminal panel described below. A reply sent while the agent works is queued by Claude Code and shows as queued.
 
 ## Managing sessions

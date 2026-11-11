@@ -276,6 +276,7 @@ function Desk({ token }: { token: string }) {
   const loadRemote = useCallback(() => store.remoteSettings(), [store])
   const saveRemote = useCallback((s: RemoteSettings) => store.setRemoteSettings(s), [store])
   const catchUp = useCallback((id: string, since: number) => store.catchUp(id, since, summaries.model), [store, summaries.model])
+  const loadCommands = useCallback((id: string) => store.commands(id), [store])
   const dismissSuggestion = useCallback((id: string) => {
     store.dismissSuggestion(id)
   }, [store])
@@ -457,6 +458,7 @@ function Desk({ token }: { token: string }) {
                   suggestion={suggestions[selected]}
                   catchUp={summaries.enabled ? catchUp : undefined}
                   dismissSuggestion={dismissSuggestion}
+                loadCommands={loadCommands}
                 />
               ) : (
                 <main className="main">
