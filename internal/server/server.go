@@ -24,6 +24,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/changes"
 	"github.com/gsperry/agent-desk/internal/conflicts"
+	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
@@ -33,6 +34,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
+	"github.com/gsperry/agent-desk/internal/usage"
 )
 
 // WSProtocol is the WebSocket subprotocol the server speaks. Browsers cannot
@@ -76,6 +78,19 @@ type Config struct {
 	Conflicts ConflictSource
 	// Pastes stores images pasted into the composer.
 	Pastes PasteStore
+	// History lists and reads every conversation on disk.
+	History HistorySource
+	Usage   UsageSource
+}
+
+type UsageSource interface {
+	Report(ctx context.Context, days int) (usage.Report, error)
+}
+
+type HistorySource interface {
+	List(ctx context.Context) ([]history.Conversation, error)
+	Read(ctx context.Context, id string, before, limit int) (hub.Page, error)
+	Export(ctx context.Context, id string) (filename, body string, err error)
 }
 
 type PasteStore interface {
@@ -146,7 +161,7 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil || cfg.Changes == nil || cfg.Conflicts == nil || cfg.Pastes == nil {
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil || cfg.Changes == nil || cfg.Conflicts == nil || cfg.Pastes == nil || cfg.History == nil || cfg.Usage == nil {
 		return nil, errors.New("every Config source is required")
 	}
 	if len(cfg.Token) < 32 {
@@ -178,6 +193,10 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("GET /api/sessions/{id}/changes", s.requireToken(http.HandlerFunc(s.changes)))
 	s.mux.Handle("POST /api/paste", s.requireToken(http.HandlerFunc(s.paste)))
 	s.mux.Handle("GET /api/conflicts", s.requireToken(http.HandlerFunc(s.conflicts)))
+	s.mux.Handle("GET /api/conversations", s.requireToken(http.HandlerFunc(s.conversations)))
+	s.mux.Handle("GET /api/conversations/{id}/transcript", s.requireToken(http.HandlerFunc(s.conversationTranscript)))
+	s.mux.Handle("GET /api/conversations/{id}/export", s.requireToken(http.HandlerFunc(s.exportConversation)))
+	s.mux.Handle("GET /api/usage", s.requireToken(http.HandlerFunc(s.usage)))
 	s.mux.Handle("GET /api/overview", s.requireToken(http.HandlerFunc(s.overview)))
 	s.mux.Handle("GET /api/spawn-options", s.requireToken(http.HandlerFunc(s.spawnOptions)))
 	s.mux.Handle("POST /api/sessions", s.requireToken(http.HandlerFunc(s.spawn)))

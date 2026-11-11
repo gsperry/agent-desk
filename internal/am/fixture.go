@@ -147,6 +147,9 @@ func (f Fixture) Spawn(_ context.Context, r SpawnRequest) (Session, error) {
 		Running:        true,
 		AgentSessionID: fmt.Sprintf("%s-0000-4000-8000-%s", randomHex(4), randomHex(6)),
 	}
+	if r.Resume != "" {
+		s.AgentSessionID = r.Resume
+	}
 	if s.Name == "" {
 		s.Name = s.Tool + "-" + s.ID[:4]
 	}

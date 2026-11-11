@@ -18,6 +18,8 @@ type SpawnRequest struct {
 	Prompt    string `json:"prompt"`
 	Model     string `json:"model"`
 	Effort    string `json:"effort"`
+	// Resume is a saved conversation id to open instead of a new one.
+	Resume string `json:"resume,omitempty"`
 }
 
 // Setting is one row of `agent-manager settings list --json`.
@@ -43,6 +45,7 @@ func (c *CLI) Spawn(ctx context.Context, r SpawnRequest) (Session, error) {
 	add("prompt", r.Prompt)
 	add("model", r.Model)
 	add("effort", r.Effort)
+	add("resume", r.Resume)
 	if r.Worktree {
 		args = append(args, "--worktree")
 	}

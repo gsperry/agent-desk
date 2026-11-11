@@ -142,6 +142,8 @@ export interface SpawnRequest {
   prompt: string
   model: string
   effort: string
+  // resume is a saved Claude Code conversation to reopen.
+  resume?: string
 }
 
 export type SessionAction = { action: 'kill' | 'revive' | 'archive' | 'restore' } | { action: 'move'; group: string }
@@ -186,4 +188,42 @@ export interface Changes {
   base?: string
   files: ChangedFile[]
   truncated?: boolean
+}
+
+// Conversation is a Claude Code transcript on disk, whether or not
+// agent-manager runs it.
+export interface Conversation {
+  id: string
+  directory?: string
+  branch?: string
+  title?: string
+  firstPrompt?: string
+  started?: string
+  modified: string
+  size: number
+}
+
+export interface UsageTokens {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+}
+
+export interface UsageBucket extends UsageTokens {
+  replies: number
+  prompts: number
+  workingMs: number
+  waitingMs: number
+  costUSD: number
+}
+
+export interface UsageReport {
+  from: string
+  to: string
+  totals: UsageBucket
+  days: (UsageBucket & { day: string })[]
+  models: (UsageTokens & { model: string })[]
+  conversations: (UsageBucket & { id: string; subagentTokens: number; last?: string })[]
+  files: number
 }

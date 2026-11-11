@@ -68,8 +68,8 @@ func setup(t *testing.T) (*Manager, *backend, *sessions, string) {
 	dir := t.TempDir()
 	ss := &sessions{st: hub.State{
 		Sessions: []hub.SessionView{
-			{ID: "live", Name: "live", Running: true, Group: ""},
-			{ID: "dead", Name: "dead", Running: false},
+			{ID: "live", Name: "live", Running: true, Group: "", AgentSessionID: "conv-live"},
+			{ID: "dead", Name: "dead", Running: false, AgentSessionID: "conv-dead"},
 			{ID: "old", Name: "old", Running: false, Archived: true},
 		},
 		Groups: []hub.GroupView{{Path: "web"}, {Path: "backend/api"}},
@@ -96,6 +96,12 @@ func TestSpawn(t *testing.T) {
 		{"defaults", am.SpawnRequest{Directory: dir}, false},
 		{"model with brackets", am.SpawnRequest{Directory: dir, Model: "opus[1m]", Effort: "xhigh"}, false},
 		{"full", am.SpawnRequest{Name: " fix-login ", Tool: "opencode", Group: "backend/api", Directory: dir, Worktree: true, Prompt: "Go\r\n", Model: "opus", Effort: "high"}, false},
+		{"resume", am.SpawnRequest{Directory: dir, Resume: " conv-past "}, false},
+		{"resume a running conversation", am.SpawnRequest{Directory: dir, Resume: "conv-live"}, true},
+		{"resume a dead session's conversation", am.SpawnRequest{Directory: dir, Resume: "conv-dead"}, true},
+		{"resume in a worktree", am.SpawnRequest{Directory: dir, Resume: "conv-past", Worktree: true}, true},
+		{"resume another CLI", am.SpawnRequest{Directory: dir, Resume: "conv-past", Tool: "opencode"}, true},
+		{"resume a bad id", am.SpawnRequest{Directory: dir, Resume: "../x"}, true},
 		{"hidden tool", am.SpawnRequest{Tool: "codex", Directory: dir}, true},
 		{"relative directory", am.SpawnRequest{Directory: "src"}, true},
 		{"missing directory", am.SpawnRequest{Directory: dir + "/nope"}, true},
@@ -121,6 +127,11 @@ func TestSpawn(t *testing.T) {
 			}
 		})
 	}
+	m.Spawn(context.Background(), am.SpawnRequest{Directory: dir, Resume: " conv-past "})
+	if b.spawn.Resume != "conv-past" || b.spawn.Tool != "claude" {
+		t.Fatalf("resume spawn = %+v", b.spawn)
+	}
+	m.Spawn(context.Background(), am.SpawnRequest{Name: " fix-login ", Tool: "opencode", Group: "backend/api", Directory: dir, Worktree: true, Prompt: "Go\r\n", Model: "opus", Effort: "high"})
 	if b.spawn.Tool != "opencode" || b.spawn.Name != "fix-login" || b.spawn.Prompt != "Go" || b.spawn.Directory != dir {
 		t.Fatalf("spawn = %+v", b.spawn)
 	}

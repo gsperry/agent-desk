@@ -5,19 +5,23 @@ import { Sidebar, type ViewOptions } from './components/Sidebar'
 import { ConfirmDialog } from './components/Dialog'
 import { NewGroup } from './components/NewGroup'
 import { NewSession } from './components/NewSession'
+import { ConversationView, HistoryList } from './components/History'
 import { Overview } from './components/Overview'
 import { SearchView } from './components/SearchView'
 import { Settings } from './components/Settings'
+import { UsageView } from './components/UsageView'
 import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
 import { groupSessions } from './model/sidebar'
 import type { Conflicts } from './model/conflicts'
+import { conversationTitle, sessionsByConversation } from './model/history'
 import type { PathRef } from './model/paths'
 import { loadSnippets, saveSnippets, type Snippet } from './model/snippets'
-import { directorySuggestions, spawnDefaults } from './model/spawn'
+import { loadTemplates, saveTemplates, upsertTemplate, type Template } from './model/templates'
+import { directorySuggestions, resumeDefaults, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
-import type { Answer, Project, SessionAction, SpawnRequest } from './types'
+import type { Answer, Conversation, Project, SessionAction, SpawnRequest } from './types'
 import { SnippetsContext } from './snippets-context'
 import { ViewPrefsContext } from './viewprefs-context'
 
@@ -33,6 +37,19 @@ function sessionFromPath(): string | null {
   return m?.[1] ? decodeURIComponent(m[1]) : null
 }
 
+// historyFromPath reads /history (the list) and /history/<id> (one
+// conversation); null means the page is not in history.
+function historyFromPath(): { id: string | null } | null {
+  const p = window.location.pathname
+  if (p === '/history' || p === '/history/') return { id: null }
+  const m = /^\/history\/([^/]+)/.exec(p)
+  return m?.[1] ? { id: decodeURIComponent(m[1]) } : null
+}
+
+function usageFromPath(): boolean {
+  return window.location.pathname === '/usage'
+}
+
 const noPending: never[] = []
 
 function isTyping(target: EventTarget | null): boolean {
@@ -45,6 +62,9 @@ function Desk({ token }: { token: string }) {
   useEffect(() => store.start(), [store])
   const { conn, data, pending, acks, prefs, permission, toast, seen } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
+  const [historyRoute, setHistoryRoute] = useState<{ id: string | null } | null>(historyFromPath)
+  const [conversations, setConversations] = useState<Conversation[] | null>(null)
+  const [usageOpen, setUsageOpen] = useState(usageFromPath)
   const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
   const [switcher, setSwitcher] = useState(false)
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
@@ -54,12 +74,16 @@ function Desk({ token }: { token: string }) {
   useEffect(() => {
     saveSnippets(localStorage, snippets)
   }, [snippets])
+  const [templates, setTemplates] = useState<Template[]>(() => loadTemplates(localStorage))
+  useEffect(() => {
+    saveTemplates(localStorage, templates)
+  }, [templates])
   // searchText is the sidebar box; searchQuery is the search being shown,
   // set once the text settles.
   const [searchText, setSearchText] = useState('')
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [searchArchived, setSearchArchived] = useState(false)
-  type Modal = { kind: 'spawn'; initial: SpawnRequest } | { kind: 'group' } | { kind: 'deleteGroup'; path: string; busy: boolean; error: string | null }
+  type Modal = { kind: 'spawn'; initial: SpawnRequest; resumeTitle?: string } | { kind: 'group' } | { kind: 'deleteGroup'; path: string; busy: boolean; error: string | null }
   const [modal, setModal] = useState<Modal | null>(null)
   const [conflicts, setConflicts] = useState<Conflicts>({})
 
@@ -110,6 +134,8 @@ function Desk({ token }: { token: string }) {
   const select = useCallback((id: string) => {
     history.pushState(null, '', `/s/${encodeURIComponent(id)}`)
     setSelected(id)
+    setHistoryRoute(null)
+    setUsageOpen(false)
     setSearchText('')
     setSearchQuery(null)
   }, [])
@@ -117,6 +143,8 @@ function Desk({ token }: { token: string }) {
   useEffect(() => {
     const onPop = () => {
       setSelected(sessionFromPath())
+      setHistoryRoute(historyFromPath())
+      setUsageOpen(usageFromPath())
     }
     const onVisibility = () => {
       setVisible(document.visibilityState === 'visible')
@@ -200,9 +228,51 @@ function Desk({ token }: { token: string }) {
   const goHome = useCallback(() => {
     history.pushState(null, '', '/')
     setSelected(null)
+    setHistoryRoute(null)
+    setUsageOpen(false)
     setSearchText('')
     setSearchQuery(null)
   }, [])
+  const openHistory = useCallback((id: string | null) => {
+    history.pushState(null, '', id ? `/history/${encodeURIComponent(id)}` : '/history')
+    setSelected(null)
+    setHistoryRoute({ id })
+    setUsageOpen(false)
+    setSearchText('')
+    setSearchQuery(null)
+  }, [])
+  const loadConversations = useCallback(async () => {
+    const r = await store.conversations()
+    if (r.data) setConversations(r.data)
+    return r
+  }, [store])
+  const exportConversation = useCallback((id: string) => {
+    void store.exportConversation(id)
+  }, [store])
+  const openUsage = useCallback(() => {
+    history.pushState(null, '', '/usage')
+    setSelected(null)
+    setHistoryRoute(null)
+    setUsageOpen(true)
+    setSearchText('')
+    setSearchQuery(null)
+  }, [])
+  const readUsage = useCallback((days: number) => store.usage(days), [store])
+  const readConversation = useCallback((id: string, before?: number) => store.conversationPage(id, before), [store])
+  const owners = useMemo(() => sessionsByConversation(sessions), [sessions])
+  // A conversation opened by URL still needs its listing for the header.
+  const historyId = historyRoute?.id
+  const needListing = Boolean(historyId) && conversations === null
+  useEffect(() => {
+    if (!needListing) return
+    let live = true
+    void store.conversations().then((r) => {
+      if (live && r.data) setConversations(r.data)
+    })
+    return () => {
+      live = false
+    }
+  }, [needListing, store])
   const readAgentTranscript = useCallback((id: string, agentId: string) => store.agentTranscript(id, agentId), [store])
   const spawn = useCallback((r: SpawnRequest) => store.spawn(r), [store])
   const act = useCallback((id: string, a: SessionAction) => store.act(id, a), [store])
@@ -268,6 +338,12 @@ function Desk({ token }: { token: string }) {
               setModal({ kind: 'deleteGroup', path, busy: false, error: null })
             }}
             onHome={goHome}
+            onHistory={() => {
+              openHistory(null)
+            }}
+            historyOpen={historyRoute !== null}
+            onUsage={openUsage}
+            usageOpen={usageOpen}
           />
           {searchQuery ? (
             <SearchView
@@ -283,6 +359,28 @@ function Desk({ token }: { token: string }) {
                 setSearchQuery(null)
               }}
             />
+          ) : usageOpen ? (
+            <UsageView load={readUsage} conversations={conversations} loadConversations={loadConversations} onOpenConversation={openHistory} />
+          ) : historyRoute ? (
+            historyRoute.id ? (
+              <ConversationView
+                key={historyRoute.id}
+                id={historyRoute.id}
+                conversation={conversations?.find((c) => c.id === historyRoute.id)}
+                owner={owners.get(historyRoute.id)}
+                load={readConversation}
+                onBack={() => {
+                  openHistory(null)
+                }}
+                onOpenSession={select}
+                onExport={exportConversation}
+                onResume={(c) => {
+                  setModal({ kind: 'spawn', initial: resumeDefaults(c.id, c.directory ?? ''), resumeTitle: conversationTitle(c) })
+                }}
+              />
+            ) : (
+              <HistoryList load={loadConversations} owners={owners} onOpen={openHistory} />
+            )
           ) : selected ? (
             data.sessions ? (
               <SessionView
@@ -309,7 +407,8 @@ function Desk({ token }: { token: string }) {
                 readChanges={readChanges}
                 conflicts={selected ? (conflicts[selected] ?? []) : []}
                 sessions={sessions}
-              pasteImage={pasteImage}
+                pasteImage={pasteImage}
+                exportConversation={exportConversation}
               />
             ) : (
               <main className="main">
@@ -322,6 +421,11 @@ function Desk({ token }: { token: string }) {
           {modal?.kind === 'spawn' && (
             <NewSession
               initial={modal.initial}
+              resumeTitle={modal.resumeTitle}
+              templates={templates}
+              onSaveTemplate={(t) => {
+                setTemplates((list) => upsertTemplate(list, t))
+              }}
               directories={directories}
               loadOptions={loadOptions}
               spawn={spawn}
@@ -373,6 +477,8 @@ function Desk({ token }: { token: string }) {
               onChange={setViewPrefs}
               snippets={snippets}
               onSnippets={setSnippets}
+              templates={templates}
+              onTemplates={setTemplates}
               onClose={() => {
                 setSettingsOpen(false)
               }}

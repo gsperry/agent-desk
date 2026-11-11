@@ -10,6 +10,9 @@ import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
 import type { Changes, Item, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
+import { NotesPanel } from './NotesPanel'
+import { togglePin } from '../model/pins'
+import { PinsContext, pinsFor, useNotebook } from '../pins-context'
 import { ChangesPanel } from './ChangesPanel'
 import { blockedReason } from '../model/compose'
 import { conflictTitle, type Conflict } from '../model/conflicts'
@@ -46,6 +49,7 @@ interface Props {
   conflicts: Conflict[]
   sessions: Session[]
   pasteImage: (image: Blob) => Promise<{ path?: string; error?: string }>
+  exportConversation: (conversationId: string) => void
 }
 
 // The subagent list refreshes this often while a session is open.
@@ -67,6 +71,9 @@ export function SessionView(props: Props) {
   const [agents, setAgents] = useState<SubAgent[]>([])
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [changesOpen, setChangesOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notebook, setNotebook] = useNotebook(props.session?.agentSessionId)
+  const pins = pinsFor(notebook, setNotebook, togglePin)
   const [openAgent, setOpenAgent] = useState<string | null>(null)
   const { readAgents } = props
   const isClaude = session?.tool === 'claude'
@@ -123,6 +130,7 @@ export function SessionView(props: Props) {
   return (
     <OpenPathContext.Provider value={openHere}>
     <AgentLinksContext.Provider value={agentLinks}>
+    <PinsContext.Provider value={session.agentSessionId ? pins : null}>
         <main className="main">
           <header className="session-head">
             <div className="session-title">
@@ -145,6 +153,7 @@ export function SessionView(props: Props) {
             onClick={() => {
               setChangesOpen(!changesOpen)
               setAgentsOpen(false)
+              setNotesOpen(false)
             }}
           >
             Changes
@@ -157,12 +166,27 @@ export function SessionView(props: Props) {
                 onClick={() => {
                   setAgentsOpen(!agentsOpen)
                   setOpenAgent(null)
+                  setNotesOpen(false)
                 }}
               >
                 Agents {counts.running > 0 ? `${String(counts.running)} running · ` : ''}
                 {counts.total}
               </button>
             )}
+              {session.agentSessionId && (
+                <button
+                  type="button"
+                  className="chip chip-button notes-toggle"
+                  aria-pressed={notesOpen}
+                  onClick={() => {
+                    setNotesOpen(!notesOpen)
+                    setAgentsOpen(false)
+                    setChangesOpen(false)
+                  }}
+                >
+                  Notes{notebook.pins.length > 0 ? ` · ${String(notebook.pins.length)}` : ''}
+                </button>
+              )}
               {session.running && (
                 <button
                   type="button"
@@ -183,6 +207,17 @@ export function SessionView(props: Props) {
                 {session.branch ? ` · ${session.branch}` : ''}
               </span>
               <SessionActions session={session} groups={props.groups} act={props.act} />
+              {isClaude && session.agentSessionId && d.items.length > 0 && (
+                <button
+                  type="button"
+                  className="chip chip-button export-button"
+                  onClick={() => {
+                    if (session.agentSessionId) props.exportConversation(session.agentSessionId)
+                  }}
+                >
+                  Export
+                </button>
+              )}
             {header.prLinks.map((pr) => (
                 <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
                   PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
@@ -278,7 +313,17 @@ export function SessionView(props: Props) {
               readTranscript={props.readAgentTranscript}
             />
           )}
+        {notesOpen && (
+          <NotesPanel
+            notebook={notebook}
+            onChange={setNotebook}
+            onClose={() => {
+              setNotesOpen(false)
+            }}
+          />
+        )}
         </main>
+    </PinsContext.Provider>
     </AgentLinksContext.Provider>
     </OpenPathContext.Provider>
   )

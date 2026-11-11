@@ -71,6 +71,8 @@ var (
 	// modelValue covers model ids such as claude-opus-4-1, gpt-5.1 or
 	// opus[1m]; anything else is refused before it reaches a CLI.
 	modelValue = regexp.MustCompile(`^[A-Za-z0-9._:\[\]-]{1,100}$`)
+	// conversationID matches Claude Code's conversation ids (UUIDs).
+	conversationID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,127}$`)
 )
 
 func hasControl(s string) bool {
@@ -104,6 +106,9 @@ func (m *Manager) Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, err
 	if len(r.Prompt) > maxPrompt || hasControl(r.Prompt) {
 		return am.Session{}, refuse("The first prompt is too long or holds control characters.")
 	}
+	if err := m.checkResume(&r); err != nil {
+		return am.Session{}, err
+	}
 	dir, err := existingDir(r.Directory)
 	if err != nil {
 		return am.Session{}, err
@@ -115,6 +120,36 @@ func (m *Manager) Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, err
 	s, err := m.Backend.Spawn(ctx, r)
 	m.Sessions.Trigger()
 	return s, err
+}
+
+// checkResume validates a request to reopen a saved conversation. Claude
+// Code finds a conversation by the directory it was saved in, so a new
+// worktree cannot resume it, and a conversation one session already runs
+// must not get a second process writing the same transcript.
+func (m *Manager) checkResume(r *am.SpawnRequest) error {
+	r.Resume = strings.TrimSpace(r.Resume)
+	if r.Resume == "" {
+		return nil
+	}
+	if !conversationID.MatchString(r.Resume) {
+		return refuse("That is not a conversation id.")
+	}
+	if r.Tool != "claude" {
+		return refuse("Only Claude Code conversations can be resumed here.")
+	}
+	if r.Worktree {
+		return refuse("A resumed conversation runs in the directory it was saved in, not a new worktree.")
+	}
+	for _, s := range m.Sessions.State().Sessions {
+		if s.AgentSessionID != r.Resume {
+			continue
+		}
+		if s.Running {
+			return refuse("Session %s already runs this conversation. Open it instead.", s.Name)
+		}
+		return refuse("Session %s holds this conversation. Revive it instead.", s.Name)
+	}
+	return nil
 }
 
 func existingDir(p string) (string, error) {

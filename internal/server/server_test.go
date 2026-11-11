@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/changes"
 	"github.com/gsperry/agent-desk/internal/conflicts"
+	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
@@ -28,6 +30,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
+	"github.com/gsperry/agent-desk/internal/usage"
 )
 
 const testToken = "0123456789abcdef0123456789abcdef"
@@ -174,6 +177,32 @@ func (fakeChanges) Changes(_ context.Context, id, mode string) (changes.Changes,
 	return changes.Changes{Repo: "/r", Mode: mode, Files: []changes.File{}}, nil
 }
 
+type fakeHistory struct{}
+
+func (fakeHistory) List(context.Context) ([]history.Conversation, error) {
+	return []history.Conversation{{ID: "c1", Title: "Old work"}}, nil
+}
+
+func (fakeHistory) Read(_ context.Context, id string, before, limit int) (hub.Page, error) {
+	if id != "c1" {
+		return hub.Page{}, history.ErrNotFound
+	}
+	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: before, Kind: transcript.KindText, Text: strconv.Itoa(limit)}}}, nil
+}
+
+func (fakeHistory) Export(_ context.Context, id string) (string, string, error) {
+	if id != "c1" {
+		return "", "", history.ErrNotFound
+	}
+	return "old-work.md", "# Old work\n", nil
+}
+
+type fakeUsage struct{}
+
+func (fakeUsage) Report(_ context.Context, days int) (usage.Report, error) {
+	return usage.Report{From: strconv.Itoa(days)}, nil
+}
+
 type fakePastes struct{}
 
 func (fakePastes) Save(data []byte) (string, error) {
@@ -243,6 +272,12 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Pastes == nil {
 		cfg.Pastes = fakePastes{}
 	}
+	if cfg.History == nil {
+		cfg.History = fakeHistory{}
+	}
+	if cfg.Usage == nil {
+		cfg.Usage = fakeUsage{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +286,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}, Changes: fakeChanges{}, Conflicts: fakeConflicts{}, Pastes: fakePastes{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}, Changes: fakeChanges{}, Conflicts: fakeConflicts{}, Pastes: fakePastes{}, History: fakeHistory{}, Usage: fakeUsage{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -591,6 +626,48 @@ func TestPasteRoute(t *testing.T) {
 			s.Handler().ServeHTTP(rec, req)
 			if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
 				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestConversationRoutes(t *testing.T) {
+	tests := []struct {
+		name, path string
+		token      bool
+		want       int
+		wantBody   string
+	}{
+		{"list", "/api/conversations", true, 200, `"title":"Old work"`},
+		{"list needs token", "/api/conversations", false, 401, ""},
+		{"read", "/api/conversations/c1/transcript?before=7&limit=50", true, 200, `"seq":7`},
+		{"read passes limit", "/api/conversations/c1/transcript?limit=50", true, 200, `"text":"50"`},
+		{"unknown", "/api/conversations/zz/transcript", true, 404, "not found"},
+		{"export", "/api/conversations/c1/export", true, 200, "# Old work"},
+		{"export needs token", "/api/conversations/c1/export", false, 401, ""},
+		{"export unknown", "/api/conversations/zz/export", true, 404, "not found"},
+		{"usage default", "/api/usage", true, 200, `"from":"30"`},
+		{"usage days", "/api/usage?days=7", true, 200, `"from":"7"`},
+		{"usage bad days", "/api/usage?days=0", true, 400, "days"},
+		{"usage needs token", "/api/usage", false, 401, ""},
+		{"bad before", "/api/conversations/c1/transcript?before=-2", true, 400, "before"},
+		{"bad limit", "/api/conversations/c1/transcript?limit=9999", true, 400, "limit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{})
+			req := httptest.NewRequest("GET", tt.path, nil)
+			req.Host = "127.0.0.1:7317"
+			if tt.token {
+				req.Header.Set("Authorization", "Bearer "+testToken)
+			}
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+			}
+			if tt.name == "export" && rec.Header().Get("Content-Disposition") != `attachment; filename="old-work.md"` {
+				t.Fatalf("disposition %q", rec.Header().Get("Content-Disposition"))
 			}
 		})
 	}

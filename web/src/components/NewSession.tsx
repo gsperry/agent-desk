@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formProblem } from '../model/spawn'
+import { applyTemplate, templateFrom, type Template } from '../model/templates'
 import type { SessionView, SpawnOptions, SpawnRequest } from '../types'
 import { Dialog } from './Dialog'
 
@@ -10,14 +11,20 @@ interface Props {
   spawn: (r: SpawnRequest) => Promise<{ data?: SessionView; error?: string }>
   onStarted: (id: string) => void
   onClose: () => void
+  // resumeTitle names the conversation being resumed.
+  resumeTitle?: string
+  templates: Template[]
+  onSaveTemplate: (t: Template) => void
 }
 
-export function NewSession({ initial, directories, loadOptions, spawn, onStarted, onClose }: Props) {
+export function NewSession({ initial, directories, loadOptions, spawn, onStarted, onClose, resumeTitle, templates, onSaveTemplate }: Props) {
   const [form, setForm] = useState<SpawnRequest>(initial)
   const [options, setOptions] = useState<SpawnOptions | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [advanced, setAdvanced] = useState(false)
+  const [templateName, setTemplateName] = useState<string | null>(null)
+  const [savedAs, setSavedAs] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -26,7 +33,7 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
       if (r.data) {
         const o = r.data
         setOptions(o)
-        setForm((f) => ({ ...f, tool: f.tool || o.defaultTool, worktree: f.worktree || o.worktreeDefault }))
+        setForm((f) => (f.resume ? f : { ...f, tool: f.tool || o.defaultTool, worktree: f.worktree || o.worktreeDefault }))
       } else setError(r.error ?? 'Could not read agent-manager settings.')
     })
     return () => {
@@ -38,6 +45,7 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
     setForm((f) => ({ ...f, ...p }))
   }
   const problem = formProblem(form)
+  const resuming = Boolean(form.resume)
 
   const submit = () => {
     if (problem || busy) return
@@ -52,16 +60,59 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
 
   return (
     <Dialog
-      title="New session"
+      title={resuming ? 'Resume conversation' : 'New session'}
       onClose={busy ? () => undefined : onClose}
       footer={
         <>
+          {!resuming && !busy && templateName === null && (
+            <button
+              type="button"
+              className="link-button template-save"
+              onClick={() => {
+                setTemplateName('')
+                setSavedAs(null)
+              }}
+            >
+              {savedAs ? `Saved “${savedAs}”` : 'Save as template'}
+            </button>
+          )}
+          {templateName !== null && (
+            <span className="template-name">
+              <input
+                aria-label="Template name"
+                placeholder="Template name"
+                value={templateName}
+                autoFocus
+                onChange={(e) => {
+                  setTemplateName(e.target.value)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation()
+                    setTemplateName(null)
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="secondary"
+                disabled={templateName.trim() === ''}
+                onClick={() => {
+                  onSaveTemplate(templateFrom(templateName, form))
+                  setSavedAs(templateName.trim())
+                  setTemplateName(null)
+                }}
+              >
+                Save
+              </button>
+            </span>
+          )}
           {busy && <span className="muted dialog-note">Starting. The first launch of a CLI can take up to two minutes.</span>}
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </button>
           <button type="button" className="send" onClick={submit} disabled={busy || problem !== null || !options}>
-            {busy ? 'Starting…' : 'Start'}
+            {busy ? 'Starting…' : resuming ? 'Resume' : 'Start'}
           </button>
         </>
       }
@@ -73,10 +124,38 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
           submit()
         }}
       >
+        {!resuming && templates.length > 0 && (
+          <label className="field">
+            <span>Template</span>
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const t = templates.find((x) => x.name === e.target.value)
+                if (t) {
+                  setForm((f) => applyTemplate(f, t))
+                  if (t.model || t.effort) setAdvanced(true)
+                }
+              }}
+            >
+              <option value="">None</option>
+              {templates.map((t) => (
+                <option key={t.name} value={t.name}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {resuming && (
+          <p className="muted resume-note">
+            Reopens “{resumeTitle ?? form.resume}” as a new agent-manager session, in the directory it was saved in.
+          </p>
+        )}
         <label className="field">
           <span>Directory</span>
           <input
             list="directories"
+            readOnly={resuming && Boolean(initial.directory)}
             value={form.directory}
             placeholder="/path/to/project"
             autoFocus={!form.directory}
@@ -102,6 +181,7 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
           />
         </label>
         <div className="field-row">
+          {!resuming && (
           <label className="field">
             <span>CLI</span>
             <select
@@ -117,6 +197,7 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
               ))}
             </select>
           </label>
+          )}
           <label className="field">
             <span>Group</span>
             <select
@@ -134,6 +215,7 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
             </select>
           </label>
         </div>
+        {!resuming && (
         <label className="check">
           <input
             type="checkbox"
@@ -144,12 +226,13 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
           />{' '}
           Own git worktree and branch
         </label>
+        )}
         <label className="field">
           <span>First prompt</span>
           <textarea
             rows={4}
             value={form.prompt}
-            placeholder="Optional. The agent starts on it right away."
+            placeholder={resuming ? 'Optional. Sent once the conversation reopens.' : 'Optional. The agent starts on it right away.'}
             onChange={(e) => {
               set({ prompt: e.target.value })
             }}

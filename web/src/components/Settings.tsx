@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { defaultSnippets, validName, type Snippet } from '../model/snippets'
+import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 
 interface Props {
@@ -7,6 +8,8 @@ interface Props {
   onChange: (p: ViewPrefs) => void
   snippets: Snippet[]
   onSnippets: (s: Snippet[]) => void
+  templates: Template[]
+  onTemplates: (t: Template[]) => void
   onClose: () => void
 }
 
@@ -39,7 +42,7 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, snippets, onSnippets, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, onClose }: Props) {
   const set = (p: Partial<ViewPrefs>) => {
     onChange({ ...prefs, ...p })
   }
@@ -227,9 +230,35 @@ export function Settings({ prefs, onChange, snippets, onSnippets, onClose }: Pro
             </button>
           </div>
         </Section>
+        <Section title="Session templates">
+          <p className="muted setting-note">Save one from the new session form with “Save as template”; pick it at the top of the form next time.</p>
+          {templates.length === 0 && <p className="muted setting-note">No templates yet.</p>}
+          <ul className="template-list">
+            {templates.map((t) => (
+              <li key={t.name}>
+                <strong>{t.name}</strong>
+                <span className="muted">{templateSummary(t)}</span>
+                <button
+                  type="button"
+                  className="link-button"
+                  aria-label={`Remove template ${t.name}`}
+                  onClick={() => {
+                    onTemplates(templates.filter((x) => x.name !== t.name))
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Section>
       </div>
     </div>
   )
+}
+
+function templateSummary(t: Template): string {
+  return [t.tool, t.directory, t.group && `group ${t.group}`, t.worktree && 'worktree', t.model, t.effort, t.prompt && 'with prompt'].filter(Boolean).join(' · ')
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

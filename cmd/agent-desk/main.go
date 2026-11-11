@@ -25,6 +25,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/changes"
 	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/grouping"
+	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
 	"github.com/gsperry/agent-desk/internal/manage"
@@ -36,6 +37,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
+	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
 )
 
@@ -114,6 +116,8 @@ func run(o options) error {
 		Overview:    &overview.Overview{Sessions: poller, Locator: transcripts.Locator},
 		Conflicts:   &conflicts.Finder{Sessions: poller, Locator: transcripts.Locator},
 		Pastes:      pastes,
+		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
+		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
 			Timeout: 15 * time.Second,
 			Env:     append(procrun.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0"),

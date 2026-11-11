@@ -38,6 +38,10 @@ interface Props {
   onNewGroup: () => void
   onDeleteGroup: (path: string) => void
   onHome: () => void
+  onHistory: () => void
+  historyOpen: boolean
+  onUsage: () => void
+  usageOpen: boolean
 }
 
 export function Sidebar(props: Props) {
@@ -185,6 +189,12 @@ export function Sidebar(props: Props) {
         )}
         <button type="button" className="link-button" onClick={props.onNewGroup}>
           New group
+        </button>
+        <button type="button" className="link-button history-link" aria-current={props.historyOpen ? 'page' : undefined} onClick={props.onHistory}>
+          All conversations
+        </button>
+        <button type="button" className="link-button history-link" aria-current={props.usageOpen ? 'page' : undefined} onClick={props.onUsage}>
+          Usage
         </button>
         <NotifyControls {...props} />
         <p className="keys">⌘K switch · j/k next that needs you · / search</p>

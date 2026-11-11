@@ -4,7 +4,7 @@ Milestones M7 to M10. Each lands on a local feature branch with step commits and
 
 Constraints that apply to every milestone: the hard rules in [CLAUDE.md](../CLAUDE.md), anonymized fixtures only in `testdata/`, no sends or spawns against real sessions in tests, and screenshots from fixtures only.
 
-## M7: Orchestrator oversight
+## M7: Orchestrator oversight (done)
 
 Goal: see what every agent and subagent is doing without reading transcripts.
 
@@ -20,7 +20,7 @@ Goal: see what every agent and subagent is doing without reading transcripts.
 
 Tests: parser tables for usage, compaction and cost records; locator-backed activity; subagent status from notifications (completed, failed, running, sync); overview summaries on fixtures; Vitest for seen marks, the threshold learner and card ordering; Playwright for the overview, the divider, the meter and the agents panel. A new fixture session with subagents.
 
-## M8: Review and steer
+## M8: Review and steer (done)
 
 Goal: supervise and correct work, not only chat.
 
@@ -33,7 +33,7 @@ Goal: supervise and correct work, not only chat.
 | 8.5 | Reply snippets | Snippets in Settings, inserted from a composer menu or `/name`; variables `{session}`, `{branch}`, `{project}` |
 | 8.6 | Image paste | Paste an image into the composer; the backend saves it owner-only under the user cache directory and returns its path, which the composer inserts. Old images are cleaned up after 7 days |
 
-## M9: History and insight
+## M9: History and insight (done)
 
 | Step | Feature | Design |
 | --- | --- | --- |

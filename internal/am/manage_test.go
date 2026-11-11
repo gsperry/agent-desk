@@ -21,6 +21,10 @@ func TestManageArgs(t *testing.T) {
 			_, err := c.Spawn(context.Background(), SpawnRequest{Directory: "/src"})
 			return err
 		}, "agent-manager|spawn|--json|--directory=/src"},
+		{"spawn resuming", func(c *CLI) error {
+			_, err := c.Spawn(context.Background(), SpawnRequest{Tool: "claude", Directory: "/src", Resume: "abc-123"})
+			return err
+		}, "agent-manager|spawn|--json|--tool=claude|--directory=/src|--resume=abc-123"},
 		{"kill", func(c *CLI) error { return c.Kill(context.Background(), "a1") }, "agent-manager|kill|--json|--|a1"},
 		{"revive", func(c *CLI) error { return c.Revive(context.Background(), "a1") }, "agent-manager|revive|--json|--|a1"},
 		{"archive", func(c *CLI) error { return c.Archive(context.Background(), "a1", false) }, "agent-manager|archive|--json|--|a1"},

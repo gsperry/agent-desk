@@ -1,5 +1,7 @@
 import { memo, useState, type ReactNode } from 'react'
+import { pinKey } from '../model/pins'
 import { formatDuration, type Block, type Step } from '../model/transcript'
+import { usePins } from '../pins-context'
 import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
 import { Markdown } from './Markdown'
@@ -37,6 +39,27 @@ export const BlockView = memo(function BlockView({ block, live }: { block: Block
   }
 })
 
+// PinButton pins a prompt or reply when the view keeps pins.
+function PinButton({ item }: { item: Item }) {
+  const pins = usePins()
+  if (!pins || !pinKey(item)) return null
+  const on = pins.isPinned(item)
+  return (
+    <button
+      type="button"
+      className={on ? 'pin-button pinned' : 'pin-button'}
+      aria-label={on ? 'Unpin' : 'Pin'}
+      aria-pressed={on}
+      title={on ? 'Unpin' : 'Pin'}
+      onClick={() => {
+        pins.toggle(item)
+      }}
+    >
+      📌
+    </button>
+  )
+}
+
 // Prompts longer than this are clamped until expanded.
 const longPromptLines = 12
 const longPromptChars = 1500
@@ -48,7 +71,7 @@ function UserPrompt({ item }: { item: Item }) {
   const long = text.length > longPromptChars || text.split('\n').length > longPromptLines
   const queued = item.meta?.queued === true
   return (
-    <section className="card user">
+    <section className="card user" data-pin={pinKey(item) ?? undefined}>
       <header className="card-head">
         <span>You</span>
         {queued && <span className="chip">queued</span>}
@@ -64,6 +87,7 @@ function UserPrompt({ item }: { item: Item }) {
           </button>
         )}
         <span className="card-time">{time(item)}</span>
+        <PinButton item={item} />
       </header>
       {showPreamble && <p className="preamble">{item.preamble}</p>}
       <div className={long && !expanded ? 'prompt-text clamped' : 'prompt-text'}>{text}</div>
@@ -191,7 +215,12 @@ function StepView({ step, live }: { step: Step; live: boolean }) {
   const prefs = useViewPrefs()
   switch (step.kind) {
     case 'text':
-      return <Markdown text={step.item.text ?? ''} />
+      return (
+        <div className="pinnable" data-pin={pinKey(step.item) ?? undefined}>
+          <PinButton item={step.item} />
+          <Markdown text={step.item.text ?? ''} />
+        </div>
+      )
     case 'thinking': {
       const ms = step.item.meta?.durationMs
       // An empty thought under a second has nothing to tell the reader.

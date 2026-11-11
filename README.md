@@ -59,6 +59,15 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 - **Snippets:** the composer's ⋯ menu inserts a saved reply, or type `/name` and press Tab. Edit them in Settings; `{session}`, `{branch}`, `{project}` and `{directory}` are filled in.
 - **Images:** paste an image into the composer. It is saved owner-only under your user cache directory, its path is inserted for the agent to read, and it is removed after seven days.
 
+## History and insight
+
+- **All conversations** (sidebar footer): every Claude Code conversation on disk, not only those agent-manager runs, newest first with title, directory and branch. Filter by any of them, and open one read-only in the normal viewer.
+- **Resume:** a past conversation no session holds can be reopened as a new agent-manager session (`agent-manager spawn --resume`), in the directory it was saved in. One a session already holds links to that session instead.
+- **Export:** the Export button in a session or conversation downloads it as Markdown: prompts and replies in full, tool calls one line each, failed tool output in short. Thinking is left out.
+- **Templates:** "Save as template" in the new session form keeps its CLI, directory, group, worktree, prompt, model and effort; pick one at the top of the form next time. Remove them in Settings.
+- **Pins and notes:** pin a prompt or reply with the pin beside it, and keep a note per conversation in the Notes panel. Both stay in this browser.
+- **Usage** (sidebar footer): tokens, replies, agent working time and time waiting on you, by day, model, project and conversation, subagents included. Cost is what Claude Code reported, at list price, which can differ from what your provider bills.
+
 ## Replying
 
 Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.

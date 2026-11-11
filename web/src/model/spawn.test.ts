@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView } from '../types'
-import { directorySuggestions, formProblem, spawnDefaults } from './spawn'
+import { directorySuggestions, formProblem, resumeDefaults, spawnDefaults } from './spawn'
 
 const s = (dir: string, root: string, kind: 'repo' | 'dir' | 'group' = 'repo', archived = false): SessionView => ({
   id: dir,
@@ -54,5 +54,19 @@ describe('formProblem', () => {
 
   it('rejects a model with spaces', () => {
     expect(formProblem({ ...base, directory: '/x', model: 'opus 4' })).toContain('single words')
+  })
+})
+
+describe('resume', () => {
+  it('starts Claude in the saved directory without a worktree', () => {
+    const r = resumeDefaults('c1', '/src/api')
+    expect(r).toMatchObject({ resume: 'c1', tool: 'claude', directory: '/src/api', worktree: false })
+    expect(formProblem(r)).toBeNull()
+  })
+  it.each([
+    [{ worktree: true }, 'not a new worktree'],
+    [{ tool: 'codex' }, 'Only Claude Code'],
+  ])('refuses %j', (over, want) => {
+    expect(formProblem({ ...resumeDefaults('c1', '/src/api'), ...over })).toContain(want)
   })
 })

@@ -5,7 +5,7 @@ import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } 
 import { expire, reconcile, type Pending } from './model/pending'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Changes, Item, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -325,6 +325,42 @@ export class Store {
     return ((await res.json()) as { conflicts: Record<string, { path: string; others: string[] }[]> }).conflicts
   }
 
+  // conversations lists every Claude Code conversation on disk.
+  async conversations(): Promise<{ data?: Conversation[]; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/conversations')
+      const body = (await res.json().catch(() => ({}))) as { conversations?: Conversation[]; error?: string }
+      return res.ok && body.conversations ? { data: body.conversations } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // usage totals tokens, time and reported cost over the last days days.
+  async usage(days: number): Promise<{ data?: UsageReport; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, `/api/usage?days=${String(days)}`)
+      const body = (await res.json().catch(() => ({}))) as UsageReport & { error?: string }
+      return res.ok ? { data: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // conversationPage reads a conversation's newest items, or those before
+  // a sequence number.
+  async conversationPage(id: string, before?: number): Promise<{ data?: Page; error?: string }> {
+    const params = new URLSearchParams()
+    if (before !== undefined) params.set('before', String(before))
+    try {
+      const res = await apiFetch(this.token, `/api/conversations/${encodeURIComponent(id)}/transcript?${params.toString()}`)
+      const body = (await res.json().catch(() => ({}))) as Page & { error?: string }
+      return res.ok ? { data: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
   async overview(): Promise<Record<string, Summary> | null> {
     const res = await apiFetch(this.token, '/api/overview').catch(() => null)
     if (!res?.ok) return null
@@ -373,6 +409,24 @@ export class Store {
     if (res?.ok) return
     const body = res ? ((await res.json().catch(() => ({}))) as SendRefusal) : {}
     this.showToast(body.message ?? body.error ?? 'Could not open the file.')
+  }
+
+  // exportConversation downloads a conversation as Markdown.
+  async exportConversation(id: string) {
+    const res = await apiFetch(this.token, `/api/conversations/${encodeURIComponent(id)}/export`).catch(() => null)
+    if (!res?.ok) {
+      this.showToast(res?.status === 404 ? 'Claude Code has not saved this conversation yet.' : 'Could not export the conversation.')
+      return
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'conversation.md'
+    const url = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 10_000)
   }
 
   showToast(message: string) {
