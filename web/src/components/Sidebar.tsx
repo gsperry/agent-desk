@@ -27,6 +27,7 @@ interface Props {
   permission: Permission
   onPrefs: (p: Partial<Prefs>) => void
   onRequestPermission: () => void
+  onOpenSettings: () => void
 }
 
 export function Sidebar(props: Props) {
@@ -38,7 +39,12 @@ export function Sidebar(props: Props) {
     <nav className="sidebar" aria-label="Sessions">
       <header className="sidebar-head">
         <span className="brand">Agent Desk</span>
-        <span className={`conn conn-${conn.kind}`} title={connTitle(conn)} />
+        <span className="head-right">
+          <button type="button" className="icon-button" aria-label="Settings" title="Settings" onClick={props.onOpenSettings}>
+            ⚙
+          </button>
+          <span className={`conn conn-${conn.kind}`} title={connTitle(conn)} />
+        </span>
       </header>
       <Banners state={state} conn={conn} onStartManager={onStartManager} />
       <div className="filters">

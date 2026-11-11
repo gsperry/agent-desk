@@ -3,6 +3,7 @@
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --reading-width: 46rem;
   --font-size: 15px;
+  color-scheme: light dark;
 
   --bg: #ffffff;
   --bg-side: #f6f7f9;
@@ -39,8 +40,40 @@
   -webkit-font-smoothing: antialiased;
 }
 
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --bg-side: #15181e;
+  --surface: #1b1f26;
+  --surface-2: #232830;
+  --border: #2d333d;
+  --text: #d5dae2;
+  --dim: #98a0ac;
+  --subtle: #646c78;
+  --accent: #6f9fd0;
+  --code-bg: #161a20;
+
+  --working: #d08442;
+  --waiting: #a78bd0;
+  --finished: #85b26f;
+  --idle: #646c78;
+  --error: #cc6a6a;
+
+  --add-bg: #17301d;
+  --add-fg: #85b26f;
+  --del-bg: #3a1c1c;
+  --del-fg: #e08a8a;
+
+  --ok: #85b26f;
+  --warn: #d0a442;
+  --warn-bg: #2e2715;
+  --error-bg: #3a1c1c;
+  --info-bg: #182333;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
     --bg: #0f1115;
     --bg-side: #15181e;
     --surface: #1b1f26;
@@ -70,10 +103,19 @@
     --info-bg: #182333;
   }
 
-  .shiki,
-  .shiki span {
+  :root:not([data-theme='light']) .shiki,
+  :root:not([data-theme='light']) .shiki span {
     color: var(--shiki-dark) !important;
   }
+}
+
+:root[data-theme='dark'] .shiki,
+:root[data-theme='dark'] .shiki span {
+  color: var(--shiki-dark) !important;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 .shiki,
@@ -1210,4 +1252,118 @@ pre.code-body,
   margin: 0.4rem 0 0;
   font-size: 0.82rem;
   color: var(--warn);
+}
+
+/* Settings */
+
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.icon-button {
+  padding: 0 0.2rem;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  color: var(--text);
+}
+
+.settings {
+  width: min(34rem, calc(100% - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--bg);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
+}
+
+.settings-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.settings-section h3 {
+  margin: 1.1rem 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+.setting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.3rem 0;
+}
+
+.setting-label {
+  font-size: 0.9rem;
+}
+
+.segmented {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+
+.segmented button {
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.segmented button:first-child {
+  border-left: 0;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.stepper button {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: none;
+  cursor: pointer;
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.setting-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
 }

@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { takeToken } from './auth'
 import { SessionView } from './components/SessionView'
 import { Sidebar, type ViewOptions } from './components/Sidebar'
+import { Settings } from './components/Settings'
 import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
 import { groupSessions } from './model/sidebar'
+import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
 import type { Answer } from './types'
+import { ViewPrefsContext } from './viewprefs-context'
 
 const token = takeToken()
 
@@ -35,6 +38,17 @@ function Desk({ token }: { token: string }) {
   const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
   const [switcher, setSwitcher] = useState(false)
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
+  const [viewPrefs, setViewPrefs] = useState<ViewPrefs>(() => loadViewPrefs(localStorage))
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  useEffect(() => {
+    saveViewPrefs(localStorage, viewPrefs)
+    const root = document.documentElement
+    if (viewPrefs.theme === 'system') delete root.dataset.theme
+    else root.dataset.theme = viewPrefs.theme
+    root.style.setProperty('--font-size', `${String(viewPrefs.fontSize)}px`)
+    root.style.setProperty('--reading-width', widths[viewPrefs.width])
+  }, [viewPrefs])
 
   const sessions = useMemo(() => data.sessions?.sessions ?? [], [data.sessions])
   const groups = useMemo(() => groupSessions(sessions, { ...view, acks }), [sessions, view, acks])
@@ -115,68 +129,82 @@ function Desk({ token }: { token: string }) {
 
   const session = sessions.find((s) => s.id === selected)
   return (
-    <div className="desk">
-      <Sidebar
-        state={data.sessions}
-        conn={conn}
-        groups={groups}
-        acks={acks}
-        attention={attention}
-        view={view}
-        onView={setView}
-        selected={selected}
-        onSelect={select}
-        onStartManager={() => store.startManager()}
-        prefs={prefs}
-        permission={permission}
-        onPrefs={(p) => {
-          store.setPrefs(p)
-        }}
-        onRequestPermission={() => {
-          void store.requestPermission()
-        }}
-      />
-      {selected ? (
-        data.sessions ? (
-          <SessionView
-            key={selected}
-            session={session}
-            sessionId={selected}
-            doc={data.docs[selected]}
-            pending={pending[selected] ?? noPending}
-            connected={conn.kind === 'open'}
-            insideSession={data.sessions.insideSession}
-            follow={follow}
-            unfollow={unfollow}
-            loadOlder={loadOlder}
-            send={send}
-            dismiss={dismiss}
-            readScreen={readScreen}
-            answer={answer}
-          />
-        ) : (
-          <main className="main">
-            <div className="empty">Loading sessions…</div>
-          </main>
-        )
-      ) : (
-        <main className="main">
-          <div className="empty">
-            {attention > 0 ? `${String(attention)} session${attention === 1 ? ' needs' : 's need'} you. Press j to go to the first.` : 'Pick a session on the left, or press ⌘K.'}
-          </div>
-        </main>
-      )}
-      {switcher && (
-        <Switcher
-          sessions={sessions}
+    <ViewPrefsContext.Provider value={viewPrefs}>
+      <div className="desk">
+        <Sidebar
+          state={data.sessions}
+          conn={conn}
+          groups={groups}
           acks={acks}
-          onPick={select}
-          onClose={() => {
-            setSwitcher(false)
+          attention={attention}
+          view={view}
+          onView={setView}
+          selected={selected}
+          onSelect={select}
+          onStartManager={() => store.startManager()}
+          prefs={prefs}
+          permission={permission}
+          onPrefs={(p) => {
+            store.setPrefs(p)
+          }}
+          onRequestPermission={() => {
+            void store.requestPermission()
+          }}
+          onOpenSettings={() => {
+            setSettingsOpen(true)
           }}
         />
-      )}
-    </div>
+        {selected ? (
+          data.sessions ? (
+            <SessionView
+              key={selected}
+              session={session}
+              sessionId={selected}
+              doc={data.docs[selected]}
+              pending={pending[selected] ?? noPending}
+              connected={conn.kind === 'open'}
+              insideSession={data.sessions.insideSession}
+              follow={follow}
+              unfollow={unfollow}
+              loadOlder={loadOlder}
+              send={send}
+              dismiss={dismiss}
+              readScreen={readScreen}
+              answer={answer}
+            />
+          ) : (
+            <main className="main">
+              <div className="empty">Loading sessions…</div>
+            </main>
+          )
+        ) : (
+          <main className="main">
+            <div className="empty">
+              {attention > 0 ? `${String(attention)} session${attention === 1 ? ' needs' : 's need'} you. Press j to go to the first.` : 'Pick a session on the left, or press ⌘K.'}
+            </div>
+          </main>
+        )}
+        {settingsOpen && (
+          <Settings
+            prefs={viewPrefs}
+            onChange={setViewPrefs}
+            onClose={() => {
+              setSettingsOpen(false)
+            }}
+          />
+        )}
+        {switcher && (
+          <Switcher
+            sessions={sessions}
+            acks={acks}
+            onPick={select}
+            onClose={() => {
+              setSwitcher(false)
+            }}
+          />
+        )}
+      </div>
+    </ViewPrefsContext.Provider>
   )
 }
 

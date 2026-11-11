@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { diffStats, patchRows, replaceRows, type DiffRow } from '../model/diff'
 import { toolLabel } from '../model/transcript'
+import { initiallyOpen } from '../model/viewprefs'
+import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
 import { CodeBlock } from './CodeBlock'
 import { Diff } from './Diff'
@@ -18,10 +20,6 @@ function str(v: unknown): string {
 }
 
 const editTools = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
-
-// Edits up to this many diff rows open expanded; everything else starts
-// as a one-line summary.
-const openDiffRows = 30
 
 function editRows(use: Item, result?: Item): DiffRow[] {
   const detail = obj(result?.result?.detail)
@@ -56,7 +54,8 @@ export function ToolCall({ use, result, live }: Props) {
   const rows = isEdit ? editRows(use, result) : []
   const stats = isEdit && rows.length ? diffStats(rows) : name === 'Write' ? newFileStats(use) : null
   const failed = result?.result?.isError === true
-  const [open, setOpen] = useState(failed || (isEdit && rows.length > 0 && rows.length <= openDiffRows))
+  const prefs = useViewPrefs()
+  const [open, setOpen] = useState(() => initiallyOpen(name, prefs, { failed, diffRows: rows.length }))
   const state = result ? (failed ? 'error' : 'done') : live ? 'running' : 'none'
 
   return (
