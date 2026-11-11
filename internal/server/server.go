@@ -1,0 +1,161 @@
+// Package server serves the Agent Desk API and frontend on a loopback address.
+//
+// Every request must name the server's own host (DNS rebinding defense).
+// API requests need the session token. Requests that change state, and
+// WebSocket upgrades, need an Origin the server trusts.
+package server
+
+import (
+	"crypto/subtle"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"net"
+	"net/http"
+	"strings"
+)
+
+// WSProtocol is the WebSocket subprotocol the server speaks. Browsers cannot
+// set headers on a WebSocket, so the client also offers the token as a second
+// subprotocol, TokenProtocolPrefix followed by the token.
+const (
+	WSProtocol          = "agentdesk.v1"
+	TokenProtocolPrefix = "agentdesk.token."
+)
+
+type Config struct {
+	// Addr is the listener's address, such as 127.0.0.1:7317.
+	Addr    string
+	Token   string
+	Version string
+	// DevOrigins are extra trusted origins, such as the Vite dev server.
+	DevOrigins []string
+	// Assets is the built frontend. A nil or empty FS serves a placeholder.
+	Assets fs.FS
+}
+
+type Server struct {
+	cfg     Config
+	hosts   map[string]bool
+	origins map[string]bool
+	mux     *http.ServeMux
+}
+
+func New(cfg Config) (*Server, error) {
+	if len(cfg.Token) < 32 {
+		return nil, errors.New("token must be at least 32 characters")
+	}
+	_, port, err := net.SplitHostPort(cfg.Addr)
+	if err != nil {
+		return nil, err
+	}
+	s := &Server{
+		cfg:     cfg,
+		hosts:   map[string]bool{"127.0.0.1:" + port: true, "localhost:" + port: true},
+		origins: map[string]bool{"http://127.0.0.1:" + port: true, "http://localhost:" + port: true},
+		mux:     http.NewServeMux(),
+	}
+	for _, o := range cfg.DevOrigins {
+		s.origins[strings.TrimRight(o, "/")] = true
+	}
+	s.mux.Handle("GET /api/health", s.requireToken(http.HandlerFunc(s.health)))
+	s.mux.HandleFunc("GET /api/ws", s.websocket)
+	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
+	s.mux.Handle("/", s.static())
+	return s, nil
+}
+
+func (s *Server) Handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.hosts[r.Host] {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if !s.originAllowed(r) {
+			http.Error(w, "forbidden origin", http.StatusForbidden)
+			return
+		}
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
+		s.mux.ServeHTTP(w, r)
+	})
+}
+
+// originAllowed rejects a foreign Origin on any request, and a missing one on
+// requests that change state or upgrade to a WebSocket.
+func (s *Server) originAllowed(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		return s.origins[origin]
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		return !isUpgrade(r)
+	default:
+		return false
+	}
+}
+
+func isUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+}
+
+func (s *Server) tokenOK(candidate string) bool {
+	return subtle.ConstantTimeCompare([]byte(candidate), []byte(s.cfg.Token)) == 1
+}
+
+func (s *Server) requireToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || !s.tokenOK(bearer) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.cfg.Version})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+const placeholder = `<!doctype html><title>Agent Desk</title><p>The frontend is not built. Run <code>make build</code>, or <code>make dev</code> for development.</p>`
+
+func (s *Server) static() http.Handler {
+	if s.cfg.Assets == nil {
+		return placeholderHandler()
+	}
+	if _, err := fs.Stat(s.cfg.Assets, "index.html"); err != nil {
+		return placeholderHandler()
+	}
+	files := http.FileServerFS(s.cfg.Assets)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name != "" {
+			if _, err := fs.Stat(s.cfg.Assets, name); err != nil {
+				// Client-side routes fall back to the app shell.
+				r2 := r.Clone(r.Context())
+				r2.URL.Path = "/"
+				files.ServeHTTP(w, r2)
+				return
+			}
+		}
+		files.ServeHTTP(w, r)
+	})
+}
+
+func placeholderHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(placeholder))
+	})
+}

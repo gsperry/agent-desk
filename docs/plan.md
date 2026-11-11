@@ -7,7 +7,7 @@ Basis: [integration-notes.md](integration-notes.md).
 The default architecture holds: a Go backend with an embedded React/TS frontend, REST plus one WebSocket. Phase 0 changes these parts:
 
 | Area | Decision | Why |
-|---|---|---|
+| --- | --- | --- |
 | Session list | Poll `agent-manager snapshot --json` every 1 s. fsnotify on `hooks/*.status` triggers an immediate extra poll. | No push API. Snapshot costs ~160 ms. Hook files change before the poller stores the status. |
 | Manager not running | Banner plus a "Start headless manager" button that runs `agent-manager serve --background`. | Status is frozen without a poller. |
 | Grouping | `group` path when set. Otherwise the repository: `git rev-parse --git-common-dir` from the session directory, so `<repo>-worktrees/<name>` lands under its repo. Otherwise the directory. | All current sessions sit in root. |

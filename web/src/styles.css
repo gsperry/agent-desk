@@ -1,0 +1,45 @@
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --bg: #ffffff;
+  --text: #1f2328;
+  --dim: #59636e;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --text: #c6ccd6;
+    --dim: #98a0ac;
+    --ok: #85b26f;
+    --warn: #d08442;
+  }
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  max-width: 44rem;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+  line-height: 1.5;
+}
+
+.status {
+  color: var(--dim);
+}
+
+.status.ok {
+  color: var(--ok);
+}
+
+.status.warn {
+  color: var(--warn);
+}
