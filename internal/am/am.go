@@ -45,6 +45,9 @@ type Snapshot struct {
 type Client interface {
 	Snapshot(ctx context.Context) (Snapshot, error)
 	StartServe(ctx context.Context) error
+	// ProfileVar is one variable of an environment profile, or "" when the
+	// profile does not set it.
+	ProfileVar(ctx context.Context, profile, key string) (string, error)
 }
 
 // ErrNotInstalled reports agent-manager missing from PATH.
@@ -93,6 +96,20 @@ func ParseSnapshot(data []byte) (Snapshot, error) {
 func (c *CLI) StartServe(ctx context.Context) error {
 	_, err := c.run(ctx, "serve", "--background")
 	return err
+}
+
+func (c *CLI) ProfileVar(ctx context.Context, profile, key string) (string, error) {
+	out, err := c.run(ctx, "env", "show", profile, "--json")
+	if err != nil {
+		return "", err
+	}
+	var rec struct {
+		Vars map[string]string `json:"vars"`
+	}
+	if err := json.Unmarshal(out, &rec); err != nil {
+		return "", fmt.Errorf("agent-manager env show: %w", err)
+	}
+	return rec.Vars[key], nil
 }
 
 // ConfigDir is agent-manager's state directory, resolved the way

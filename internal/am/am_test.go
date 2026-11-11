@@ -86,6 +86,24 @@ func TestNotInstalledIsDetectable(t *testing.T) {
 	}
 }
 
+func TestProfileVar(t *testing.T) {
+	r := &fakeRunner{out: []byte(`{"name":"alt","keys":["CLAUDE_CONFIG_DIR","SECRET"],"vars":{"CLAUDE_CONFIG_DIR":"/x/claude","SECRET":"s"}}`)}
+	c := &CLI{Runner: r, Bin: "agent-manager"}
+	tests := []struct{ key, want string }{
+		{"CLAUDE_CONFIG_DIR", "/x/claude"},
+		{"MISSING", ""},
+	}
+	for _, tt := range tests {
+		got, err := c.ProfileVar(context.Background(), "alt", tt.key)
+		if err != nil || got != tt.want {
+			t.Fatalf("%s: got %q, %v; want %q", tt.key, got, err, tt.want)
+		}
+	}
+	if got := strings.Join(r.args, " "); got != "agent-manager env show alt --json" {
+		t.Fatalf("args = %q", got)
+	}
+}
+
 func TestConfigDir(t *testing.T) {
 	tests := []struct {
 		name, amDir, xdg, want string

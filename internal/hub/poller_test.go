@@ -30,6 +30,8 @@ func (f *fakeClient) Snapshot(context.Context) (am.Snapshot, error) {
 
 func (f *fakeClient) StartServe(context.Context) error { return nil }
 
+func (f *fakeClient) ProfileVar(context.Context, string, string) (string, error) { return "", nil }
+
 func (f *fakeClient) set(snap am.Snapshot, err error) {
 	f.mu.Lock()
 	f.snap, f.err = snap, err

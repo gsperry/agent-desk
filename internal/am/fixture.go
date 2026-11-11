@@ -20,3 +20,5 @@ func (f Fixture) Snapshot(context.Context) (Snapshot, error) {
 }
 
 func (f Fixture) StartServe(context.Context) error { return nil }
+
+func (f Fixture) ProfileVar(context.Context, string, string) (string, error) { return "", nil }
