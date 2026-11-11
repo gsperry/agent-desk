@@ -9,8 +9,10 @@ export interface Pending {
   text: string
   sentAt: number
   state: PendingState
-  // message explains a failure or a refusal.
+  // message explains a failure or a refusal; reason is the server's code
+  // for a refusal, such as dialog.
   message?: string
+  reason?: string
 }
 
 // After this long without a matching transcript record, a sent reply is

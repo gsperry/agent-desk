@@ -6,6 +6,7 @@ import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
 import { groupSessions } from './model/sidebar'
 import { Store, useStore } from './store'
+import type { Answer } from './types'
 
 const token = takeToken()
 
@@ -107,6 +108,8 @@ function Desk({ token }: { token: string }) {
   const dismiss = useCallback((id: string, clientId: string) => {
     store.dismiss(id, clientId)
   }, [store])
+  const readScreen = useCallback((id: string) => store.screen(id), [store])
+  const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
 
   if (conn.kind === 'unauthorized') return <NoToken />
 
@@ -148,6 +151,8 @@ function Desk({ token }: { token: string }) {
             loadOlder={loadOlder}
             send={send}
             dismiss={dismiss}
+            readScreen={readScreen}
+            answer={answer}
           />
         ) : (
           <main className="main">
