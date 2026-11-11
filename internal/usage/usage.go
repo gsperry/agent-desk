@@ -230,7 +230,7 @@ func (s *Scanner) Report(ctx context.Context, days int) (Report, error) {
 		return a.path < b.path
 	})
 
-	rep := Report{From: from, To: to, Files: len(files)}
+	rep := Report{From: from, To: to, Files: len(files), Days: []Day{}, Models: []Model{}, Conversations: []Conversation{}}
 	byDay := map[string]*Bucket{}
 	byModel := map[string]*Tokens{}
 	byConv := map[string]*Conversation{}
@@ -453,11 +453,39 @@ func (s *Scanner) read(path string, f *fileState) error {
 }
 
 var (
-	markAssistant = []byte(`"type":"assistant"`)
-	markUsage     = []byte(`"usage"`)
-	markUser      = []byte(`"type":"user"`)
-	markCost      = []byte(`"type":"cost-state"`)
+	markUsage = []byte(`"usage"`)
+	markType  = []byte(`"type"`)
 )
+
+// hasType reports whether line holds "type": "<name>" anywhere, allowing
+// whitespace around the colon. It is a cheap filter before decoding; the
+// decoders check the record's own fields.
+func hasType(line []byte, name string) bool {
+	want := `"` + name + `"`
+	for rest := line; ; {
+		i := bytes.Index(rest, markType)
+		if i < 0 {
+			return false
+		}
+		rest = rest[i+len(markType):]
+		j := 0
+		for j < len(rest) && isSpace(rest[j]) {
+			j++
+		}
+		if j >= len(rest) || rest[j] != ':' {
+			continue
+		}
+		j++
+		for j < len(rest) && isSpace(rest[j]) {
+			j++
+		}
+		if bytes.HasPrefix(rest[j:], []byte(want)) {
+			return true
+		}
+	}
+}
+
+func isSpace(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' }
 
 type assistantRecord struct {
 	UUID      string `json:"uuid"`
@@ -483,11 +511,11 @@ type costRecord struct {
 
 func (s *Scanner) line(f *fileState, line []byte) {
 	switch {
-	case bytes.Contains(line, markAssistant) && bytes.Contains(line, markUsage):
+	case hasType(line, "assistant") && bytes.Contains(line, markUsage):
 		s.assistant(f, line)
-	case bytes.Contains(line, markUser):
+	case hasType(line, "user"):
 		s.user(f, line)
-	case bytes.Contains(line, markCost):
+	case hasType(line, "cost-state"):
 		s.cost(f, line)
 	}
 }

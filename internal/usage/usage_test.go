@@ -240,3 +240,43 @@ func TestCopiedHistoryCountsOnce(t *testing.T) {
 		t.Fatalf("by conversation = %v", got)
 	}
 }
+
+func TestHasType(t *testing.T) {
+	tests := []struct {
+		line, name string
+		want       bool
+	}{
+		{`{"type":"assistant","x":1}`, "assistant", true},
+		{`{"type": "assistant"}`, "assistant", true},
+		{"{\"type\" :\t\"user\"}", "user", true},
+		{`{"type":"assistant_extra"}`, "assistant", false},
+		{`{"subtype":"user"}`, "user", false},
+		{`{"text":"the type is user"}`, "user", false},
+		{`{"type":"text","x":{"type":"user"}}`, "user", true},
+		{`{"type":`, "user", false},
+	}
+	for _, tt := range tests {
+		if got := hasType([]byte(tt.line), tt.name); got != tt.want {
+			t.Errorf("hasType(%s, %q) = %v", tt.line, tt.name, got)
+		}
+	}
+}
+
+func TestReportSpacedJSONAndEmptyLists(t *testing.T) {
+	root := t.TempDir()
+	rep, err := scanner(root).Report(context.Background(), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Models == nil || rep.Conversations == nil || rep.Days == nil {
+		t.Fatalf("lists must be empty, not nil: %+v", rep)
+	}
+	writeLines(t, filepath.Join(root, "projects", "-p", "spaced.jsonl"),
+		`{"type": "user", "uuid": "p1", "timestamp": "2026-11-02T10:00:00Z", "promptSource": "typed", "origin": {"kind": "human"}, "message": {"role": "user", "content": "go"}}`,
+		`{"type": "assistant", "uuid": "a1", "timestamp": "2026-11-02T10:00:05Z", "message": {"id": "m1", "model": "x", "content": [], "usage": {"input_tokens": 3, "output_tokens": 4}}}`,
+	)
+	rep, _ = scanner(root).Report(context.Background(), 1)
+	if rep.Totals.Input != 3 || rep.Totals.Prompts != 1 {
+		t.Fatalf("spaced JSON was dropped: %+v", rep.Totals)
+	}
+}
