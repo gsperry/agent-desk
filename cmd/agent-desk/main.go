@@ -120,7 +120,7 @@ func run(o options) error {
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
 			Timeout: 15 * time.Second,
-			Env:     append(procrun.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0"),
+			Env:     changes.Env(procrun.Environ()),
 		}}},
 	})
 	if err != nil {

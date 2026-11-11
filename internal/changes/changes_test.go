@@ -118,7 +118,10 @@ func TestCollect(t *testing.T) {
 	write("scratch.txt", "untracked\n")
 	// A diff driver in the repo's own config must not run.
 	git(t, dir, "config", "diff.evil.textconv", "touch "+filepath.Join(dir, "PWNED")+"; cat")
-	write(".gitattributes", "*.txt diff=evil\n")
+	// So must a clean filter, which git diff runs on changed worktree files.
+	git(t, dir, "config", "filter.sneaky.clean", "touch "+filepath.Join(dir, "PWNED-FILTER")+"; cat")
+	git(t, dir, "config", "filter.sneaky.required", "true")
+	write(".gitattributes", "*.txt diff=evil filter=sneaky\n")
 
 	r := Reader{Runner: run.Exec{Env: append(run.Environ(), "GIT_OPTIONAL_LOCKS=0")}}
 	sub := filepath.Join(dir, "sub")
@@ -152,7 +155,17 @@ func TestCollect(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "PWNED")); err == nil {
 		t.Fatal("a repo-configured textconv ran")
 	}
+	if _, err := os.Stat(filepath.Join(dir, "PWNED-FILTER")); err == nil {
+		t.Fatal("a repo-configured clean filter ran")
+	}
 	if _, err := r.Collect(context.Background(), t.TempDir(), ModeUncommitted); err != ErrNotRepo {
 		t.Fatalf("non-repo err = %v", err)
+	}
+}
+
+func TestEnv(t *testing.T) {
+	got := strings.Join(Env([]string{"HOME=/h", "GIT_DIR=/x", "GIT_CONFIG_PARAMETERS='core.pager=sh'", "PATH=/bin"}), " ")
+	if got != "HOME=/h PATH=/bin GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0" {
+		t.Fatalf("env = %s", got)
 	}
 }

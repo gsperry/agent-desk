@@ -54,6 +54,23 @@ func NewParser() *Parser {
 
 func (p *Parser) Stats() Stats { return p.stats }
 
+// Clone copies a parser, so a reader can carry on from its state without
+// changing the original.
+func (p *Parser) Clone() *Parser {
+	c := &Parser{stats: p.stats, seq: p.seq, seen: make(map[string]bool, len(p.seen)), seenContent: make(map[string]bool, len(p.seenContent))}
+	c.stats.Skipped = make(map[string]int, len(p.stats.Skipped))
+	for k, v := range p.stats.Skipped {
+		c.stats.Skipped[k] = v
+	}
+	for k := range p.seen {
+		c.seen[k] = true
+	}
+	for k := range p.seenContent {
+		c.seenContent[k] = true
+	}
+	return c
+}
+
 type record struct {
 	Type             string          `json:"type"`
 	Subtype          string          `json:"subtype"`

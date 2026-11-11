@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-func prompt(uuid, at string) string {
+func promptLine(uuid, at string) string {
 	return fmt.Sprintf(`{"type":"user","uuid":%q,"timestamp":%q,"promptSource":"typed","origin":{"kind":"human"},"message":{"role":"user","content":"go"}}`, uuid, at)
 }
 
@@ -59,7 +60,7 @@ func TestReport(t *testing.T) {
 	root := t.TempDir()
 	main := filepath.Join(root, "projects", "-p", "conv-1.jsonl")
 	writeLines(t, main,
-		prompt("p1", "2026-11-01T10:00:00Z"),
+		promptLine("p1", "2026-11-01T10:00:00Z"),
 		reply("m1", "2026-11-01T10:00:30Z", 100, 5),
 		// The same reply written again with its final usage.
 		reply("m1", "2026-11-01T10:00:40Z", 100, 20),
@@ -67,12 +68,12 @@ func TestReport(t *testing.T) {
 		reply("m2", "2026-11-01T10:01:00Z", 50, 10),
 		cost("s1", 0.5),
 		// Answered 30 minutes later: 30 min waiting.
-		prompt("p2", "2026-11-01T10:31:00Z"),
+		promptLine("p2", "2026-11-01T10:31:00Z"),
 		// A 10 minute pause is not working time.
 		reply("m3", "2026-11-01T10:41:00Z", 10, 1),
 		cost("s1", 0.75),
 		// Answered the next day after a long gap: waiting capped at an hour.
-		prompt("p3", "2026-11-02T09:00:00Z"),
+		promptLine("p3", "2026-11-02T09:00:00Z"),
 		reply("m4", "2026-11-02T09:00:10Z", 1, 1),
 		cost("s2", 0.1),
 		`{"type":"mystery"}`,
@@ -80,7 +81,7 @@ func TestReport(t *testing.T) {
 	)
 	sub := filepath.Join(root, "projects", "-p", "conv-1", "subagents", "agent-a.jsonl")
 	writeLines(t, sub,
-		prompt("sp", "2026-11-01T10:00:35Z"),
+		promptLine("sp", "2026-11-01T10:00:35Z"),
 		reply("s1", "2026-11-01T10:00:45Z", 1000, 100),
 	)
 
@@ -126,7 +127,7 @@ func TestReport(t *testing.T) {
 func TestReportFollowsAppends(t *testing.T) {
 	root := t.TempDir()
 	p := filepath.Join(root, "projects", "-p", "conv-2.jsonl")
-	writeLines(t, p, prompt("p1", "2026-11-02T10:00:00Z"), reply("m1", "2026-11-02T10:00:10Z", 5, 5))
+	writeLines(t, p, promptLine("p1", "2026-11-02T10:00:00Z"), reply("m1", "2026-11-02T10:00:10Z", 5, 5))
 	s := scanner(root)
 	rep, _ := s.Report(context.Background(), 1)
 	if rep.Totals.Input != 5 {
@@ -180,5 +181,62 @@ func TestPartialLastLineWaits(t *testing.T) {
 	rep, _ = s.Report(context.Background(), 1)
 	if rep.Totals.Input != 9 {
 		t.Fatalf("completed line input = %d", rep.Totals.Input)
+	}
+}
+
+func TestConcurrentReports(t *testing.T) {
+	root := t.TempDir()
+	p := filepath.Join(root, "projects", "-p", "conv-c.jsonl")
+	writeLines(t, p, promptLine("p1", "2026-11-02T10:00:00Z"), reply("m1", "2026-11-02T10:00:10Z", 5, 5))
+	s := scanner(root)
+	if _, err := s.Report(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	appendLines(t, p, promptLine("p2", "2026-11-02T10:05:00Z"), reply("m2", "2026-11-02T10:05:10Z", 7, 1))
+	var wg sync.WaitGroup
+	results := make([]Report, 8)
+	for i := range results {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i], _ = s.Report(context.Background(), 1)
+		}()
+	}
+	wg.Wait()
+	for i, r := range results {
+		if r.Totals.Input != 12 || r.Totals.Prompts != 2 || r.Totals.Replies != 2 {
+			t.Fatalf("report %d = %+v", i, r.Totals)
+		}
+	}
+}
+
+func TestCopiedHistoryCountsOnce(t *testing.T) {
+	root := t.TempDir()
+	// The original conversation.
+	writeLines(t, filepath.Join(root, "projects", "-p", "zzzz-original.jsonl"),
+		promptLine("p1", "2026-11-02T09:00:00Z"),
+		reply("m1", "2026-11-02T09:00:10Z", 100, 10),
+	)
+	// Resumed later: Claude Code copies the earlier records into a new file.
+	writeLines(t, filepath.Join(root, "projects", "-p", "aaaa-resumed.jsonl"),
+		promptLine("p1", "2026-11-02T09:00:00Z"),
+		reply("m1", "2026-11-02T09:00:10Z", 100, 10),
+		promptLine("p2", "2026-11-02T11:00:00Z"),
+		reply("m2", "2026-11-02T11:00:10Z", 1, 1),
+	)
+	rep, err := scanner(root).Report(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Totals.Input != 101 || rep.Totals.Replies != 2 || rep.Totals.Prompts != 2 {
+		t.Fatalf("totals = %+v", rep.Totals)
+	}
+	got := map[string]int64{}
+	for _, c := range rep.Conversations {
+		got[c.ID] = c.Input
+	}
+	// The copy belongs to the conversation that started first.
+	if got["zzzz-original"] != 100 || got["aaaa-resumed"] != 1 {
+		t.Fatalf("by conversation = %v", got)
 	}
 }

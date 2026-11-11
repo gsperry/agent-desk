@@ -105,21 +105,29 @@ type Scanner struct {
 	Now      func() time.Time
 	Location *time.Location
 
-	mu    sync.Mutex
-	files map[string]*fileState
+	// refreshing lets one refresh run at a time; a second Report waits for
+	// it and then finds the files already read.
+	refreshing sync.Mutex
+	mu         sync.Mutex
+	files      map[string]*fileState
 }
 
-// fileState is what a file has contributed so far, plus what is needed to
-// carry on reading it.
+// fileState is what a file has contributed so far, keyed by record, plus
+// what is needed to carry on reading it. Contributions are kept per record
+// so a reply copied into a resumed conversation's file counts once.
 type fileState struct {
+	path     string
 	conv     string
 	subagent bool
 	size     int64
 	modTime  time.Time
 	offset   int64
 	parser   *transcript.Parser
-	messages map[string]seenMessage
-	days     map[string]*dayState
+	messages map[string]*message
+	prompts  map[string]*prompt
+	costs    map[string]float64
+	first    time.Time
+	last     time.Time
 	// Turn timing for main transcripts.
 	lastPrompt    time.Time
 	lastEvent     time.Time
@@ -127,31 +135,69 @@ type fileState struct {
 	// Claude Code's cost counter restarts with each process.
 	lastCost  float64
 	costStart string
-	last      time.Time
 }
 
-type dayState struct {
-	Bucket
-	models map[string]*Tokens
-}
-
-type seenMessage struct {
+// message is one model reply. Claude Code writes a reply as a record per
+// content block, each with the usage so far, so tokens keep the largest.
+type message struct {
 	day, model string
 	tokens     Tokens
+	workingMs  int64
+}
+
+type prompt struct {
+	day       string
+	waitingMs int64
+}
+
+func newFileState(t target) *fileState {
+	return &fileState{
+		path: t.path, conv: t.conv, subagent: t.subagent,
+		parser:   transcript.NewParser(),
+		messages: map[string]*message{},
+		prompts:  map[string]*prompt{},
+		costs:    map[string]float64{},
+	}
+}
+
+// clone copies a state so a read in progress never changes what a
+// concurrent Report sees, and a failed read leaves the saved state as it was.
+func (f *fileState) clone() *fileState {
+	c := *f
+	c.parser = f.parser.Clone()
+	c.messages = make(map[string]*message, len(f.messages))
+	for k, v := range f.messages {
+		m := *v
+		c.messages[k] = &m
+	}
+	c.prompts = make(map[string]*prompt, len(f.prompts))
+	for k, v := range f.prompts {
+		p := *v
+		c.prompts[k] = &p
+	}
+	c.costs = make(map[string]float64, len(f.costs))
+	for k, v := range f.costs {
+		c.costs[k] = v
+	}
+	return &c
 }
 
 const workers = 4
 
-// Report totals the last days days, today included.
+// Report totals the last days days, today included. A reply or prompt that
+// appears in more than one file counts once, for the conversation that
+// started first.
 func (s *Scanner) Report(ctx context.Context, days int) (Report, error) {
 	if days < 1 {
 		days = 30
 	}
+	s.refreshing.Lock()
 	paths, err := s.paths()
-	if err != nil {
-		return Report{}, err
+	if err == nil {
+		err = s.refresh(ctx, paths)
 	}
-	if err := s.refresh(ctx, paths); err != nil {
+	s.refreshing.Unlock()
+	if err != nil {
 		return Report{}, err
 	}
 	loc := s.loc()
@@ -163,38 +209,80 @@ func (s *Scanner) Report(ctx context.Context, days int) (Report, error) {
 	from := now.In(loc).AddDate(0, 0, -(days - 1)).Format(time.DateOnly)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	rep := Report{From: from, To: to, Files: len(s.files)}
+	files := make([]*fileState, 0, len(s.files))
+	for _, f := range s.files {
+		files = append(files, f)
+	}
+	s.mu.Unlock()
+	sort.Slice(files, func(i, j int) bool {
+		a, b := files[i], files[j]
+		if !a.first.Equal(b.first) {
+			if a.first.IsZero() || b.first.IsZero() {
+				return b.first.IsZero()
+			}
+			return a.first.Before(b.first)
+		}
+		// A resumed conversation starts with copies of the original's
+		// records, so both start together; the original ends first.
+		if !a.last.Equal(b.last) {
+			return a.last.Before(b.last)
+		}
+		return a.path < b.path
+	})
+
+	rep := Report{From: from, To: to, Files: len(files)}
 	byDay := map[string]*Bucket{}
 	byModel := map[string]*Tokens{}
 	byConv := map[string]*Conversation{}
-	for _, f := range s.files {
-		for day, d := range f.days {
-			if day < from || day > to {
+	seenMessages := map[string]bool{}
+	seenPrompts := map[string]bool{}
+	inRange := func(day string) bool { return day >= from && day <= to }
+	add := func(f *fileState, day string, b Bucket) {
+		rep.Totals.add(b)
+		if byDay[day] == nil {
+			byDay[day] = &Bucket{}
+		}
+		byDay[day].add(b)
+		c := byConv[f.conv]
+		if c == nil {
+			c = &Conversation{ID: f.conv}
+			byConv[f.conv] = c
+		}
+		c.add(b)
+		if f.subagent {
+			c.SubagentTokens += b.Total()
+		}
+		if l := f.last.UTC().Format(time.RFC3339); !f.last.IsZero() && l > c.Last {
+			c.Last = l
+		}
+	}
+	for _, f := range files {
+		for id, m := range f.messages {
+			if seenMessages[id] {
 				continue
 			}
-			rep.Totals.add(d.Bucket)
-			if byDay[day] == nil {
-				byDay[day] = &Bucket{}
+			seenMessages[id] = true
+			if !inRange(m.day) {
+				continue
 			}
-			byDay[day].add(d.Bucket)
-			for m, t := range d.models {
-				if byModel[m] == nil {
-					byModel[m] = &Tokens{}
-				}
-				byModel[m].add(*t)
+			add(f, m.day, Bucket{Tokens: m.tokens, Replies: 1, WorkingMs: m.workingMs})
+			if byModel[m.model] == nil {
+				byModel[m.model] = &Tokens{}
 			}
-			c := byConv[f.conv]
-			if c == nil {
-				c = &Conversation{ID: f.conv}
-				byConv[f.conv] = c
+			byModel[m.model].add(m.tokens)
+		}
+		for id, p := range f.prompts {
+			if seenPrompts[id] {
+				continue
 			}
-			c.add(d.Bucket)
-			if f.subagent {
-				c.SubagentTokens += d.Total()
+			seenPrompts[id] = true
+			if inRange(p.day) {
+				add(f, p.day, Bucket{Prompts: 1, WaitingMs: p.waitingMs})
 			}
-			if l := f.last.UTC().Format(time.RFC3339); !f.last.IsZero() && l > c.Last {
-				c.Last = l
+		}
+		for day, usd := range f.costs {
+			if inRange(day) && usd != 0 {
+				add(f, day, Bucket{CostUSD: usd})
 			}
 		}
 	}
@@ -208,7 +296,12 @@ func (s *Scanner) Report(ctx context.Context, days int) (Report, error) {
 	for m, t := range byModel {
 		rep.Models = append(rep.Models, Model{Model: m, Tokens: *t})
 	}
-	sort.Slice(rep.Models, func(i, j int) bool { return rep.Models[i].Total() > rep.Models[j].Total() })
+	sort.Slice(rep.Models, func(i, j int) bool {
+		if rep.Models[i].Total() != rep.Models[j].Total() {
+			return rep.Models[i].Total() > rep.Models[j].Total()
+		}
+		return rep.Models[i].Model < rep.Models[j].Model
+	})
 	for _, c := range byConv {
 		rep.Conversations = append(rep.Conversations, *c)
 	}
@@ -289,10 +382,15 @@ func (s *Scanner) refresh(ctx context.Context, targets []target) error {
 			}
 		}()
 	}
+send:
 	for _, t := range targets {
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case jobs <- t:
 		case <-ctx.Done():
+			break send
 		}
 	}
 	close(jobs)
@@ -316,7 +414,7 @@ func (s *Scanner) refreshFile(t target) {
 	}
 	// A file that shrank was rewritten; read it again from the start.
 	if f == nil || info.Size() < f.offset {
-		f = &fileState{conv: t.conv, subagent: t.subagent, parser: transcript.NewParser(), messages: map[string]seenMessage{}, days: map[string]*dayState{}}
+		f = newFileState(t)
 	} else {
 		f = f.clone()
 	}
@@ -327,27 +425,6 @@ func (s *Scanner) refreshFile(t target) {
 	s.mu.Lock()
 	s.files[t.path] = f
 	s.mu.Unlock()
-}
-
-// clone copies a state so a read in progress never changes what a
-// concurrent Report sees. Maps are copied shallowly where values are
-// replaced, not mutated.
-func (f *fileState) clone() *fileState {
-	c := *f
-	c.messages = make(map[string]seenMessage, len(f.messages))
-	for k, v := range f.messages {
-		c.messages[k] = v
-	}
-	c.days = make(map[string]*dayState, len(f.days))
-	for k, v := range f.days {
-		d := &dayState{Bucket: v.Bucket, models: make(map[string]*Tokens, len(v.models))}
-		for m, t := range v.models {
-			tt := *t
-			d.models[m] = &tt
-		}
-		c.days[k] = d
-	}
-	return &c
 }
 
 func (s *Scanner) read(path string, f *fileState) error {
@@ -383,6 +460,7 @@ var (
 )
 
 type assistantRecord struct {
+	UUID      string `json:"uuid"`
 	Timestamp string `json:"timestamp"`
 	Message   struct {
 		ID    string `json:"id"`
@@ -414,14 +492,18 @@ func (s *Scanner) line(f *fileState, line []byte) {
 	}
 }
 
-func (s *Scanner) day(f *fileState, at time.Time) *dayState {
-	key := at.In(s.loc()).Format(time.DateOnly)
-	d := f.days[key]
-	if d == nil {
-		d = &dayState{models: map[string]*Tokens{}}
-		f.days[key] = d
+func (s *Scanner) day(at time.Time) string {
+	return at.In(s.loc()).Format(time.DateOnly)
+}
+
+// seen widens the file's time span.
+func (f *fileState) seen(at time.Time) {
+	if f.first.IsZero() || at.Before(f.first) {
+		f.first = at
 	}
-	return d
+	if at.After(f.last) {
+		f.last = at
+	}
 }
 
 func (s *Scanner) assistant(f *fileState, line []byte) {
@@ -433,42 +515,30 @@ func (s *Scanner) assistant(f *fileState, line []byte) {
 	if err != nil {
 		return
 	}
+	key := rec.Message.ID
+	if key == "" {
+		if rec.UUID == "" {
+			return
+		}
+		key = "uuid:" + rec.UUID
+	}
 	u := rec.Message.Usage
 	tok := Tokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
-	model := rec.Message.Model
-	if model == "" || model == "<synthetic>" {
-		model = "unknown"
-	}
-	d := s.day(f, at)
-	if prev, ok := f.messages[rec.Message.ID]; ok && rec.Message.ID != "" {
-		// One reply is written as a record per content block, each with the
-		// usage so far. Count only what grew.
-		delta := Tokens{
-			Input:      max(tok.Input-prev.tokens.Input, 0),
-			Output:     max(tok.Output-prev.tokens.Output, 0),
-			CacheRead:  max(tok.CacheRead-prev.tokens.CacheRead, 0),
-			CacheWrite: max(tok.CacheWrite-prev.tokens.CacheWrite, 0),
+	m := f.messages[key]
+	if m == nil {
+		model := rec.Message.Model
+		if model == "" || model == "<synthetic>" {
+			model = "unknown"
 		}
-		pd := f.days[prev.day]
-		pd.Tokens.add(delta)
-		pd.models[prev.model].add(delta)
-		prev.tokens = Tokens{max(tok.Input, prev.tokens.Input), max(tok.Output, prev.tokens.Output), max(tok.CacheRead, prev.tokens.CacheRead), max(tok.CacheWrite, prev.tokens.CacheWrite)}
-		f.messages[rec.Message.ID] = prev
+		m = &message{day: s.day(at), model: model, tokens: tok}
+		f.messages[key] = m
 	} else {
-		d.Tokens.add(tok)
-		d.Replies++
-		if d.models[model] == nil {
-			d.models[model] = &Tokens{}
-		}
-		d.models[model].add(tok)
-		if rec.Message.ID != "" {
-			f.messages[rec.Message.ID] = seenMessage{day: at.In(s.loc()).Format(time.DateOnly), model: model, tokens: tok}
-		}
+		m.tokens = Tokens{max(tok.Input, m.tokens.Input), max(tok.Output, m.tokens.Output), max(tok.CacheRead, m.tokens.CacheRead), max(tok.CacheWrite, m.tokens.CacheWrite)}
 	}
 	if !f.subagent {
 		if !f.lastEvent.IsZero() && at.After(f.lastEvent) {
 			if gap := at.Sub(f.lastEvent); gap <= workGap {
-				d.WorkingMs += gap.Milliseconds()
+				m.workingMs += gap.Milliseconds()
 			}
 		}
 		if at.After(f.lastEvent) {
@@ -476,38 +546,35 @@ func (s *Scanner) assistant(f *fileState, line []byte) {
 		}
 		f.lastAssistant = at
 	}
-	if at.After(f.last) {
-		f.last = at
-	}
+	f.seen(at)
 }
 
 func (s *Scanner) user(f *fileState, line []byte) {
 	if f.subagent {
 		return
 	}
-	var at time.Time
-	prompt := false
 	for _, it := range f.parser.Line(line) {
 		if it.Kind != transcript.KindUser {
 			continue
 		}
-		t, err := time.Parse(time.RFC3339Nano, it.Time)
+		at, err := time.Parse(time.RFC3339Nano, it.Time)
 		if err != nil {
 			continue
 		}
-		at, prompt = t, true
-	}
-	if !prompt {
-		return
-	}
-	d := s.day(f, at)
-	d.Prompts++
-	if !f.lastAssistant.IsZero() && f.lastAssistant.After(f.lastPrompt) && at.After(f.lastAssistant) {
-		d.WaitingMs += min(at.Sub(f.lastAssistant), waitCap).Milliseconds()
-	}
-	f.lastPrompt, f.lastEvent = at, at
-	if at.After(f.last) {
-		f.last = at
+		key := it.UUID
+		if key == "" {
+			key = "time:" + it.Time
+		}
+		if f.prompts[key] != nil {
+			continue
+		}
+		p := &prompt{day: s.day(at)}
+		if !f.lastAssistant.IsZero() && f.lastAssistant.After(f.lastPrompt) && at.After(f.lastAssistant) {
+			p.waitingMs = min(at.Sub(f.lastAssistant), waitCap).Milliseconds()
+		}
+		f.prompts[key] = p
+		f.lastPrompt, f.lastEvent = at, at
+		f.seen(at)
 	}
 }
 
@@ -528,5 +595,5 @@ func (s *Scanner) cost(f *fileState, line []byte) {
 		f.costStart = start
 	}
 	f.lastCost = v
-	s.day(f, f.last).CostUSD += delta
+	f.costs[s.day(f.last)] += delta
 }

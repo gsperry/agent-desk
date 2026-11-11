@@ -311,6 +311,26 @@ func TestDuplicatesAndSequence(t *testing.T) {
 	}
 }
 
+func TestClone(t *testing.T) {
+	p := NewParser()
+	p.Line([]byte(`{"type":"user","uuid":"u1","message":{"content":"hi"}}`))
+	p.Line([]byte(`{"type":"api-request"}`))
+	c := p.Clone()
+	// The clone remembers what the original saw.
+	if got := c.Line([]byte(`{"type":"user","uuid":"u1","message":{"content":"hi"}}`)); len(got) != 0 {
+		t.Fatalf("clone forgot a seen uuid: %v", got)
+	}
+	// And what it sees afterwards does not reach the original.
+	c.Line([]byte(`{"type":"user","uuid":"u2","message":{"content":"new"}}`))
+	c.Line([]byte(`{"type":"api-request"}`))
+	if got := p.Line([]byte(`{"type":"user","uuid":"u2","message":{"content":"new"}}`)); len(got) != 1 || got[0].Seq != 1 {
+		t.Fatalf("original saw the clone's uuid: %v", got)
+	}
+	if p.Stats().Skipped["api-request"] != 1 || c.Stats().Skipped["api-request"] != 2 {
+		t.Fatalf("skipped counts shared: %v %v", p.Stats().Skipped, c.Stats().Skipped)
+	}
+}
+
 func TestVersionStutterIsDeduped(t *testing.T) {
 	p := NewParser()
 	a := p.Line([]byte(`{"type":"assistant","uuid":"x1","message":{"id":"msg_s","content":[{"type":"text","text":"hello"}]}}`))

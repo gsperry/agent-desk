@@ -1,9 +1,11 @@
 // Package changes reads what a session has changed in its git checkout.
 //
 // Every git call is read-only and runs with external diff tools, text
-// converters and the fsmonitor hook disabled, since a repository's own
-// config could otherwise make a diff run commands. GIT_OPTIONAL_LOCKS=0
-// keeps git from taking the index lock an agent may need.
+// converters, the repository's own filter drivers, hooks and the fsmonitor
+// hook disabled, and with no inherited GIT_ variables, since a
+// repository's config could otherwise make a diff run commands.
+// GIT_OPTIONAL_LOCKS=0 keeps git from taking the index lock an agent may
+// need.
 package changes
 
 import (
@@ -58,6 +60,19 @@ type Reader struct {
 	Runner run.Runner
 }
 
+// Env is the environment for git: base without any GIT_ variable, which
+// could point git at another repository or inject config
+// (GIT_CONFIG_PARAMETERS), plus no optional locks and no prompts.
+func Env(base []string) []string {
+	out := make([]string, 0, len(base)+2)
+	for _, kv := range base {
+		if !strings.HasPrefix(kv, "GIT_") {
+			out = append(out, kv)
+		}
+	}
+	return append(out, "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
+}
+
 // safeArgs prefixes every git call.
 func safeArgs(dir string) []string {
 	return []string{"-C", dir, "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "--no-pager"}
@@ -66,6 +81,38 @@ func safeArgs(dir string) []string {
 func (r Reader) git(ctx context.Context, dir string, args ...string) (string, error) {
 	out, err := r.Runner.Run(ctx, "git", append(safeArgs(dir), args...)...)
 	return string(out), err
+}
+
+// filterGuard blanks every filter driver the repository itself configures.
+// git diff runs a driver's clean or process command on worktree files, so
+// a hostile repository could otherwise run a command when its changes are
+// shown. Drivers from the user's own global or system config are left
+// alone; those are tools the user installed, such as Git LFS.
+func (r Reader) filterGuard(ctx context.Context, dir string) []string {
+	out, _ := r.git(ctx, dir, "config", "--show-scope", "--get-regexp", `^filter\.`)
+	var guard []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 || f[0] == "global" || f[0] == "system" {
+			continue
+		}
+		key := f[1]
+		dot := strings.LastIndexByte(key, '.')
+		if !strings.HasPrefix(key, "filter.") || dot <= len("filter.") {
+			continue
+		}
+		name := key[len("filter."):dot]
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		for _, k := range []string{"clean", "smudge", "process"} {
+			guard = append(guard, "-c", "filter."+name+"."+k+"=")
+		}
+		guard = append(guard, "-c", "filter."+name+".required=false")
+	}
+	return guard
 }
 
 // Collect reads the changes in the repository holding dir: uncommitted
@@ -90,7 +137,8 @@ func (r Reader) Collect(ctx context.Context, dir, mode string) (Changes, error) 
 	} else {
 		c.Mode = ModeUncommitted
 	}
-	diff, err := r.git(ctx, root, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M", against, "--")
+	args := append(r.filterGuard(ctx, root), "diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M", against, "--")
+	diff, err := r.git(ctx, root, args...)
 	if err != nil {
 		return Changes{}, err
 	}

@@ -53,7 +53,7 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 
 ## Review and steer
 
-- **Changes:** the Changes button shows the session's git changes, uncommitted or since its branch left the default branch. Click a diff line to comment; Send review sends all comments as one numbered prompt. Git runs read-only with external diff tools, text converters and fsmonitor disabled, so a repository's config cannot make it run commands.
+- **Changes:** the Changes button shows the session's git changes, uncommitted or since its branch left the default branch. Click a diff line to comment; Send review sends all comments as one numbered prompt. Git runs read-only with external diff tools, text converters, the repository's filter drivers, hooks and fsmonitor disabled, so a repository's config cannot make it run commands.
 - **Shared files:** ⚠ on a sidebar row and in the session header means another live session wrote the same file in the last six hours.
 - **Activity filter:** above the transcript, show all activity, only shell commands, only file changes, or only errors. Risky shell commands (recursive deletes, force pushes, hard resets, `sudo` and others) carry a warning badge.
 - **Snippets:** the composer's ⋯ menu inserts a saved reply, or type `/name` and press Tab. Edit them in Settings; `{session}`, `{branch}`, `{project}` and `{directory}` are filled in.

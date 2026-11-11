@@ -33,13 +33,13 @@ func Markdown(h Header, items []transcript.Item) string {
 	}
 	fmt.Fprintf(&b, "# %s\n\n", oneLine(title))
 	if h.Directory != "" {
-		fmt.Fprintf(&b, "- Directory: `%s`\n", h.Directory)
+		fmt.Fprintf(&b, "- Directory: %s\n", code(h.Directory))
 	}
 	if h.Branch != "" {
-		fmt.Fprintf(&b, "- Branch: `%s`\n", h.Branch)
+		fmt.Fprintf(&b, "- Branch: %s\n", code(h.Branch))
 	}
 	if h.ID != "" {
-		fmt.Fprintf(&b, "- Conversation: `%s`\n", h.ID)
+		fmt.Fprintf(&b, "- Conversation: %s\n", code(h.ID))
 	}
 	b.WriteString("\n")
 
