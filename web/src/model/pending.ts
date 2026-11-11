@@ -9,8 +9,10 @@ export interface Pending {
   text: string
   sentAt: number
   state: PendingState
-  // message explains a failure or a refusal.
+  // message explains a failure or a refusal; reason is the server's code
+  // for a refusal, such as dialog.
   message?: string
+  reason?: string
 }
 
 // After this long without a matching transcript record, a sent reply is
@@ -39,12 +41,14 @@ function humanPrompts(items: Item[]): Item[] {
 // reconcile removes pending replies that now appear in the transcript as a
 // human prompt (typed or queued). Each record confirms at most one reply,
 // oldest reply first, so sending the same text twice needs two records.
+// A reply still in flight counts too: the transcript can record the prompt
+// before the send request returns.
 export function reconcile(pending: Pending[], items: Item[]): Pending[] {
   if (pending.length === 0) return pending
   const used = new Set<number>()
   const prompts = humanPrompts(items)
   const remaining = pending.filter((p) => {
-    if (p.state === 'failed' || p.state === 'sending') return true
+    if (p.state === 'failed') return true
     const want = normalize(p.text)
     const match = prompts.find((it) => {
       if (used.has(it.seq)) return false

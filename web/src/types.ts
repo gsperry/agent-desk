@@ -79,3 +79,23 @@ export type ServerMessage =
   | { type: 'transcript.page'; page: Page }
   | { type: 'transcript.append'; sessionId: string; items: Item[] }
   | { type: 'error'; message: string }
+
+export interface DialogOption {
+  index: number
+  label: string
+  selected: boolean
+  free?: boolean
+}
+
+export interface Dialog {
+  question?: string
+  options: DialogOption[]
+  footer: string
+}
+
+export interface Screen {
+  text: string
+  dialog?: Dialog
+}
+
+export type Answer = { action: 'choose'; index: number; label: string } | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }

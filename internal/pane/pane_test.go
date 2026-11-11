@@ -1,0 +1,123 @@
+package pane
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
+
+func read(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func labels(d *Dialog) []string {
+	var out []string
+	for _, o := range d.Options {
+		out = append(out, o.Label)
+	}
+	return out
+}
+
+func TestParse(t *testing.T) {
+	tests := []struct {
+		file     string
+		labels   []string
+		selected int
+		question string
+		free     []bool
+	}{
+		{
+			file:     "permission.txt",
+			labels:   []string{"Yes", "Yes, and always allow access to /tmp/agentdesk-scratch/probe from this project", "Yes, and switch to auto mode · auto mode handles these prompts for you", "No"},
+			selected: 0,
+			question: "Do you want to proceed?",
+		},
+		{
+			file:     "trust-dialog.txt",
+			labels:   []string{"No, exit", "Yes, I trust this folder"},
+			selected: 0,
+			question: "Security guide",
+		},
+		{
+			file:     "ask-question.txt",
+			labels:   []string{"Red", "Blue", "Type something.", "Chat about this"},
+			selected: 0,
+			question: "Which color do you pick?",
+			free:     []bool{false, false, true, true},
+		},
+		{
+			file:     "auto-mode-dialog.txt",
+			labels:   []string{"Yes", "Not now", "Don't show again"},
+			selected: 0,
+			question: "Auto mode works better when it knows your environment. Takes about a minute.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			d := Parse(read(t, tt.file))
+			if d == nil {
+				t.Fatal("no dialog")
+			}
+			if !reflect.DeepEqual(labels(d), tt.labels) {
+				t.Fatalf("labels = %q, want %q", labels(d), tt.labels)
+			}
+			for i, o := range d.Options {
+				if o.Index != i || o.Selected != (i == tt.selected) {
+					t.Fatalf("option %d = %+v", i, o)
+				}
+				if tt.free != nil && o.Free != tt.free[i] {
+					t.Fatalf("option %d free = %v", i, o.Free)
+				}
+			}
+			if d.Question != tt.question {
+				t.Fatalf("question = %q, want %q", d.Question, tt.question)
+			}
+		})
+	}
+}
+
+func TestParseNoDialog(t *testing.T) {
+	for _, f := range []string{"idle.txt", "agent-quotes-dialog.txt"} {
+		if d := Parse(read(t, f)); d != nil {
+			t.Errorf("%s: unexpected dialog %+v", f, d)
+		}
+	}
+	if Parse("") != nil {
+		t.Error("empty screen")
+	}
+}
+
+func TestParseSelectionAway(t *testing.T) {
+	screen := " Pick one\n   1. Alpha\n ❯ 2. Beta\n   3. Gamma\n Enter to select · Esc to cancel\n"
+	d := Parse(screen)
+	if d == nil || d.Options[1].Selected != true || d.Options[0].Selected {
+		t.Fatalf("%+v", d)
+	}
+	tests := []struct {
+		index int
+		want  []string
+	}{
+		{0, []string{"Up", "Enter"}},
+		{1, []string{"Enter"}},
+		{2, []string{"Down", "Enter"}},
+	}
+	for _, tt := range tests {
+		if got := d.Moves(tt.index); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("Moves(%d) = %v, want %v", tt.index, got, tt.want)
+		}
+	}
+}
+
+func TestParseIgnoresEarlierNumberedLists(t *testing.T) {
+	screen := "⏺ Plan:\n  1. first step\n  2. second step\n Do it?\n ❯ 1. Yes\n   2. No\n Esc to cancel\n"
+	d := Parse(screen)
+	if d == nil || !reflect.DeepEqual(labels(d), []string{"Yes", "No"}) || d.Question != "Do it?" {
+		t.Fatalf("%+v", d)
+	}
+}

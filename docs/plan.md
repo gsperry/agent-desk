@@ -96,4 +96,4 @@ Prior art read in step 3 and 6: VibeDeck (Apache 2.0) and claude-code-log (MIT) 
 
 ## Upstream proposals
 
-Written up as PR proposals in [docs/upstream](upstream/README.md): `type --at-rest`, `mark-idle` and `snapshot --watch` (done in M3); a `dialog` field and key sending for agents (M4).
+Written up as PR proposals in [docs/upstream](upstream/README.md): `type --at-rest`, `mark-idle` and `snapshot --watch` (M3); a `dialog` field and `keys` for agents (M4).

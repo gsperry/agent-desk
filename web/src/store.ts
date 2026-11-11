@@ -4,7 +4,7 @@ import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Trans
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Page, ServerMessage } from './types'
+import type { Answer, Page, Screen, ServerMessage } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -195,6 +195,7 @@ export class Store {
     this.set({ ...this.state, pending: { ...this.state.pending, [sessionId]: [...(this.state.pending[sessionId] ?? []), entry] } })
     let state: Pending['state'] = 'failed'
     let message: string | undefined
+    let reason: string | undefined
     try {
       const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/send`, {
         method: 'POST',
@@ -203,13 +204,36 @@ export class Store {
       })
       const body = (await res.json().catch(() => ({}))) as { status?: string } & SendRefusal
       if (res.ok) state = body.status === 'maybe' ? 'maybe' : 'sent'
-      else message = body.message ?? body.error ?? `HTTP ${String(res.status)}`
+      else {
+        message = body.message ?? body.error ?? `HTTP ${String(res.status)}`
+        reason = body.reason
+      }
     } catch (e) {
       message = e instanceof Error ? e.message : String(e)
     }
-    this.updatePending(sessionId, clientId, (p) => ({ ...p, state, message, sentAt: Date.now() }))
+    this.updatePending(sessionId, clientId, (p) => ({ ...p, state, message, reason, sentAt: Date.now() }))
     // The transcript may already hold the prompt.
     this.set({ ...this.state, pending: this.reconciled(this.state.data) })
+  }
+
+  // screen reads a session's live pane. A refusal comes back as message.
+  async screen(sessionId: string): Promise<{ screen?: Screen; message?: string }> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/pane`)
+    const body = (await res.json().catch(() => ({}))) as Screen & SendRefusal
+    if (res.ok) return { screen: body }
+    return { message: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+  }
+
+  // answer replies to a dialog; it resolves to an error message or null.
+  async answer(sessionId: string, answer: Answer): Promise<string | null> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(answer),
+    })
+    if (res.ok) return null
+    const body = (await res.json().catch(() => ({}))) as SendRefusal
+    return body.message ?? body.error ?? `HTTP ${String(res.status)}`
   }
 
   dismiss(sessionId: string, clientId: string) {

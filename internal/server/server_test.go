@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
 )
@@ -76,6 +77,18 @@ func (f *fakeSender) Send(_ context.Context, _ string, text string) (send.Result
 	return f.res, f.err
 }
 
+type fakePanes struct {
+	screen pane.Screen
+	err    error
+	answer pane.Answer
+}
+
+func (f *fakePanes) Screen(context.Context, string) (pane.Screen, error) { return f.screen, f.err }
+func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
+	f.answer = a
+	return f.err
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -100,6 +113,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Sender == nil {
 		cfg.Sender = &fakeSender{res: send.Result{Status: send.StatusSent}}
 	}
+	if cfg.Panes == nil {
+		cfg.Panes = &fakePanes{screen: pane.Screen{Text: "screen"}}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +124,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -245,6 +261,50 @@ func TestSend(t *testing.T) {
 				t.Fatalf("status %d body %q, want %d containing %q", rec.Code, rec.Body.String(), tt.wantStatus, tt.wantBody)
 			}
 		})
+	}
+}
+
+func TestPaneRoutes(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		panes      *fakePanes
+		origin     string
+		wantStatus int
+		wantBody   string
+	}{
+		{"screen", "GET", "/api/sessions/a1/pane", "", &fakePanes{screen: pane.Screen{Text: "hello"}}, "", 200, `"text":"hello"`},
+		{"screen refused", "GET", "/api/sessions/a1/pane", "", &fakePanes{err: &send.Refused{Reason: send.ReasonNotRunning}}, "", 409, "not_running"},
+		{"answer", "POST", "/api/sessions/a1/answer", `{"action":"choose","index":1,"label":"No"}`, &fakePanes{}, "http://127.0.0.1:7317", 200, "ok"},
+		{"answer refused", "POST", "/api/sessions/a1/answer", `{"action":"key","key":"x"}`, &fakePanes{err: &send.Refused{Reason: "bad_key"}}, "http://127.0.0.1:7317", 409, "bad_key"},
+		{"answer bad body", "POST", "/api/sessions/a1/answer", `[`, &fakePanes{}, "http://127.0.0.1:7317", 400, "JSON"},
+		{"answer without origin", "POST", "/api/sessions/a1/answer", `{"action":"key","key":"Enter"}`, &fakePanes{}, "", 403, "forbidden"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Panes: tt.panes})
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q, want %d containing %q", rec.Code, rec.Body.String(), tt.wantStatus, tt.wantBody)
+			}
+		})
+	}
+	p := &fakePanes{}
+	s := newTestServer(t, Config{Panes: p})
+	req := httptest.NewRequest("POST", "/api/sessions/a1/answer", strings.NewReader(`{"action":"choose","index":2,"label":"Blue"}`))
+	req.Host, req.Header = "127.0.0.1:7317", http.Header{"Origin": {"http://127.0.0.1:7317"}, "Authorization": {"Bearer " + testToken}}
+	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+	if p.answer != (pane.Answer{Action: "choose", Index: 2, Label: "Blue"}) {
+		t.Fatalf("answer = %+v", p.answer)
 	}
 }
 

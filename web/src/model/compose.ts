@@ -9,7 +9,7 @@ export function blockedReason(session: SessionView, connected: boolean, insideSe
   if (!session.running || session.status === 'dead') return 'Revive this session in agent-manager to reply.'
   if (session.status === 'starting') return 'The agent is still starting.'
   if (session.status === 'waiting')
-    return 'The agent is waiting on a question or permission prompt in its terminal. Answer it in agent-manager.'
+    return 'The agent is waiting on a question or permission prompt. Answer it in the terminal panel above.'
   return null
 }
 

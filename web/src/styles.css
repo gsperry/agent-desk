@@ -1106,3 +1106,102 @@ pre.code-body,
 .switch-row.active {
   background: var(--surface-2);
 }
+
+/* Live pane */
+
+.live-pane {
+  margin: 0 auto;
+  width: min(var(--reading-width), calc(100% - 3rem));
+  padding: 0.6rem 0 0.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.live-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.live-screen {
+  max-height: 28vh;
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  overflow: auto;
+  border-radius: 0.4rem;
+  background: var(--code-bg);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: pre;
+}
+
+.live-dialog {
+  margin-top: 0.6rem;
+}
+
+/* With buttons to answer, the screen is context only. */
+.live-pane:has(.live-dialog) .live-screen {
+  max-height: 14vh;
+}
+
+.live-question {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+.live-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.live-option {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--bg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-option:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.live-option.selected {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.live-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.live-option-index {
+  color: var(--subtle);
+  font-family: var(--font-mono);
+}
+
+.live-cancel {
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.live-message {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  color: var(--warn);
+}

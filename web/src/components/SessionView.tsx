@@ -3,7 +3,9 @@ import { loadingDoc, type Doc } from '../model/docs'
 import type { Pending } from '../model/pending'
 import { buildHeader } from '../model/transcript'
 import type { SessionView as Session } from '../types'
+import type { Answer, Screen } from '../types'
 import { Composer } from './Composer'
+import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
 import { glyph } from './status'
 import { Transcript } from './Transcript'
@@ -20,10 +22,14 @@ interface Props {
   loadOlder: (id: string) => void
   send: (id: string, text: string) => void
   dismiss: (id: string, clientId: string) => void
+  readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
+  answer: (id: string, a: Answer) => Promise<string | null>
 }
 
-export function SessionView({ session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss }: Props) {
+export function SessionView(props: Props) {
+  const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer } = props
   const [sends, setSends] = useState(0)
+  const [showPane, setShowPane] = useState(false)
   const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>()
   useEffect(() => {
     follow(sessionId)
@@ -34,6 +40,11 @@ export function SessionView({ session, sessionId, doc, pending, connected, insid
 
   const d = doc ?? loadingDoc
   const header = useMemo(() => buildHeader(d.items), [d.items])
+
+  // The pane opens on its own when the agent waits, or when a reply was
+  // refused because a dialog is on screen that the status did not show.
+  const dialogRefusal = pending.some((p) => p.state === 'failed' && p.reason === 'dialog')
+  const paneOpen = session?.running === true && (showPane || session.status === 'waiting' || dialogRefusal)
 
   if (!session) {
     return (
@@ -53,6 +64,18 @@ export function SessionView({ session, sessionId, doc, pending, connected, insid
           <h1>{session.name}</h1>
           <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
           {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
+          {session.running && (
+            <button
+              type="button"
+              className="chip chip-button terminal-toggle"
+              aria-pressed={paneOpen}
+              onClick={() => {
+                setShowPane(!showPane)
+              }}
+            >
+              Terminal
+            </button>
+          )}
         </div>
         <div className="session-sub">
           {header.title && <span>{header.title}</span>}
@@ -98,6 +121,20 @@ export function SessionView({ session, sessionId, doc, pending, connected, insid
         />
       ) : (
         <div className="empty">{emptyText(session, d)}</div>
+      )}
+      {paneOpen && (
+        <LivePane
+          sessionId={sessionId}
+          read={readScreen}
+          answer={answer}
+          onClose={
+            showPane
+              ? () => {
+                  setShowPane(false)
+                }
+              : undefined
+          }
+        />
       )}
       <Composer
         key={sessionId}
