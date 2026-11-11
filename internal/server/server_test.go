@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/transcript"
 )
 
 const testToken = "0123456789abcdef0123456789abcdef"
@@ -44,6 +45,25 @@ func (f *fakeSource) Trigger() {
 	f.mu.Unlock()
 }
 
+type fakeTranscripts struct {
+	events chan hub.Event
+	before int
+	limit  int
+}
+
+func newFakeTranscripts() *fakeTranscripts {
+	return &fakeTranscripts{events: make(chan hub.Event, 4)}
+}
+
+func (f *fakeTranscripts) Window(_ context.Context, id string, before, limit int) hub.Page {
+	f.before, f.limit = before, limit
+	return hub.Page{SessionID: id, Status: hub.DocOK}
+}
+
+func (f *fakeTranscripts) Subscribe(_ context.Context, id string) (hub.Page, <-chan hub.Event, func()) {
+	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 0, Kind: transcript.KindUser, Text: "hi"}}}, f.events, func() {}
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -62,6 +82,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Manager == nil {
 		cfg.Manager = fakeManager{}
 	}
+	if cfg.Transcripts == nil {
+		cfg.Transcripts = newFakeTranscripts()
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +93,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts()}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -104,6 +127,11 @@ func TestRequestChecks(t *testing.T) {
 		{"start manager", "POST", "/api/manager/start", "127.0.0.1:7317", "http://127.0.0.1:7317", "Bearer " + testToken, 200},
 		{"start manager without origin", "POST", "/api/manager/start", "127.0.0.1:7317", "", "Bearer " + testToken, 403},
 		{"start manager without token", "POST", "/api/manager/start", "127.0.0.1:7317", "http://127.0.0.1:7317", "", 401},
+		{"transcript window", "GET", "/api/sessions/a1/transcript?before=10&limit=50", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"transcript window bad before", "GET", "/api/sessions/a1/transcript?before=x", "127.0.0.1:7317", "", "Bearer " + testToken, 400},
+		{"transcript window negative before", "GET", "/api/sessions/a1/transcript?before=-5", "127.0.0.1:7317", "", "Bearer " + testToken, 400},
+		{"transcript window huge limit", "GET", "/api/sessions/a1/transcript?limit=99999", "127.0.0.1:7317", "", "Bearer " + testToken, 400},
+		{"transcript window without token", "GET", "/api/sessions/a1/transcript", "127.0.0.1:7317", "", "", 401},
 		{"unknown api route without token", "GET", "/api/anything", "127.0.0.1:7317", "", "", 401},
 		{"static without token", "GET", "/", "127.0.0.1:7317", "", "", 200},
 		{"static on foreign host", "GET", "/", "evil.example", "", "", 403},
@@ -210,6 +238,50 @@ func TestStatic(t *testing.T) {
 				t.Fatalf("status %d body %q, want 200 containing %q", rec.Code, rec.Body.String(), tt.want)
 			}
 		})
+	}
+}
+
+func TestWebSocketTranscript(t *testing.T) {
+	tr := newFakeTranscripts()
+	addr := startLive(t, Config{Transcripts: tr})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/api/ws", &websocket.DialOptions{
+		Subprotocols: []string{WSProtocol, TokenProtocolPrefix + testToken},
+		HTTPHeader:   http.Header{"Origin": {"http://" + addr}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	var msg map[string]any
+	for range 2 { // hello, sessions
+		if err := wsjson.Read(ctx, conn, &msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := wsjson.Write(ctx, conn, map[string]string{"type": "subscribe", "sessionId": "a1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg["type"] != "transcript.page" {
+		t.Fatalf("first transcript message = %v", msg)
+	}
+	tr.events <- hub.Event{SessionID: "a1", Items: []transcript.Item{{Seq: 1, Kind: transcript.KindText, Text: "reply"}}}
+	if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg["type"] != "transcript.append" || msg["sessionId"] != "a1" {
+		t.Fatalf("append = %v", msg)
+	}
+	tr.events <- hub.Event{SessionID: "a1", Reset: true, Page: hub.Page{SessionID: "a1", Status: hub.DocGone}}
+	if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg["type"] != "transcript.page" {
+		t.Fatalf("reset = %v", msg)
 	}
 }
 

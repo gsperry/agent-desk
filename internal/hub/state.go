@@ -38,6 +38,7 @@ type SessionView struct {
 	Running        bool             `json:"running"`
 	Archived       bool             `json:"archived"`
 	Branch         string           `json:"branch,omitempty"`
+	Environment    string           `json:"environment,omitempty"`
 	AgentSessionID string           `json:"agentSessionId,omitempty"`
 	Project        grouping.Project `json:"project"`
 }
@@ -53,6 +54,7 @@ func viewOf(s am.Session, p grouping.Project) SessionView {
 		Running:        s.Running,
 		Archived:       s.Archived,
 		Branch:         s.Branch,
+		Environment:    s.Environment,
 		AgentSessionID: s.AgentSessionID,
 		Project:        p,
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/am"
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/locate"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/server"
 	"github.com/gsperry/agent-desk/web"
@@ -71,19 +72,24 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
+	transcripts, err := newTranscripts(o.fixtures, poller, client)
+	if err != nil {
+		return err
+	}
 	l, err := listen(o.port)
 	if err != nil {
 		return err
 	}
 	addr := l.Addr().String()
 	s, err := server.New(server.Config{
-		Addr:       addr,
-		Token:      token,
-		Version:    version,
-		DevOrigins: o.devOrigins,
-		Assets:     web.Assets(),
-		Sessions:   poller,
-		Manager:    client,
+		Addr:        addr,
+		Token:       token,
+		Version:     version,
+		DevOrigins:  o.devOrigins,
+		Assets:      web.Assets(),
+		Sessions:    poller,
+		Manager:     client,
+		Transcripts: transcripts,
 	})
 	if err != nil {
 		return err
@@ -103,6 +109,7 @@ func run(o options) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go poller.Run(ctx)
+	go transcripts.Run(ctx)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	select {
@@ -130,6 +137,22 @@ func newPoller(fixtures string) (*hub.Poller, am.Client, error) {
 	c := am.NewCLI()
 	p.Client, p.HooksDir = c, hooks
 	return p, c, nil
+}
+
+// newTranscripts reads Claude's transcripts, or <fixtures>/claude in
+// fixture mode.
+func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*hub.Transcripts, error) {
+	root := filepath.Join(fixtures, "claude")
+	if fixtures == "" {
+		var err error
+		if root, err = locate.DefaultRoot(); err != nil {
+			return nil, err
+		}
+	}
+	return &hub.Transcripts{
+		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
+		Sessions: sessions,
+	}, nil
 }
 
 // sessionToken reads AGENT_DESK_TOKEN so `make dev` keeps one token across

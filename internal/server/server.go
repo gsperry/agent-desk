@@ -40,6 +40,13 @@ type Config struct {
 	Sessions SessionSource
 	// Manager starts a headless agent-manager on request.
 	Manager ManagerStarter
+	// Transcripts serves session transcripts.
+	Transcripts TranscriptSource
+}
+
+type TranscriptSource interface {
+	Window(ctx context.Context, sessionID string, before, limit int) hub.Page
+	Subscribe(ctx context.Context, sessionID string) (hub.Page, <-chan hub.Event, func())
 }
 
 type SessionSource interface {
@@ -60,8 +67,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil {
-		return nil, errors.New("sessions and manager are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil {
+		return nil, errors.New("sessions, manager and transcripts are required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -81,6 +88,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	s.mux.Handle("GET /api/health", s.requireToken(http.HandlerFunc(s.health)))
 	s.mux.Handle("GET /api/sessions", s.requireToken(http.HandlerFunc(s.sessions)))
+	s.mux.Handle("GET /api/sessions/{id}/transcript", s.requireToken(http.HandlerFunc(s.transcriptWindow)))
 	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
 	s.mux.HandleFunc("GET /api/ws", s.websocket)
 	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
