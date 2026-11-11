@@ -1,0 +1,106 @@
+package am
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/gsperry/agent-desk/internal/run"
+)
+
+type fakeRunner struct {
+	out  []byte
+	err  error
+	args []string
+}
+
+func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	f.args = append([]string{name}, args...)
+	return f.out, f.err
+}
+
+func TestSnapshot(t *testing.T) {
+	sample, err := os.ReadFile(filepath.Join("testdata", "snapshot.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name      string
+		out       string
+		err       error
+		wantErr   string
+		wantCount int
+	}{
+		{"sample", string(sample), nil, "", 3},
+		{"not installed", "", fmt.Errorf("agent-manager: %w", run.ErrNotFound), ErrNotInstalled.Error(), 0},
+		{"exit error", "", &run.ExitError{Name: "agent-manager", Code: 1, Stderr: "boom"}, "boom", 0},
+		{"invalid json", "{", nil, "not valid JSON", 0},
+		{"unknown version", `{"version": 2, "sessions": []}`, nil, "version 2", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &fakeRunner{out: []byte(tt.out), err: tt.err}
+			c := &CLI{Runner: r, Bin: "agent-manager"}
+			snap, err := c.Snapshot(context.Background())
+			if got := strings.Join(r.args, " "); got != "agent-manager snapshot --json" {
+				t.Errorf("args = %q", got)
+			}
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(snap.Sessions) != tt.wantCount {
+				t.Fatalf("sessions = %d, want %d", len(snap.Sessions), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestSnapshotFields(t *testing.T) {
+	snap, err := Fixture{Path: filepath.Join("testdata", "snapshot.json")}.Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := snap.Sessions[1]
+	if s.Group != "frontend" || s.Branch != "am/login" || s.Status != "waiting" || !s.Running || s.AgentSessionID == "" {
+		t.Fatalf("unexpected session %+v", s)
+	}
+	if !snap.ManagerAwake || len(snap.Groups) != 1 {
+		t.Fatalf("unexpected snapshot %+v", snap)
+	}
+}
+
+func TestNotInstalledIsDetectable(t *testing.T) {
+	c := &CLI{Runner: &fakeRunner{err: fmt.Errorf("x: %w", run.ErrNotFound)}, Bin: "agent-manager"}
+	if err := c.StartServe(context.Background()); !errors.Is(err, ErrNotInstalled) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestConfigDir(t *testing.T) {
+	tests := []struct {
+		name, amDir, xdg, want string
+	}{
+		{"explicit", "/x/am", "/x/xdg", "/x/am"},
+		{"xdg", "", "/x/xdg", "/x/xdg/agent-manager"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("AGENT_MANAGER_CONFIG_DIR", tt.amDir)
+			t.Setenv("XDG_CONFIG_HOME", tt.xdg)
+			got, err := ConfigDir()
+			if err != nil || got != tt.want {
+				t.Fatalf("ConfigDir() = %q, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+}
