@@ -6,6 +6,7 @@ import { Settings } from './components/Settings'
 import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
 import { groupSessions } from './model/sidebar'
+import type { PathRef } from './model/paths'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
 import type { Answer } from './types'
@@ -33,7 +34,7 @@ function isTyping(target: EventTarget | null): boolean {
 function Desk({ token }: { token: string }) {
   const store = useMemo(() => new Store(token), [token])
   useEffect(() => store.start(), [store])
-  const { conn, data, pending, acks, prefs, permission } = useStore(store)
+  const { conn, data, pending, acks, prefs, permission, toast } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
   const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
   const [switcher, setSwitcher] = useState(false)
@@ -124,6 +125,21 @@ function Desk({ token }: { token: string }) {
   }, [store])
   const readScreen = useCallback((id: string) => store.screen(id), [store])
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
+  const openPath = useCallback(
+    (id: string, ref: PathRef) => {
+      void store.openPath(id, ref)
+    },
+    [store],
+  )
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => {
+      store.clearToast(toast.id)
+    }, 5000)
+    return () => {
+      clearTimeout(t)
+    }
+  }, [store, toast])
 
   if (conn.kind === 'unauthorized') return <NoToken />
 
@@ -171,6 +187,7 @@ function Desk({ token }: { token: string }) {
               dismiss={dismiss}
               readScreen={readScreen}
               answer={answer}
+              openPath={openPath}
             />
           ) : (
             <main className="main">
@@ -183,6 +200,11 @@ function Desk({ token }: { token: string }) {
               {attention > 0 ? `${String(attention)} session${attention === 1 ? ' needs' : 's need'} you. Press j to go to the first.` : 'Pick a session on the left, or press ⌘K.'}
             </div>
           </main>
+        )}
+        {toast && (
+          <div className="toast" role="status">
+            {toast.message}
+          </div>
         )}
         {settingsOpen && (
           <Settings

@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { diffStats, patchRows, replaceRows, type DiffRow } from '../model/diff'
+import { toolPathRef } from '../model/paths'
 import { toolLabel } from '../model/transcript'
 import { initiallyOpen } from '../model/viewprefs'
+import { useOpenPath } from '../session-context'
 import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
 import { CodeBlock } from './CodeBlock'
@@ -57,6 +59,8 @@ export function ToolCall({ use, result, live }: Props) {
   const prefs = useViewPrefs()
   const [open, setOpen] = useState(() => initiallyOpen(name, prefs, { failed, diffRows: rows.length }))
   const state = result ? (failed ? 'error' : 'done') : live ? 'running' : 'none'
+  const openPath = useOpenPath()
+  const fileRef = toolPathRef(obj(use.tool?.input), rows.find((r) => r.newNo !== undefined)?.newNo)
 
   return (
     <div className={`tool tool-${state}`}>
@@ -78,6 +82,18 @@ export function ToolCall({ use, result, live }: Props) {
         )}
         <span className="tool-state">{state === 'running' ? '…' : state === 'error' ? 'failed' : ''}</span>
       </button>
+      {fileRef && openPath && (
+        <button
+          type="button"
+          className="tool-open"
+          title={`Open ${fileRef.path} in VS Code`}
+          onClick={() => {
+            openPath(fileRef)
+          }}
+        >
+          Open
+        </button>
+      )}
       {open && <div className="tool-body">{body(use, result, rows)}</div>}
     </div>
   )

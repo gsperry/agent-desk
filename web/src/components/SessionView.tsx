@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadingDoc, type Doc } from '../model/docs'
 import type { Pending } from '../model/pending'
 import { buildHeader } from '../model/transcript'
 import type { SessionView as Session } from '../types'
+import type { PathRef } from '../model/paths'
+import { OpenPathContext } from '../session-context'
 import type { Answer, Screen } from '../types'
 import { Composer } from './Composer'
 import { LivePane } from './LivePane'
@@ -24,10 +26,17 @@ interface Props {
   dismiss: (id: string, clientId: string) => void
   readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
+  openPath: (id: string, ref: PathRef) => void
 }
 
 export function SessionView(props: Props) {
-  const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer } = props
+  const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer, openPath } = props
+  const openHere = useCallback(
+    (ref: PathRef) => {
+      openPath(sessionId, ref)
+    },
+    [openPath, sessionId],
+  )
   const [sends, setSends] = useState(0)
   const [showPane, setShowPane] = useState(false)
   const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>()
@@ -55,99 +64,101 @@ export function SessionView(props: Props) {
   }
 
   return (
-    <main className="main">
-      <header className="session-head">
-        <div className="session-title">
-          <span className={`glyph status-${session.status}`} aria-hidden>
-            {glyph(session.status)}
-          </span>
-          <h1>{session.name}</h1>
-          <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
-          {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
-          {session.running && (
-            <button
-              type="button"
-              className="chip chip-button terminal-toggle"
-              aria-pressed={paneOpen}
-              onClick={() => {
-                setShowPane(!showPane)
-              }}
-            >
-              Terminal
-            </button>
-          )}
-        </div>
-        <div className="session-sub">
-          {header.title && <span>{header.title}</span>}
-          <span className="muted" title={d.path ?? session.directory}>
-            {session.project.name}
-            {session.branch ? ` · ${session.branch}` : ''}
-          </span>
-          {header.prLinks.map((pr) => (
-            <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
-              PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
-            </a>
-          ))}
-        </div>
-      </header>
-      <StatusBanner session={session} doc={d} />
-      {d.items.length > 0 || pending.length > 0 ? (
-        <Transcript
-          sessionId={sessionId}
-          items={d.items}
-          hasMore={d.hasMore}
-          loadingOlder={d.loadingOlder}
-          live={session.running}
-          followKey={sends}
-          onLoadOlder={() => {
-            loadOlder(sessionId)
+    <OpenPathContext.Provider value={openHere}>
+      <main className="main">
+        <header className="session-head">
+          <div className="session-title">
+            <span className={`glyph status-${session.status}`} aria-hidden>
+              {glyph(session.status)}
+            </span>
+            <h1>{session.name}</h1>
+            <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
+            {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
+            {session.running && (
+              <button
+                type="button"
+                className="chip chip-button terminal-toggle"
+                aria-pressed={paneOpen}
+                onClick={() => {
+                  setShowPane(!showPane)
+                }}
+              >
+                Terminal
+              </button>
+            )}
+          </div>
+          <div className="session-sub">
+            {header.title && <span>{header.title}</span>}
+            <span className="muted" title={d.path ?? session.directory}>
+              {session.project.name}
+              {session.branch ? ` · ${session.branch}` : ''}
+            </span>
+            {header.prLinks.map((pr) => (
+              <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
+                PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
+              </a>
+            ))}
+          </div>
+        </header>
+        <StatusBanner session={session} doc={d} />
+        {d.items.length > 0 || pending.length > 0 ? (
+          <Transcript
+            sessionId={sessionId}
+            items={d.items}
+            hasMore={d.hasMore}
+            loadingOlder={d.loadingOlder}
+            live={session.running}
+            followKey={sends}
+            onLoadOlder={() => {
+              loadOlder(sessionId)
+            }}
+            trailing={
+              <PendingReplies
+                pending={pending}
+                onRetry={(p) => {
+                  dismiss(sessionId, p.clientId)
+                  send(sessionId, p.text)
+                }}
+                onEdit={(p) => {
+                  dismiss(sessionId, p.clientId)
+                  setRestore({ text: p.text, nonce: Date.now() })
+                }}
+                onDismiss={(p) => {
+                  dismiss(sessionId, p.clientId)
+                }}
+              />
+            }
+          />
+        ) : (
+          <div className="empty">{emptyText(session, d)}</div>
+        )}
+        {paneOpen && (
+          <LivePane
+            sessionId={sessionId}
+            read={readScreen}
+            answer={answer}
+            onClose={
+              showPane
+                ? () => {
+                    setShowPane(false)
+                  }
+                : undefined
+            }
+          />
+        )}
+        <Composer
+          key={sessionId}
+          session={session}
+          connected={connected}
+          insideSession={insideSession}
+          restore={restore}
+          onSend={(text) => {
+            send(sessionId, text)
+            setSends((n) => n + 1)
           }}
-          trailing={
-            <PendingReplies
-              pending={pending}
-              onRetry={(p) => {
-                dismiss(sessionId, p.clientId)
-                send(sessionId, p.text)
-              }}
-              onEdit={(p) => {
-                dismiss(sessionId, p.clientId)
-                setRestore({ text: p.text, nonce: Date.now() })
-              }}
-              onDismiss={(p) => {
-                dismiss(sessionId, p.clientId)
-              }}
-            />
-          }
         />
-      ) : (
-        <div className="empty">{emptyText(session, d)}</div>
-      )}
-      {paneOpen && (
-        <LivePane
-          sessionId={sessionId}
-          read={readScreen}
-          answer={answer}
-          onClose={
-            showPane
-              ? () => {
-                  setShowPane(false)
-                }
-              : undefined
-          }
-        />
-      )}
-      <Composer
-        key={sessionId}
-        session={session}
-        connected={connected}
-        insideSession={insideSession}
-        restore={restore}
-        onSend={(text) => {
-          send(sessionId, text)
-          setSends((n) => n + 1)
-        }}
-      />
-    </main>
+      </main>
+    </OpenPathContext.Provider>
   )
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
@@ -89,6 +90,16 @@ func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
 	return f.err
 }
 
+type fakeOpener struct {
+	req open.Request
+	err error
+}
+
+func (f *fakeOpener) Open(_ context.Context, req open.Request) error {
+	f.req = req
+	return f.err
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -116,6 +127,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Panes == nil {
 		cfg.Panes = &fakePanes{screen: pane.Screen{Text: "screen"}}
 	}
+	if cfg.Opener == nil {
+		cfg.Opener = &fakeOpener{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +138,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -305,6 +319,45 @@ func TestPaneRoutes(t *testing.T) {
 	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
 	if p.answer != (pane.Answer{Action: "choose", Index: 2, Label: "Blue"}) {
 		t.Fatalf("answer = %+v", p.answer)
+	}
+}
+
+func TestOpenRoute(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		opener     *fakeOpener
+		origin     string
+		wantStatus int
+	}{
+		{"opened", `{"sessionId":"a1","path":"src/x.go","line":4}`, &fakeOpener{}, "http://127.0.0.1:7317", 200},
+		{"refused", `{"path":"x"}`, &fakeOpener{err: &send.Refused{Reason: "not_found"}}, "http://127.0.0.1:7317", 409},
+		{"bad body", `{`, &fakeOpener{}, "http://127.0.0.1:7317", 400},
+		{"no origin", `{"path":"x"}`, &fakeOpener{}, "", 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Opener: tt.opener})
+			req := httptest.NewRequest("POST", "/api/open", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+	o := &fakeOpener{}
+	s := newTestServer(t, Config{Opener: o})
+	req := httptest.NewRequest("POST", "/api/open", strings.NewReader(`{"sessionId":"a1","path":"src/x.go","line":4}`))
+	req.Host, req.Header = "127.0.0.1:7317", http.Header{"Origin": {"http://127.0.0.1:7317"}, "Authorization": {"Bearer " + testToken}}
+	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+	if o.req != (open.Request{SessionID: "a1", Path: "src/x.go", Line: 4}) {
+		t.Fatalf("req = %+v", o.req)
 	}
 }
 

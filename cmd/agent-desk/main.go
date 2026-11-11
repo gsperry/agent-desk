@@ -24,6 +24,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
+	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/pane"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/send"
@@ -94,6 +95,7 @@ func run(o options) error {
 		Transcripts: transcripts,
 		Sender:      &send.Sender{Sessions: poller, Pane: client},
 		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures)},
+		Opener:      opener(o.fixtures, poller),
 	})
 	if err != nil {
 		return err
@@ -166,6 +168,15 @@ func keys(fixtures string) pane.Keys {
 		return pane.FileKeys{Path: filepath.Join(fixtures, "keys.log")}
 	}
 	return pane.TmuxKeys{Runner: procrun.Exec{Timeout: 5 * time.Second}}
+}
+
+// opener runs VS Code's code command, or records it in <fixtures>/open.log
+// in fixture mode.
+func opener(fixtures string, sessions *hub.Poller) *open.Opener {
+	if fixtures != "" {
+		return &open.Opener{Sessions: sessions, Runner: open.LogRunner{Path: filepath.Join(fixtures, "open.log")}, Editor: "code"}
+	}
+	return &open.Opener{Sessions: sessions, Runner: procrun.Exec{Timeout: 10 * time.Second}}
 }
 
 // sessionToken reads AGENT_DESK_TOKEN so `make dev` keeps one token across

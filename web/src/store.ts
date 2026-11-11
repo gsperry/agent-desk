@@ -19,6 +19,9 @@ export interface StoreState {
   acks: Acks
   prefs: Prefs
   permission: Permission
+  // toast is a short message about an action that failed, such as opening
+  // a file.
+  toast: { message: string; id: number } | null
 }
 
 const acksKey = 'agent-desk:acks'
@@ -67,6 +70,7 @@ export class Store {
       acks: readJSON<Acks>(acksKey, {}),
       prefs: readJSON<Prefs>(prefsKey, { notify: true, notifyOnFinish: false }),
       permission: notifier.permission(),
+      toast: null,
     }
   }
 
@@ -234,6 +238,25 @@ export class Store {
     if (res.ok) return null
     const body = (await res.json().catch(() => ({}))) as SendRefusal
     return body.message ?? body.error ?? `HTTP ${String(res.status)}`
+  }
+
+  async openPath(sessionId: string, ref: { path: string; line?: number }) {
+    const res = await apiFetch(this.token, '/api/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, path: ref.path, line: ref.line ?? 0 }),
+    }).catch(() => null)
+    if (res?.ok) return
+    const body = res ? ((await res.json().catch(() => ({}))) as SendRefusal) : {}
+    this.showToast(body.message ?? body.error ?? 'Could not open the file.')
+  }
+
+  showToast(message: string) {
+    this.set({ ...this.state, toast: { message, id: ++this.nextId } })
+  }
+
+  clearToast(id: number) {
+    if (this.state.toast?.id === id) this.set({ ...this.state, toast: null })
   }
 
   dismiss(sessionId: string, clientId: string) {

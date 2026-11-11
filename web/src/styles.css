@@ -1367,3 +1367,59 @@ pre.code-body,
   margin: 0.6rem 0 0;
   font-size: 0.78rem;
 }
+
+/* File links */
+
+.path-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.path-link code {
+  color: var(--accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+.path-link:hover code {
+  text-decoration-style: solid;
+}
+
+.tool {
+  position: relative;
+}
+
+.tool-open {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 0.72rem;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tool:hover .tool-open,
+.tool-open:focus-visible {
+  opacity: 1;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 20;
+  max-width: 28rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.85rem;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+}
