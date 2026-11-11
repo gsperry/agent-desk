@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
 )
 
@@ -64,6 +65,17 @@ func (f *fakeTranscripts) Subscribe(_ context.Context, id string) (hub.Page, <-c
 	return hub.Page{SessionID: id, Status: hub.DocOK, Items: []transcript.Item{{Seq: 0, Kind: transcript.KindUser, Text: "hi"}}}, f.events, func() {}
 }
 
+type fakeSender struct {
+	res  send.Result
+	err  error
+	text string
+}
+
+func (f *fakeSender) Send(_ context.Context, _ string, text string) (send.Result, error) {
+	f.text = text
+	return f.res, f.err
+}
+
 type fakeManager struct{ err error }
 
 func (m fakeManager) StartServe(context.Context) error { return m.err }
@@ -85,6 +97,9 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Transcripts == nil {
 		cfg.Transcripts = newFakeTranscripts()
 	}
+	if cfg.Sender == nil {
+		cfg.Sender = &fakeSender{res: send.Result{Status: send.StatusSent}}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +108,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts()}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -193,6 +208,41 @@ func TestStartManager(t *testing.T) {
 			s.Handler().ServeHTTP(rec, req)
 			if rec.Code != tt.wantStatus || src.triggers != tt.wantTriggers {
 				t.Fatalf("status %d triggers %d, want %d and %d", rec.Code, src.triggers, tt.wantStatus, tt.wantTriggers)
+			}
+		})
+	}
+}
+
+func TestSend(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		sender     *fakeSender
+		origin     string
+		wantStatus int
+		wantBody   string
+	}{
+		{"sent", `{"text":"hello"}`, &fakeSender{res: send.Result{Status: send.StatusSent}}, "http://127.0.0.1:7317", 200, `"status":"sent"`},
+		{"maybe", `{"text":"hello"}`, &fakeSender{res: send.Result{Status: send.StatusMaybe}}, "http://127.0.0.1:7317", 200, `"status":"maybe"`},
+		{"refused", `{"text":"hello"}`, &fakeSender{err: &send.Refused{Reason: send.ReasonDialog, Message: "dialog"}}, "http://127.0.0.1:7317", 409, `"reason":"dialog"`},
+		{"delivery error", `{"text":"hello"}`, &fakeSender{err: errors.New("tmux gone")}, "http://127.0.0.1:7317", 502, "tmux gone"},
+		{"bad body", `nope`, &fakeSender{}, "http://127.0.0.1:7317", 400, "JSON"},
+		{"foreign origin", `{"text":"hello"}`, &fakeSender{}, "http://evil.example", 403, "forbidden"},
+		{"no origin", `{"text":"hello"}`, &fakeSender{}, "", 403, "forbidden"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Sender: tt.sender})
+			req := httptest.NewRequest("POST", "/api/sessions/a1/send", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q, want %d containing %q", rec.Code, rec.Body.String(), tt.wantStatus, tt.wantBody)
 			}
 		})
 	}

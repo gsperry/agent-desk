@@ -25,6 +25,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
 	procrun "github.com/gsperry/agent-desk/internal/run"
+	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
 	"github.com/gsperry/agent-desk/web"
 )
@@ -90,6 +91,7 @@ func run(o options) error {
 		Sessions:    poller,
 		Manager:     client,
 		Transcripts: transcripts,
+		Sender:      &send.Sender{Sessions: poller, Pane: client},
 	})
 	if err != nil {
 		return err

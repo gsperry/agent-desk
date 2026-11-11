@@ -1,0 +1,13 @@
+⏺ The dialog footer reads "Enter to confirm · Esc to cancel", which is
+  what the gate looks for.
+  More explanation follows here.
+  And here.
+  And here.
+  And here.
+  And here.
+  And a final line.
+✻ Worked for 3s · done 6:20 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

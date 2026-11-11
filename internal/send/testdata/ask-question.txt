@@ -1,0 +1,12 @@
+❯ Use the AskUserQuestion tool to ask me to pick a color.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Color
+Which color do you pick?
+❯ 1. Red
+     Pick red
+  2. Blue
+     Pick blue
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+Enter to select · ↑/↓ to navigate · Esc to cancel
