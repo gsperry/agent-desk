@@ -44,9 +44,13 @@ describe('reconcile', () => {
     expect(left[0]?.sentAt).toBe(t0 + 1000)
   })
 
-  it('keeps failed and in-flight replies', () => {
-    const p = [pending('a', 'failed'), pending('b', 'sending')]
-    expect(reconcile(p, [prompt(1, 'a'), prompt(2, 'b')])).toBe(p)
+  it('keeps failed replies', () => {
+    const p = [pending('a', 'failed')]
+    expect(reconcile(p, [prompt(1, 'a')])).toBe(p)
+  })
+
+  it('confirms a reply whose send has not returned yet', () => {
+    expect(reconcile([pending('b', 'sending')], [prompt(2, 'b')])).toEqual([])
   })
 
   it('does not match assistant text', () => {
