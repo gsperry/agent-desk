@@ -2,6 +2,8 @@
 
 A local GUI for reading and driving the agent sessions that [agent-manager](https://github.com/YoanWai/agent-manager) runs.
 
+Website: [agent-desk.app](https://agent-desk.app)
+
 agent-manager stays the session engine: every agent runs in its tmux server, and closing Agent Desk leaves them all running. Agent Desk is the viewing and talking surface: transcripts rendered as documents, a proper composer, and notifications when a session needs you.
 
 Agent Desk is an independent project. It is not affiliated with or endorsed by the agent-manager authors or Anthropic.
