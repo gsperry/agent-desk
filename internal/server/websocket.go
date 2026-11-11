@@ -8,6 +8,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+
+	"github.com/gsperry/agent-desk/internal/hub"
 )
 
 func (s *Server) wsTokenOK(r *http.Request) bool {
@@ -44,12 +46,21 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	if err := wsjson.Write(ctx, conn, map[string]any{"type": "hello", "version": s.cfg.Version}); err != nil {
 		return
 	}
+	updates, unsubscribe := s.cfg.Sessions.Subscribe()
+	defer unsubscribe()
+	if err := writeSessions(ctx, conn, s.cfg.Sessions.State()); err != nil {
+		return
+	}
 	ping := time.NewTicker(30 * time.Second)
 	defer ping.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case st := <-updates:
+			if err := writeSessions(ctx, conn, st); err != nil {
+				return
+			}
 		case <-ping.C:
 			pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			err := conn.Ping(pctx)
@@ -59,4 +70,10 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func writeSessions(ctx context.Context, conn *websocket.Conn, st hub.State) error {
+	wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return wsjson.Write(wctx, conn, map[string]any{"type": "sessions", "state": st})
 }

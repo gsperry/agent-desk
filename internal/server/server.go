@@ -6,6 +6,7 @@
 package server
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/gsperry/agent-desk/internal/hub"
 )
 
 // WSProtocol is the WebSocket subprotocol the server speaks. Browsers cannot
@@ -32,6 +36,20 @@ type Config struct {
 	DevOrigins []string
 	// Assets is the built frontend. A nil or empty FS serves a placeholder.
 	Assets fs.FS
+	// Sessions is the live session list.
+	Sessions SessionSource
+	// Manager starts a headless agent-manager on request.
+	Manager ManagerStarter
+}
+
+type SessionSource interface {
+	State() hub.State
+	Subscribe() (<-chan hub.State, func())
+	Trigger()
+}
+
+type ManagerStarter interface {
+	StartServe(ctx context.Context) error
 }
 
 type Server struct {
@@ -42,6 +60,9 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
+	if cfg.Sessions == nil || cfg.Manager == nil {
+		return nil, errors.New("sessions and manager are required")
+	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
 	}
@@ -59,6 +80,8 @@ func New(cfg Config) (*Server, error) {
 		s.origins[strings.TrimRight(o, "/")] = true
 	}
 	s.mux.Handle("GET /api/health", s.requireToken(http.HandlerFunc(s.health)))
+	s.mux.Handle("GET /api/sessions", s.requireToken(http.HandlerFunc(s.sessions)))
+	s.mux.Handle("POST /api/manager/start", s.requireToken(http.HandlerFunc(s.startManager)))
 	s.mux.HandleFunc("GET /api/ws", s.websocket)
 	s.mux.Handle("/api/", s.requireToken(http.NotFoundHandler()))
 	s.mux.Handle("/", s.static())
@@ -120,6 +143,21 @@ func (s *Server) requireToken(next http.Handler) http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.cfg.Version})
+}
+
+func (s *Server) sessions(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.cfg.Sessions.State())
+}
+
+func (s *Server) startManager(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := s.cfg.Manager.StartServe(ctx); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	s.cfg.Sessions.Trigger()
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

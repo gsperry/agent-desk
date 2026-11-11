@@ -2,19 +2,51 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+
+	"github.com/gsperry/agent-desk/internal/hub"
 )
 
 const testToken = "0123456789abcdef0123456789abcdef"
+
+type fakeSource struct {
+	mu       sync.Mutex
+	state    hub.State
+	ch       chan hub.State
+	triggers int
+}
+
+func newFakeSource() *fakeSource {
+	return &fakeSource{state: hub.State{ManagerAwake: true, Sessions: []hub.SessionView{{ID: "a1", Name: "one", Status: "idle"}}}, ch: make(chan hub.State, 1)}
+}
+
+func (f *fakeSource) State() hub.State {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.state
+}
+func (f *fakeSource) Subscribe() (<-chan hub.State, func()) { return f.ch, func() {} }
+func (f *fakeSource) Trigger() {
+	f.mu.Lock()
+	f.triggers++
+	f.mu.Unlock()
+}
+
+type fakeManager struct{ err error }
+
+func (m fakeManager) StartServe(context.Context) error { return m.err }
 
 func newTestServer(t *testing.T, cfg Config) *Server {
 	t.Helper()
@@ -24,6 +56,12 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Token == "" {
 		cfg.Token = testToken
 	}
+	if cfg.Sessions == nil {
+		cfg.Sessions = newFakeSource()
+	}
+	if cfg.Manager == nil {
+		cfg.Manager = fakeManager{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +70,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short"}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -61,6 +99,11 @@ func TestRequestChecks(t *testing.T) {
 		{"POST without origin", "POST", "/api/anything", "127.0.0.1:7317", "", "Bearer " + testToken, 403},
 		{"POST with foreign origin", "POST", "/api/anything", "127.0.0.1:7317", "http://evil.example", "Bearer " + testToken, 403},
 		{"POST with own origin, unknown route", "POST", "/api/anything", "127.0.0.1:7317", "http://127.0.0.1:7317", "Bearer " + testToken, 404},
+		{"sessions with token", "GET", "/api/sessions", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"sessions without token", "GET", "/api/sessions", "127.0.0.1:7317", "", "", 401},
+		{"start manager", "POST", "/api/manager/start", "127.0.0.1:7317", "http://127.0.0.1:7317", "Bearer " + testToken, 200},
+		{"start manager without origin", "POST", "/api/manager/start", "127.0.0.1:7317", "", "Bearer " + testToken, 403},
+		{"start manager without token", "POST", "/api/manager/start", "127.0.0.1:7317", "http://127.0.0.1:7317", "", 401},
 		{"unknown api route without token", "GET", "/api/anything", "127.0.0.1:7317", "", "", 401},
 		{"static without token", "GET", "/", "127.0.0.1:7317", "", "", 200},
 		{"static on foreign host", "GET", "/", "evil.example", "", "", 403},
@@ -79,6 +122,49 @@ func TestRequestChecks(t *testing.T) {
 			s.Handler().ServeHTTP(rec, req)
 			if rec.Code != tt.want {
 				t.Fatalf("status = %d, want %d (body %q)", rec.Code, tt.want, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSessionsBody(t *testing.T) {
+	s := newTestServer(t, Config{})
+	req := httptest.NewRequest("GET", "/api/sessions", nil)
+	req.Host = "127.0.0.1:7317"
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	var st hub.State
+	if err := json.Unmarshal(rec.Body.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	if !st.ManagerAwake || len(st.Sessions) != 1 || st.Sessions[0].ID != "a1" {
+		t.Fatalf("state %+v", st)
+	}
+}
+
+func TestStartManager(t *testing.T) {
+	tests := []struct {
+		name         string
+		err          error
+		wantStatus   int
+		wantTriggers int
+	}{
+		{"started", nil, 200, 1},
+		{"failed", errors.New("serve failed"), 502, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := newFakeSource()
+			s := newTestServer(t, Config{Sessions: src, Manager: fakeManager{err: tt.err}})
+			req := httptest.NewRequest("POST", "/api/manager/start", nil)
+			req.Host = "127.0.0.1:7317"
+			req.Header.Set("Origin", "http://127.0.0.1:7317")
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus || src.triggers != tt.wantTriggers {
+				t.Fatalf("status %d triggers %d, want %d and %d", rec.Code, src.triggers, tt.wantStatus, tt.wantTriggers)
 			}
 		})
 	}
@@ -128,6 +214,9 @@ func TestStatic(t *testing.T) {
 }
 
 func startLive(t *testing.T, cfg Config) string {
+	if cfg.Sessions == nil {
+		cfg.Sessions = newFakeSource()
+	}
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -139,6 +228,37 @@ func startLive(t *testing.T, cfg Config) string {
 	srv.Start()
 	t.Cleanup(srv.Close)
 	return cfg.Addr
+}
+
+func TestWebSocketPushesUpdates(t *testing.T) {
+	src := newFakeSource()
+	addr := startLive(t, Config{Sessions: src})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/api/ws", &websocket.DialOptions{
+		Subprotocols: []string{WSProtocol, TokenProtocolPrefix + testToken},
+		HTTPHeader:   http.Header{"Origin": {"http://" + addr}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	var msg struct {
+		Type  string    `json:"type"`
+		State hub.State `json:"state"`
+	}
+	for range 2 { // hello, initial sessions
+		if err := wsjson.Read(ctx, conn, &msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	src.ch <- hub.State{Sessions: []hub.SessionView{{ID: "b2", Status: "waiting"}}}
+	if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg.Type != "sessions" || msg.State.Sessions[0].Status != "waiting" {
+		t.Fatalf("update = %+v", msg)
+	}
 }
 
 func TestWebSocket(t *testing.T) {
@@ -188,6 +308,16 @@ func TestWebSocket(t *testing.T) {
 			}
 			if hello["type"] != "hello" || hello["version"] != "test" {
 				t.Fatalf("hello = %v", hello)
+			}
+			var first struct {
+				Type  string    `json:"type"`
+				State hub.State `json:"state"`
+			}
+			if err := wsjson.Read(ctx, conn, &first); err != nil {
+				t.Fatal(err)
+			}
+			if first.Type != "sessions" || len(first.State.Sessions) != 1 {
+				t.Fatalf("first message = %+v", first)
 			}
 		})
 	}
