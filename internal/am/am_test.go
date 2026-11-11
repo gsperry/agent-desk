@@ -99,7 +99,7 @@ func TestProfileVar(t *testing.T) {
 			t.Fatalf("%s: got %q, %v; want %q", tt.key, got, err, tt.want)
 		}
 	}
-	if got := strings.Join(r.args, " "); got != "agent-manager env show alt --json" {
+	if got := strings.Join(r.args, " "); got != "agent-manager env show --json -- alt" {
 		t.Fatalf("args = %q", got)
 	}
 }

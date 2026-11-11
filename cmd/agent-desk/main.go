@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"log"
 	"net"
 	"net/http"
@@ -195,6 +196,10 @@ func opener(fixtures string, sessions *hub.Poller) *open.Opener {
 // backend restarts. Otherwise each start gets a fresh random token.
 func sessionToken() (string, error) {
 	if t := os.Getenv("AGENT_DESK_TOKEN"); t != "" {
+		// Child processes must not inherit it.
+		if err := os.Unsetenv("AGENT_DESK_TOKEN"); err != nil {
+			return "", err
+		}
 		if len(t) < 32 {
 			return "", errors.New("AGENT_DESK_TOKEN must be at least 32 characters")
 		}
@@ -216,21 +221,58 @@ func listen(port int) (net.Listener, error) {
 	return net.Listen("tcp", "127.0.0.1:0")
 }
 
+// openBrowser opens the app through a private launcher file rather than
+// the URL itself, so the token never appears in a process's arguments,
+// which other accounts on the machine can read.
 func openBrowser(url string) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		log.Printf("could not open a browser: %v", err)
+		return
+	}
+	path, err := writeLauncher(filepath.Join(dir, "agent-desk"), url)
+	if err != nil {
+		log.Printf("could not open a browser: %v", err)
+		return
+	}
+	// The browser reads the file within moments; it is not needed after.
+	time.AfterFunc(30*time.Second, func() { _ = os.Remove(path) })
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", url)
+		cmd = exec.Command("open", path)
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	default:
-		cmd = exec.Command("xdg-open", url)
+		cmd = exec.Command("xdg-open", path)
 	}
 	if err := cmd.Start(); err != nil {
 		log.Printf("could not open a browser: %v", err)
 		return
 	}
 	go func() { _ = cmd.Wait() }()
+}
+
+// writeLauncher writes an owner-only HTML file that redirects to url, in an
+// owner-only directory, and returns its path.
+func writeLauncher(dir, url string) (string, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, "open-*.html")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	u := html.EscapeString(url)
+	page := `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=` + u + `"><title>Agent Desk</title><p><a href="` + u + `">Open Agent Desk</a></p>`
+	if _, err := f.WriteString(page); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func splitList(s string) []string {

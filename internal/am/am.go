@@ -110,7 +110,7 @@ func (c *CLI) StartServe(ctx context.Context) error {
 }
 
 func (c *CLI) ProfileVar(ctx context.Context, profile, key string) (string, error) {
-	out, err := c.run(ctx, "env", "show", profile, "--json")
+	out, err := c.run(ctx, "env", "show", "--json", "--", profile)
 	if err != nil {
 		return "", err
 	}

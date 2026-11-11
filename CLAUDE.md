@@ -7,7 +7,7 @@ Background: [docs/integration-notes.md](docs/integration-notes.md) (how agent-ma
 ## Hard rules
 
 - **Never write to `~/.claude`.** Transcripts are read-only input.
-- **Never call the Anthropic API or any model API, and never ask for or read an API key.** Claude Code is billed through Vertex. Agent Desk only reads local files and runs local CLIs (`agent-manager`, `tmux`).
+- **Never call the Anthropic API or any model API, and never ask for or read an API key.** Users run Claude Code on their own provider setup (Anthropic, Vertex AI, Bedrock), which the local CLIs already carry. Agent Desk only reads local files and runs local CLIs (`agent-manager`, `tmux`, `code`).
 - **Do not fork or vendor agent-manager.** Integrate through its CLI. Gaps that need upstream changes go in `docs/upstream/` as PR proposals.
 - **Every tmux call names the socket**: `tmux -L agentmgr`. A bare `tmux` hits the user's own server.
 - **The JSONL parser is tolerant.** Unknown or malformed records become raw items. Never crash on input, never silently drop a record. New record shapes get an anonymized sample in `testdata/` with the Claude Code version it came from.

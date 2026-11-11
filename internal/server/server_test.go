@@ -208,7 +208,8 @@ func TestRequestChecks(t *testing.T) {
 		want   int
 	}{
 		{"health with token", "GET", "/api/health", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
-		{"health via localhost host", "GET", "/api/health", "localhost:7317", "", "Bearer " + testToken, 200},
+		{"localhost host is not trusted", "GET", "/api/health", "localhost:7317", "", "Bearer " + testToken, 403},
+		{"localhost origin is not trusted", "GET", "/api/health", "127.0.0.1:7317", "http://localhost:7317", "Bearer " + testToken, 403},
 		{"health without token", "GET", "/api/health", "127.0.0.1:7317", "", "", 401},
 		{"health with wrong token", "GET", "/api/health", "127.0.0.1:7317", "", "Bearer " + strings.Repeat("x", 32), 401},
 		{"token without bearer prefix", "GET", "/api/health", "127.0.0.1:7317", "", testToken, 401},

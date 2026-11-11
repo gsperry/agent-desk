@@ -84,6 +84,18 @@ describe('buildHeader', () => {
   })
 })
 
+describe('PR links', () => {
+  it.each([
+    ['https://github.com/o/r/pull/1', 1],
+    ['vscode://file/etc/passwd', 0],
+    ['javascript:alert(1)', 0],
+    ['file:///etc/hosts', 0],
+    ['not a url', 0],
+  ])('%s renders %i link', (prUrl, want) => {
+    expect(buildHeader([item('meta', { label: 'pr-link', meta: { prUrl } })]).prLinks).toHaveLength(want)
+  })
+})
+
 describe('toolLabel', () => {
   it.each([
     ['Bash with description', { name: 'Bash', input: { command: 'ls -la', description: 'List files' } }, 'Bash', 'List files'],

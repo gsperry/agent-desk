@@ -70,10 +70,11 @@ func (x Exec) Run(ctx context.Context, name string, args ...string) ([]byte, err
 }
 
 // Environ is the process environment without the variables that make
-// agent-manager treat a child process as one of its own sessions. Process
-// ancestry can still identify a caller; see docs/integration-notes.md.
+// agent-manager treat a child process as one of its own sessions, and
+// without Agent Desk's token. Process ancestry can still identify a
+// caller; see docs/integration-notes.md.
 func Environ() []string {
-	drop := map[string]bool{"TMUX": true, "TMUX_PANE": true, "AGENT_MANAGER_SESSION_ID": true}
+	drop := map[string]bool{"TMUX": true, "TMUX_PANE": true, "AGENT_MANAGER_SESSION_ID": true, "AGENT_DESK_TOKEN": true}
 	var env []string
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")

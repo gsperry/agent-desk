@@ -33,6 +33,14 @@ The gate comes from each tool's own rules in `builtinTools`, so it applies to ev
 - A table test over captured panes (trust dialog, AskUserQuestion, permission prompt, idle prompt, prompt with a draft) for each tool with fixtures in `internal/status/testdata`.
 - An end-to-end test that `type --at-rest` on a pane showing a dialog exits 4 and leaves the pane unchanged.
 
+## Related: text on stdin
+
+`type`, `send` and `spawn --prompt` take the text as a command argument, which other accounts on the machine can read with `ps` while the command runs. Accepting `-` for the text (read from stdin) would keep messages private:
+
+```
+printf '%s' "$text" | agent-manager type <session-id> - --at-rest
+```
+
 ## Why not just use send
 
 `send` is at-most-once queued delivery with sender identity, rate limits and an envelope. `type` is the user's own keystrokes. `--at-rest` keeps `type`'s meaning and adds only the safety check.

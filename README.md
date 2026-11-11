@@ -4,11 +4,13 @@ A local GUI for reading and driving the agent sessions that [agent-manager](http
 
 agent-manager stays the session engine: every agent runs in its tmux server, and closing Agent Desk leaves them all running. Agent Desk is the viewing and talking surface: transcripts rendered as documents, a proper composer, and notifications when a session needs you.
 
+Agent Desk is an independent project. It is not affiliated with or endorsed by the agent-manager authors or Anthropic.
+
 ![A session rendered in Agent Desk: the sidebar groups sessions by project with live status, and the transcript reads as a document](docs/screenshot.png)
 
 The screenshot shows anonymized fixture data (`make screenshot`).
 
-Status: early development. Milestones are in [docs/plan.md](docs/plan.md).
+Status: early. Built and used on macOS (Apple Silicon); CI also builds and tests on Linux. The design and milestones are in [docs/plan.md](docs/plan.md).
 
 ## Prerequisites
 
@@ -72,7 +74,7 @@ A session needs you when it is waiting on a question or permission prompt, has e
 ## Development
 
 ```sh
-make dev     # backend under air plus Vite, with hot reload on both
+make dev     # backend on :7318 under air plus Vite on :5173, with hot reload on both
 make test    # Go and Vitest
 make lint    # gofmt, go vet, staticcheck, ESLint, tsc
 make e2e     # Playwright smoke test against fixture sessions
@@ -93,6 +95,8 @@ go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl
 - Every request must name the server's own host, which blocks DNS rebinding. State-changing requests and WebSocket upgrades must come from the app's own origin.
 - No telemetry and no network calls beyond localhost. Agent Desk never calls a model API and never asks for an API key.
 - Read-only toward Claude Code's data: nothing is written under `~/.claude`.
+
+Report security problems privately; see [SECURITY.md](SECURITY.md).
 
 ## Known limits
 

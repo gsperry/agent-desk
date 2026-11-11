@@ -124,9 +124,11 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{
-		cfg:     cfg,
-		hosts:   map[string]bool{"127.0.0.1:" + port: true, "localhost:" + port: true},
-		origins: map[string]bool{"http://127.0.0.1:" + port: true, "http://localhost:" + port: true},
+		cfg: cfg,
+		// Only the IPv4 loopback the server binds. localhost can resolve to
+		// ::1, where another local account could listen on the same port.
+		hosts:   map[string]bool{"127.0.0.1:" + port: true},
+		origins: map[string]bool{"http://127.0.0.1:" + port: true},
 		mux:     http.NewServeMux(),
 	}
 	for _, o := range cfg.DevOrigins {
@@ -166,7 +168,7 @@ func (s *Server) Handler() http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Frame-Options", "DENY")
-		h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
+		h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'")
 		s.mux.ServeHTTP(w, r)
 	})
 }

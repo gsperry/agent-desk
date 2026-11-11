@@ -141,7 +141,8 @@ export function buildHeader(items: Item[]): Header {
         if (typeof m.permissionMode === 'string') permissionMode = m.permissionMode
         break
       case 'pr-link':
-        if (typeof m.prUrl === 'string') {
+        // Transcript data decides the href, so only https links render.
+        if (typeof m.prUrl === 'string' && isHttps(m.prUrl)) {
           prs.set(m.prUrl, {
             url: m.prUrl,
             number: typeof m.prNumber === 'number' ? m.prNumber : undefined,
@@ -152,6 +153,14 @@ export function buildHeader(items: Item[]): Header {
     }
   }
   return { title: custom ?? ai, prLinks: [...prs.values()], permissionMode }
+}
+
+function isHttps(u: string): boolean {
+  try {
+    return new URL(u).protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 function str(v: unknown): string | undefined {
