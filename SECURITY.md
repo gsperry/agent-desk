@@ -22,4 +22,11 @@ Agent Desk can type into agent sessions and start new ones, so access to its API
 - Child processes (`agent-manager`, `tmux`, `code`, `git`) run with argument lists, never a shell, and with timeouts. Values that could look like flags are passed as `--flag=value` or after `--`.
 - Transcript content is rendered without raw HTML.
 
+- The browser opens through an owner-only launcher file, so the token never appears in a process's arguments, which other accounts can read.
+
+Known limits:
+
+- The URL with the token is printed when Agent Desk starts. Do not redirect that output to a file other accounts can read.
+- A reply or first prompt is passed to agent-manager as a command argument, so another account on the same machine running `ps` at that moment could read the text. Proposed upstream: [type --at-rest](docs/upstream/type-at-rest.md) asks agent-manager to accept text on stdin.
+
 Out of scope: an attacker who already runs code as your user account. That account can drive agent-manager directly.

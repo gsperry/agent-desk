@@ -74,7 +74,7 @@ A session needs you when it is waiting on a question or permission prompt, has e
 ## Development
 
 ```sh
-make dev     # backend under air plus Vite, with hot reload on both
+make dev     # backend on :7318 under air plus Vite on :5173, with hot reload on both
 make test    # Go and Vitest
 make lint    # gofmt, go vet, staticcheck, ESLint, tsc
 make e2e     # Playwright smoke test against fixture sessions

@@ -2,12 +2,13 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-const backend = process.env.AGENT_DESK_BACKEND ?? 'http://127.0.0.1:7317'
+// Dev uses its own port so it never collides with an installed Agent Desk.
+const backend = process.env.AGENT_DESK_BACKEND ?? 'http://127.0.0.1:7318'
 
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: 'localhost',
+    host: '127.0.0.1',
     port: 5173,
     strictPort: true,
     proxy: {

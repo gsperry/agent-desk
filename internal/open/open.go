@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/run"
@@ -66,7 +67,7 @@ func (o *Opener) Open(ctx context.Context, req Request) error {
 
 func (o *Opener) resolve(req Request) (string, error) {
 	p := strings.TrimSpace(strings.TrimPrefix(req.Path, "file://"))
-	if p == "" || req.Line < 0 || strings.ContainsRune(p, 0) {
+	if p == "" || req.Line < 0 || strings.ContainsFunc(p, unicode.IsControl) {
 		return "", &send.Refused{Reason: reasonBadRequest, Message: "No file path to open."}
 	}
 	if strings.HasPrefix(p, "~/") {
@@ -87,8 +88,14 @@ func (o *Opener) resolve(req Request) (string, error) {
 		p = filepath.Join(dir, p)
 	}
 	p = filepath.Clean(p)
-	if _, err := os.Stat(p); err != nil {
+	info, err := os.Stat(p)
+	if err != nil {
 		return "", &send.Refused{Reason: reasonNotFound, Message: fmt.Sprintf("%s does not exist.", p)}
+	}
+	// A directory would open as a VS Code workspace, a bigger step than
+	// viewing a file a transcript mentions.
+	if info.IsDir() {
+		return "", &send.Refused{Reason: reasonBadRequest, Message: fmt.Sprintf("%s is a directory; only files open from here.", p)}
 	}
 	return p, nil
 }

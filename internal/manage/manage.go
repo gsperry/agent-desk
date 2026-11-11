@@ -64,10 +64,14 @@ func (m *Manager) Options(ctx context.Context) (Options, error) {
 const (
 	maxName   = 80
 	maxPrompt = 64 << 10
-	maxValue  = 100
 )
 
-var groupPath = regexp.MustCompile(`^[\pL\pN _.-]+(/[\pL\pN _.-]+)*$`)
+var (
+	groupPath = regexp.MustCompile(`^[\pL\pN _.-]+(/[\pL\pN _.-]+)*$`)
+	// modelValue covers model ids such as claude-opus-4-1, gpt-5.1 or
+	// opus[1m]; anything else is refused before it reaches a CLI.
+	modelValue = regexp.MustCompile(`^[A-Za-z0-9._:\[\]-]{1,100}$`)
+)
 
 func hasControl(s string) bool {
 	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' })
@@ -93,8 +97,8 @@ func (m *Manager) Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, err
 		return am.Session{}, refuse("The name must be at most %d characters with no control characters.", maxName)
 	}
 	for _, v := range []string{r.Model, r.Effort} {
-		if len(v) > maxValue || strings.ContainsFunc(v, unicode.IsSpace) {
-			return am.Session{}, refuse("Model and effort are single words.")
+		if v != "" && !modelValue.MatchString(v) {
+			return am.Session{}, refuse("Model and effort take letters, digits and . _ : - [ ] only.")
 		}
 	}
 	if len(r.Prompt) > maxPrompt || hasControl(r.Prompt) {
@@ -115,6 +119,9 @@ func (m *Manager) Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, err
 
 func existingDir(p string) (string, error) {
 	p = strings.TrimSpace(p)
+	if strings.ContainsFunc(p, unicode.IsControl) {
+		return "", refuse("The directory path holds control characters.")
+	}
 	if strings.HasPrefix(p, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
 			p = filepath.Join(home, p[2:])

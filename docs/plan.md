@@ -49,7 +49,7 @@ testdata/              anonymized JSONL samples, each with its Claude Code versi
 - Listen on `127.0.0.1` only, port from `--port` (default 7317, falls back to a free port).
 - 32-byte random token per start. Startup opens `http://127.0.0.1:<port>/#t=<token>`. The page moves the token into `sessionStorage` and clears the URL.
 - REST requires `Authorization: Bearer <token>`. WebSocket carries it as a subprotocol, since browsers cannot set headers there.
-- Every request checks `Host` is `127.0.0.1:<port>` or `localhost:<port>` (DNS rebinding). State-changing requests and WebSocket upgrades also check `Origin`.
+- Every request checks `Host` is `127.0.0.1:<port>` (DNS rebinding). State-changing requests and WebSocket upgrades also check `Origin`.
 - Static assets need no token and hold no data.
 - No network calls besides localhost. No telemetry. Nothing written under `~/.claude`. The app never reads `ANTHROPIC_API_KEY` or calls any model API.
 
