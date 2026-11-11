@@ -333,10 +333,13 @@ function Desk({ token }: { token: string }) {
   if (conn.kind === 'unauthorized') return <NoToken />
 
   const session = sessions.find((s) => s.id === selected)
+  // On a phone the list and a view take turns; a view is showing when a
+  // session, search, history or usage is open.
+  const mainActive = searchQuery !== null || usageOpen || historyRoute !== null || selected !== null
   return (
     <ViewPrefsContext.Provider value={viewPrefs}>
     <SnippetsContext.Provider value={snippets}>
-        <div className="desk">
+        <div className={mainActive ? 'desk show-main' : 'desk show-nav'}>
           <Sidebar
             state={data.sessions}
             conn={conn}
@@ -378,83 +381,92 @@ function Desk({ token }: { token: string }) {
             onUsage={openUsage}
             usageOpen={usageOpen}
           />
-          {searchQuery ? (
-            <SearchView
-              query={searchQuery}
-              archived={searchArchived}
-              onArchived={setSearchArchived}
-              run={runSearch}
-              around={around}
-              openPath={openPath}
-              onOpenSession={select}
-              onClose={() => {
-                setSearchText('')
-                setSearchQuery(null)
-              }}
-            />
-          ) : usageOpen ? (
-            <UsageView load={readUsage} conversations={conversations} loadConversations={loadConversations} onOpenConversation={openHistory} />
-          ) : historyRoute ? (
-            historyRoute.id ? (
-              <ConversationView
-                key={historyRoute.id}
-                id={historyRoute.id}
-                conversation={conversations?.find((c) => c.id === historyRoute.id)}
-                owner={owners.get(historyRoute.id)}
-                load={readConversation}
-                onBack={() => {
-                  openHistory(null)
-                }}
-                onOpenSession={select}
-                onExport={exportConversation}
-                onResume={(c) => {
-                  setModal({ kind: 'spawn', initial: resumeDefaults(c.id, c.directory ?? ''), resumeTitle: conversationTitle(c) })
-                }}
-              />
-            ) : (
-              <HistoryList load={loadConversations} owners={owners} onOpen={openHistory} />
-            )
-          ) : selected ? (
-            data.sessions ? (
-              <SessionView
-                key={selected}
-                session={session}
-                sessionId={selected}
-                doc={data.docs[selected]}
-                pending={pending[selected] ?? noPending}
-                connected={conn.kind === 'open'}
-                insideSession={data.sessions.insideSession}
-                follow={follow}
-                unfollow={unfollow}
-                loadOlder={loadOlder}
-                send={send}
-                dismiss={dismiss}
-                readScreen={readScreen}
-                readStyled={readStyled}
-                answer={answer}
+          <div className="main-col">
+            {mainActive && (
+              <div className="mobile-bar">
+                <button type="button" className="link-button" onClick={goHome}>
+                  ‹ Sessions
+                </button>
+              </div>
+            )}
+            {searchQuery ? (
+              <SearchView
+                query={searchQuery}
+                archived={searchArchived}
+                onArchived={setSearchArchived}
+                run={runSearch}
+                around={around}
                 openPath={openPath}
-                groups={amGroups}
-                act={act}
-                seenMark={session?.agentSessionId ? seen[session.agentSessionId] : undefined}
-                readAgents={readAgents}
-                readAgentTranscript={readAgentTranscript}
-                readChanges={readChanges}
-                conflicts={selected ? (conflicts[selected] ?? []) : []}
-                sessions={sessions}
-                pasteImage={pasteImage}
-                exportConversation={exportConversation}
-                suggestion={suggestions[selected]}
-                catchUp={summaries.enabled ? catchUp : undefined}
-                dismissSuggestion={dismissSuggestion}
+                onOpenSession={select}
+                onClose={() => {
+                  setSearchText('')
+                  setSearchQuery(null)
+                }}
               />
+            ) : usageOpen ? (
+              <UsageView load={readUsage} conversations={conversations} loadConversations={loadConversations} onOpenConversation={openHistory} />
+            ) : historyRoute ? (
+              historyRoute.id ? (
+                <ConversationView
+                  key={historyRoute.id}
+                  id={historyRoute.id}
+                  conversation={conversations?.find((c) => c.id === historyRoute.id)}
+                  owner={owners.get(historyRoute.id)}
+                  load={readConversation}
+                  onBack={() => {
+                    openHistory(null)
+                  }}
+                  onOpenSession={select}
+                  onExport={exportConversation}
+                  onResume={(c) => {
+                    setModal({ kind: 'spawn', initial: resumeDefaults(c.id, c.directory ?? ''), resumeTitle: conversationTitle(c) })
+                  }}
+                />
+              ) : (
+                <HistoryList load={loadConversations} owners={owners} onOpen={openHistory} />
+              )
+            ) : selected ? (
+              data.sessions ? (
+                <SessionView
+                  key={selected}
+                  session={session}
+                  sessionId={selected}
+                  doc={data.docs[selected]}
+                  pending={pending[selected] ?? noPending}
+                  connected={conn.kind === 'open'}
+                  insideSession={data.sessions.insideSession}
+                  follow={follow}
+                  unfollow={unfollow}
+                  loadOlder={loadOlder}
+                  send={send}
+                  dismiss={dismiss}
+                  readScreen={readScreen}
+                  readStyled={readStyled}
+                  answer={answer}
+                  openPath={openPath}
+                  groups={amGroups}
+                  act={act}
+                  seenMark={session?.agentSessionId ? seen[session.agentSessionId] : undefined}
+                  readAgents={readAgents}
+                  readAgentTranscript={readAgentTranscript}
+                  readChanges={readChanges}
+                  conflicts={selected ? (conflicts[selected] ?? []) : []}
+                  sessions={sessions}
+                  pasteImage={pasteImage}
+                  exportConversation={exportConversation}
+                  suggestion={suggestions[selected]}
+                  catchUp={summaries.enabled ? catchUp : undefined}
+                  dismissSuggestion={dismissSuggestion}
+                />
+              ) : (
+                <main className="main">
+                  <div className="empty">Loading sessions…</div>
+                </main>
+              )
             ) : (
-              <main className="main">
-                <div className="empty">Loading sessions…</div>
-              </main>
-            )
-          ) : (
-            <Overview sessions={sessions} acks={acks} seen={seen} load={loadOverview} onOpen={select} />
-          )}
+              <Overview sessions={sessions} acks={acks} seen={seen} load={loadOverview} onOpen={select} />
+            )}
+          </div>
           {modal?.kind === 'spawn' && (
             <NewSession
               initial={modal.initial}
