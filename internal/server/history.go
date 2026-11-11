@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -77,4 +78,25 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
+}
+
+// summarize writes a catch-up summary. It spends tokens on the user's
+// provider, so the web app only offers it once the user turns it on.
+func (s *Server) summarize(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Since int    `json:"since"`
+		Model string `json:"model"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON with since and model"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+	defer cancel()
+	res, err := s.cfg.Summaries.Summarize(ctx, r.PathValue("id"), req.Since, req.Model)
+	logOutcome("summary", r.PathValue("id"), "model="+req.Model, "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }

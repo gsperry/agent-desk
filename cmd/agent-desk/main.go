@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -37,6 +38,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
+	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
 )
@@ -118,6 +120,7 @@ func run(o options) error {
 		Pastes:      pastes,
 		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
+		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
 			Timeout: 15 * time.Second,
 			Env:     changes.Env(procrun.Environ()),
@@ -212,6 +215,27 @@ func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*h
 		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
 		Sessions: sessions,
 	}, nil
+}
+
+// summaryRunner runs the user's Claude Code CLI for catch-up summaries. In
+// fixture mode it answers with a canned result, so tests never call a model.
+func summaryRunner(fixtures string) summary.Runner {
+	if fixtures != "" {
+		return fixtureSummaries{}
+	}
+	return procrun.Exec{Timeout: 3 * time.Minute}
+}
+
+type fixtureSummaries struct{}
+
+func (fixtureSummaries) RunInput(_ context.Context, _ string, input []byte, _ string, _ ...string) ([]byte, error) {
+	turns := strings.Count(string(input), "\n## ")
+	return json.Marshal(map[string]any{
+		"type": "result", "is_error": false,
+		"result":         fmt.Sprintf("- Fixture summary of %d sections.\n- No model was called.", turns),
+		"total_cost_usd": 0.0012,
+		"usage":          map[string]int{"input_tokens": 1500, "output_tokens": 30},
+	})
 }
 
 // pasteStore keeps pasted images under the user cache directory, or the

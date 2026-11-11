@@ -2669,3 +2669,42 @@ mark {
 .shell-file-head code {
   overflow-wrap: anywhere;
 }
+
+/* Catch-up summaries */
+
+.catchup {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  max-width: var(--reading-width);
+  width: calc(100% - 3rem);
+  margin: 0.75rem auto 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.catchup > :first-child {
+  flex: 1;
+}
+
+.catchup-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.catchup-cost {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+}
+
+.catchup-error {
+  flex: 1;
+  margin: 0;
+  color: var(--error, #c0392b);
+}
+
+.summary-model input {
+  max-width: 14rem;
+}

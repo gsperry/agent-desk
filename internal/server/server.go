@@ -33,6 +33,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/paste"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
+	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/transcript"
 	"github.com/gsperry/agent-desk/internal/usage"
 )
@@ -81,6 +82,13 @@ type Config struct {
 	// History lists and reads every conversation on disk.
 	History HistorySource
 	Usage   UsageSource
+	// Summaries writes catch-up summaries with the user's Claude Code CLI,
+	// only when asked.
+	Summaries SummarySource
+}
+
+type SummarySource interface {
+	Summarize(ctx context.Context, sessionID string, since int, model string) (summary.Result, error)
 }
 
 type UsageSource interface {
@@ -162,7 +170,7 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil || cfg.Changes == nil || cfg.Conflicts == nil || cfg.Pastes == nil || cfg.History == nil || cfg.Usage == nil {
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil || cfg.Changes == nil || cfg.Conflicts == nil || cfg.Pastes == nil || cfg.History == nil || cfg.Usage == nil || cfg.Summaries == nil {
 		return nil, errors.New("every Config source is required")
 	}
 	if len(cfg.Token) < 32 {
@@ -198,6 +206,7 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("GET /api/conversations", s.requireToken(http.HandlerFunc(s.conversations)))
 	s.mux.Handle("GET /api/conversations/{id}/transcript", s.requireToken(http.HandlerFunc(s.conversationTranscript)))
 	s.mux.Handle("GET /api/conversations/{id}/export", s.requireToken(http.HandlerFunc(s.exportConversation)))
+	s.mux.Handle("POST /api/sessions/{id}/summary", s.requireToken(http.HandlerFunc(s.summarize)))
 	s.mux.Handle("GET /api/usage", s.requireToken(http.HandlerFunc(s.usage)))
 	s.mux.Handle("GET /api/overview", s.requireToken(http.HandlerFunc(s.overview)))
 	s.mux.Handle("GET /api/spawn-options", s.requireToken(http.HandlerFunc(s.spawnOptions)))

@@ -227,3 +227,14 @@ export interface UsageReport {
   conversations: (UsageBucket & { id: string; subagentTokens: number; last?: string })[]
   files: number
 }
+
+// CatchUp is a catch-up summary written by the user's Claude Code CLI.
+export interface CatchUp {
+  text: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  costUSD: number
+  items: number
+  cached?: boolean
+}

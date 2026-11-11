@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +45,18 @@ func TestExec(t *testing.T) {
 				t.Fatalf("out = %q, err = %v; want %q", out, err, tt.wantOut)
 			}
 		})
+	}
+}
+
+func TestRunInput(t *testing.T) {
+	dir := t.TempDir()
+	out, err := Exec{}.RunInput(context.Background(), dir, []byte("from stdin"), "sh", "-c", "pwd -P; cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, _ := filepath.EvalSymlinks(dir)
+	if string(out) != real+"\nfrom stdin" {
+		t.Fatalf("out = %q", out)
 	}
 }
 

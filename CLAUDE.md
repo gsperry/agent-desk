@@ -8,6 +8,7 @@ Background: [docs/integration-notes.md](docs/integration-notes.md) (how agent-ma
 
 - **Never write to `~/.claude`.** Transcripts are read-only input.
 - **Never call the Anthropic API or any model API, and never ask for or read an API key.** Users run Claude Code on their own provider setup (Anthropic, Vertex AI, Bedrock), which the local CLIs already carry. Agent Desk only reads local files and runs local CLIs (`agent-manager`, `tmux`, `code`).
+- **The one model call is catch-up summaries** (`internal/summary`): the user's own `claude -p`, only after the user turns summaries on in Settings and presses Catch me up, with no tools, no MCP servers, no session persistence and a one-line system prompt. Off by default, labelled as costing tokens. Never from a timer, a rule or a test (fixture mode answers with a canned result).
 - **Do not fork or vendor agent-manager.** Integrate through its CLI. Gaps that need upstream changes go in `docs/upstream/` as PR proposals.
 - **Every tmux call names the socket**: `tmux -L agentmgr`. A bare `tmux` hits the user's own server.
 - **The JSONL parser is tolerant.** Unknown or malformed records become raw items. Never crash on input, never silently drop a record. New record shapes get an anonymized sample in `testdata/` with the Claude Code version it came from.
@@ -47,6 +48,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/history`: every conversation on disk (listing cached by size and mtime) and read-only paging
 - `internal/export`: transcript to Markdown
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
+- `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
 - `internal/pane`: dialog parser, answers (allow-listed keys through `tmux -L agentmgr send-keys`) and the styled screen for the read-only color view

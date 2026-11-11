@@ -18,6 +18,7 @@ import { conversationTitle, sessionsByConversation } from './model/history'
 import type { PathRef } from './model/paths'
 import { loadSnippets, saveSnippets, type Snippet } from './model/snippets'
 import { loadTemplates, saveTemplates, upsertTemplate, type Template } from './model/templates'
+import { loadSummaries, saveSummaries, type SummarySettings } from './model/summaries'
 import { directorySuggestions, resumeDefaults, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
@@ -74,6 +75,10 @@ function Desk({ token }: { token: string }) {
   useEffect(() => {
     saveSnippets(localStorage, snippets)
   }, [snippets])
+  const [summaries, setSummaries] = useState<SummarySettings>(() => loadSummaries(localStorage))
+  useEffect(() => {
+    saveSummaries(localStorage, summaries)
+  }, [summaries])
   const [templates, setTemplates] = useState<Template[]>(() => loadTemplates(localStorage))
   useEffect(() => {
     saveTemplates(localStorage, templates)
@@ -247,6 +252,7 @@ function Desk({ token }: { token: string }) {
     if (r.data) setConversations(r.data)
     return r
   }, [store])
+  const catchUp = useCallback((id: string, since: number) => store.catchUp(id, since, summaries.model), [store, summaries.model])
   const dismissSuggestion = useCallback((id: string) => {
     store.dismissSuggestion(id)
   }, [store])
@@ -415,6 +421,7 @@ function Desk({ token }: { token: string }) {
                 pasteImage={pasteImage}
                 exportConversation={exportConversation}
                 suggestion={suggestions[selected]}
+                catchUp={summaries.enabled ? catchUp : undefined}
                 dismissSuggestion={dismissSuggestion}
               />
             ) : (
@@ -486,6 +493,8 @@ function Desk({ token }: { token: string }) {
               onSnippets={setSnippets}
               templates={templates}
               onTemplates={setTemplates}
+              summaries={summaries}
+              onSummaries={setSummaries}
               rules={rules}
               onRules={(r) => {
                 store.setRules(r)

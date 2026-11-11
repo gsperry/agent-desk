@@ -8,11 +8,12 @@ import { OpenPathContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
-import type { Changes, Item, SubAgent } from '../types'
+import type { CatchUp, Changes, Item, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
 import { NotesPanel } from './NotesPanel'
 import { togglePin } from '../model/pins'
 import type { Suggestion } from '../model/rules'
+import { costLine } from '../model/summaries'
 import { PinsContext, pinsFor, useNotebook } from '../pins-context'
 import { ChangesPanel } from './ChangesPanel'
 import { blockedReason } from '../model/compose'
@@ -54,6 +55,8 @@ interface Props {
   exportConversation: (conversationId: string) => void
   suggestion?: Suggestion
   dismissSuggestion: (sessionId: string) => void
+  // catchUp is set when catch-up summaries are turned on in Settings.
+  catchUp?: (sessionId: string, since: number) => Promise<{ data?: CatchUp; error?: string }>
 }
 
 // The subagent list refreshes this often while a session is open.
@@ -76,6 +79,7 @@ export function SessionView(props: Props) {
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [changesOpen, setChangesOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
+  const [catchUpState, setCatchUpState] = useState<{ busy: boolean; data?: CatchUp; error?: string } | null>(null)
   const [notebook, setNotebook] = useNotebook(props.session?.agentSessionId)
   const pins = pinsFor(notebook, setNotebook, togglePin)
   const [openAgent, setOpenAgent] = useState<string | null>(null)
@@ -177,6 +181,28 @@ export function SessionView(props: Props) {
                 {counts.total}
               </button>
             )}
+              {props.catchUp && isClaude && session.agentSessionId && (
+                <button
+                  type="button"
+                  className="chip chip-button catchup-toggle"
+                  disabled={catchUpState?.busy}
+                  title="Summarize what happened since you last looked. Costs tokens on your Claude Code provider."
+                  onClick={() => {
+                    const run = props.catchUp
+                    if (!run) return
+                    setCatchUpState({ busy: true })
+                    // Since the last look when something is new, else the most
+                    // recent part of the transcript.
+                    const latest = d.items.at(-1)?.seq
+                    const since = markAtOpen && latest !== undefined && markAtOpen.seq < latest ? markAtOpen.seq : -1
+                    void run(sessionId, since).then((r) => {
+                      setCatchUpState({ busy: false, ...r })
+                    })
+                  }}
+                >
+                  {catchUpState?.busy ? 'Summarizing…' : 'Catch me up'}
+                </button>
+              )}
               {session.agentSessionId && (
                 <button
                   type="button"
@@ -230,6 +256,27 @@ export function SessionView(props: Props) {
             </div>
           </header>
           <StatusBanner session={session} doc={d} />
+          {catchUpState && !catchUpState.busy && (
+            <section className="catchup" aria-label="Catch-up summary">
+              {catchUpState.data ? (
+                <div>
+                  <p className="catchup-text">{catchUpState.data.text}</p>
+                  <p className="muted catchup-cost">{costLine(catchUpState.data)}</p>
+                </div>
+              ) : (
+                <p className="catchup-error">{catchUpState.error ?? 'The summary failed.'}</p>
+              )}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setCatchUpState(null)
+                }}
+              >
+                Close
+              </button>
+            </section>
+          )}
           {d.items.length > 0 || pending.length > 0 ? (
             <Transcript
               sessionId={sessionId}

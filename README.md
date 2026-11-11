@@ -98,6 +98,10 @@ Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -
 - **Files:** inline code that names a file, and the Open button on file tools, open the file in VS Code at the right line (`code -g path:line`). Relative paths resolve against the session's directory. If `code` is not on your PATH, run "Shell Command: Install 'code' command in PATH" in VS Code.
 - **Settings** (gear in the sidebar): theme (system, light or dark), font size, reading width, and whether each kind of tool call and thinking starts expanded or collapsed.
 
+## Catch-up summaries
+
+Off by default. Settings → Catch-up summaries adds a "Catch me up" button to sessions: it runs your own Claude Code CLI (`claude -p`) on what happened since you last looked, with no tools, no MCP servers and nothing saved, and shows the summary with the tokens and cost it used. **Each summary spends tokens on your Claude Code provider**, about $0.002 of fixed overhead on the default `haiku` model plus the excerpt. Nothing runs until you press the button; repeating the same request is answered from cache.
+
 ## Rules
 
 Settings → Rules: when a session matching a name, project or group reaches a status (waits for you, finishes a turn, hits an error, goes idle), notify you, suggest a reply, or both. A suggested reply appears above the composer with Send, Edit and Dismiss, and is only sent when you press Send. It goes away when the session's status moves on. Rules run while an Agent Desk tab is open.
@@ -137,7 +141,7 @@ go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl
 - Listens on 127.0.0.1 only.
 - A random token is generated at startup and required on every API request and WebSocket. It travels in the URL fragment, which never reaches the server, and the page moves it into session storage.
 - Every request must name the server's own host, which blocks DNS rebinding. State-changing requests and WebSocket upgrades must come from the app's own origin.
-- No telemetry and no network calls beyond localhost. Agent Desk never calls a model API and never asks for an API key.
+- No telemetry and no network calls beyond localhost. Agent Desk never calls a model API and never asks for an API key. The optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.
 - Read-only toward Claude Code's data: nothing is written under `~/.claude`.
 
 Report security problems privately; see [SECURITY.md](SECURITY.md).

@@ -6,7 +6,7 @@ import { expire, reconcile, type Pending } from './model/pending'
 import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, CatchUp, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -386,6 +386,13 @@ export class Store {
     } catch (e) {
       return { message: e instanceof Error ? e.message : String(e) }
     }
+  }
+
+  // catchUp asks the user's Claude Code CLI for a summary of what happened
+  // after since. It spends tokens, so the UI only offers it when turned on.
+  async catchUp(sessionId: string, since: number, model: string): Promise<{ data?: CatchUp; error?: string }> {
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/summary`, { since, model })
+    return { data: r.data as CatchUp | undefined, error: r.error }
   }
 
   // usage totals tokens, time and reported cost over the last days days.
