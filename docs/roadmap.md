@@ -46,7 +46,7 @@ Goal: supervise and correct work, not only chat.
 
 ## M10: Bigger bets
 
-| Step | Feature | Approach | Needs Guy |
+| Step | Feature | Approach | Needs a decision |
 | --- | --- | --- | --- |
 | 10.1 | Live terminal (read-only, done) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Whether to allow typing later |
 | 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |

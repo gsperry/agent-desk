@@ -1,6 +1,6 @@
 # Away from the desk
 
-Status: design only. Nothing is built without Guy's decisions.
+Status: design only. Nothing is built without the owner's decisions.
 
 ## Goal
 

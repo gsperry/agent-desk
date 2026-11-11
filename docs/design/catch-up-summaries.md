@@ -1,6 +1,6 @@
 # Catch-up summaries
 
-Status: proposal, not built. Needs Guy's decisions below.
+Status: proposal, not built. Needs the owner's decisions below.
 
 ## What
 
@@ -8,7 +8,7 @@ A "Catch me up" button on a session or on the overview that writes a few lines o
 
 ## Why it is not built yet
 
-The hard rules in `CLAUDE.md` say Agent Desk runs only `agent-manager`, `tmux` and `code`, and never calls a model API. A summary needs a model. The only way to get one without an API key is the user's own Claude Code CLI, which spends tokens on their provider (Anthropic, Vertex AI or Bedrock). That changes a hard rule, so it is Guy's call.
+The hard rules in `CLAUDE.md` say Agent Desk runs only `agent-manager`, `tmux` and `code`, and never calls a model API. A summary needs a model. The only way to get one without an API key is the user's own Claude Code CLI, which spends tokens on their provider (Anthropic, Vertex AI or Bedrock). That changes a hard rule, so it needs the owner's decision.
 
 ## Design
 

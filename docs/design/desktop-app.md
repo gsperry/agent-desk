@@ -1,6 +1,6 @@
 # Desktop app
 
-Status: design only. Needs Guy's decisions below, and a newer Rust toolchain.
+Status: design only. Needs the owner's decisions below, and a newer Rust toolchain.
 
 ## What
 
