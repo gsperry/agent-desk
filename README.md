@@ -33,6 +33,10 @@ install -m 0755 bin/agent-desk ~/.local/bin/agent-desk   # or any directory on y
 
 To update, pull and repeat the last two commands.
 
+### Desktop app (macOS)
+
+`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications and a dock badge for sessions that need you. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Builds are unsigned, for the machine that made them. Quitting the app leaves every agent running.
+
 ## Run
 
 ```sh

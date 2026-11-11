@@ -23,6 +23,7 @@ make build   # bin/agent-desk with embedded frontend
 make test    # go test -race ./... and vitest
 make lint    # gofmt, go vet, staticcheck, eslint, tsc
 make e2e     # Playwright smoke test on testdata/fixtures/desk
+make desktop # desktop/target/release/bundle/macos/Agent Desk.app (Rust, Tauri CLI)
 go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl   # raw-item report on real data
 go run ./tools/anonymize in.jsonl > testdata/transcripts/x.jsonl   # new sample
 go run ./tools/claudecommands "$(readlink -f "$(command -v claude)")" > internal/commands/builtin.go   # after a Claude Code upgrade
@@ -60,6 +61,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `web/src/model`: pure view-model logic, covered by Vitest
 - `web/src/render`, `web/src/components`: React views
 - `web/embed.go` embeds `web/dist`.
+- `desktop`: Tauri 2 macOS shell. Runs the bundled server through the login shell, opens its 127.0.0.1 address, grants the page only `notify` and `set_badge`.
 
 ## Conventions
 

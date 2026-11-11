@@ -5,7 +5,7 @@ import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } 
 import { expire, reconcile, type Pending } from './model/pending'
 import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
-import { browserNotifier, type Notifier, type Permission } from './notify'
+import { defaultNotifier, type Notifier, type Permission } from './notify'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
 import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
@@ -68,7 +68,7 @@ export class Store {
   private followed = new Set<string>()
   private readonly token: string
 
-  constructor(token: string, notifier: Notifier = browserNotifier) {
+  constructor(token: string, notifier: Notifier = defaultNotifier()) {
     this.token = token
     this.notifier = notifier
     this.state = {
