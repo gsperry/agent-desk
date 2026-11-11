@@ -53,6 +53,16 @@ describe('groupSessions', () => {
     expect(groupSessions(sessions, { showArchived: false, acks })[0]?.project.name).toBe('gamma')
   })
 
+  it('lists empty agent-manager groups, except in the attention filter', () => {
+    const groups = [{ path: 'ops', directory: '/srv/ops' }]
+    const all = groupSessions(sessions, { showArchived: false, groups })
+    const ops = all.find((g) => g.project.key === 'group:ops')
+    expect(ops?.sessions).toEqual([])
+    expect(ops?.project.root).toBe('/srv/ops')
+    expect(all.at(-1)?.project.name).toBe('ops')
+    expect(groupSessions(sessions, { showArchived: false, groups, onlyAttention: true }).some((g) => g.project.key === 'group:ops')).toBe(false)
+  })
+
   it('sorts unknown statuses last', () => {
     const g = groupSessions([s('x', 'p', 'mystery'), s('y', 'p', 'idle')], { showArchived: false })[0]
     expect(g?.sessions.map((x) => x.id)).toEqual(['y', 'x'])

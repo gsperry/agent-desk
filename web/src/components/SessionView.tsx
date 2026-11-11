@@ -5,10 +5,11 @@ import { buildHeader } from '../model/transcript'
 import type { SessionView as Session } from '../types'
 import type { PathRef } from '../model/paths'
 import { OpenPathContext } from '../session-context'
-import type { Answer, Screen } from '../types'
+import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { Composer } from './Composer'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
+import { SessionActions } from './SessionActions'
 import { glyph } from './status'
 import { Transcript } from './Transcript'
 
@@ -27,6 +28,8 @@ interface Props {
   readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
   openPath: (id: string, ref: PathRef) => void
+  groups: GroupView[]
+  act: (id: string, a: SessionAction) => Promise<string | null>
 }
 
 export function SessionView(props: Props) {
@@ -93,7 +96,8 @@ export function SessionView(props: Props) {
               {session.project.name}
               {session.branch ? ` · ${session.branch}` : ''}
             </span>
-            {header.prLinks.map((pr) => (
+            <SessionActions session={session} groups={props.groups} act={props.act} />
+          {header.prLinks.map((pr) => (
               <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
                 PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
               </a>
