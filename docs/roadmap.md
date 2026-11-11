@@ -48,8 +48,8 @@ Goal: supervise and correct work, not only chat.
 
 | Step | Feature | Approach | Needs Guy |
 | --- | --- | --- | --- |
-| 10.1 | Live terminal (read-only) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Whether to allow typing later |
-| 10.2 | Rules | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |
-| 10.3 | Catch-up summaries | `claude -p` on recent items of selected sessions, run only when asked; shows token use | Approval to spend tokens; model choice |
-| 10.4 | Desktop app | Tauri 2 shell that runs the binary as a sidecar and loads it: native notifications without a tab, dock badge, menu-bar count, global hotkey | Signing and distribution choices |
-| 10.5 | Away from the desk | Design only: stronger auth than a per-start token, device pairing, Tailscale | All of it; nothing is built without a decision |
+| 10.1 | Live terminal (read-only, done) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Whether to allow typing later |
+| 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |
+| 10.3 | Catch-up summaries | Proposal in [design/catch-up-summaries.md](design/catch-up-summaries.md); not built | Approval to spend tokens and amend the CLI hard rule; model choice |
+| 10.4 | Desktop app | Design in [design/desktop-app.md](design/desktop-app.md); not built (Tauri 2 needs a newer Rust than the installed 1.82) | Rust update, signing and distribution, repository layout |
+| 10.5 | Away from the desk | Design in [design/away-from-desk.md](design/away-from-desk.md); not built | All of it; nothing is built without a decision |

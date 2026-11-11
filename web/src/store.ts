@@ -3,6 +3,7 @@ import { apiFetch, connect, type Connection, type ConnectionState } from './api'
 import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Transition } from './model/attention'
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
+import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
 import type { Answer, Changes, Conversation, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
@@ -24,6 +25,10 @@ export interface StoreState {
   // a file.
   toast: { message: string; id: number } | null
   seen: Seen
+  rules: Rule[]
+  // suggestions holds a rule's suggested reply per session until it is
+  // sent, dismissed, or the session's status moves on.
+  suggestions: Record<string, Suggestion>
 }
 
 const acksKey = 'agent-desk:acks'
@@ -39,7 +44,7 @@ function readJSON<T>(key: string, fallback: T): T {
 }
 
 const glyphs: Record<string, string> = { waiting: '◆', errored: '✕', finished: '●' }
-const verbs: Record<string, string> = { waiting: 'is waiting for you', errored: 'hit an error', finished: 'finished its turn' }
+const verbs: Record<string, string> = { waiting: 'is waiting for you', errored: 'hit an error', finished: 'finished its turn', idle: 'went idle' }
 
 export interface SendRefusal {
   reason?: string
@@ -74,6 +79,8 @@ export class Store {
       permission: notifier.permission(),
       toast: null,
       seen: loadSeen(localStorage),
+      rules: loadRules(localStorage),
+      suggestions: {},
     }
   }
 
@@ -114,6 +121,37 @@ export class Store {
     const next = { ...this.state.prefs, ...prefs }
     localStorage.setItem(prefsKey, JSON.stringify(next))
     this.set({ ...this.state, prefs: next })
+  }
+
+  setRules(rules: Rule[]) {
+    saveRules(localStorage, rules)
+    this.set({ ...this.state, rules })
+  }
+
+  dismissSuggestion(sessionId: string) {
+    if (!(sessionId in this.state.suggestions)) return
+    const rest = Object.fromEntries(Object.entries(this.state.suggestions).filter(([id]) => id !== sessionId))
+    this.set({ ...this.state, suggestions: rest })
+  }
+
+  private runRules(list: Transition[]) {
+    if (list.length === 0) return
+    const out = applyRules(this.state.rules, list)
+    const cleared = new Set(out.cleared)
+    const suggestions = Object.fromEntries(Object.entries(this.state.suggestions).filter(([id]) => !cleared.has(id)))
+    for (const sg of out.suggestions) suggestions[sg.sessionId] = sg
+    this.set({ ...this.state, suggestions })
+    if (this.notifier.permission() !== 'granted') return
+    const { prefs } = this.state
+    for (const { rule, transition: t } of out.notify) {
+      // The general notification already covers it, or the reader is looking.
+      if (prefs.notify && shouldNotify(t, { onFinish: prefs.notifyOnFinish })) continue
+      if (this.visible && this.viewing === t.session.id) continue
+      const s = t.session
+      this.notifier.show(`${s.name} ${verbs[t.to] ?? t.to}`, `Rule: ${rule.name}`, `rule-${s.id}`, () => {
+        this.onOpen(s.id)
+      })
+    }
   }
 
   async requestPermission() {
@@ -165,7 +203,9 @@ export class Store {
     this.set({ ...this.state, data, pending: this.reconciled(data) })
     if (msg.type === 'sessions') {
       this.setSeen(baseline(this.state.seen, msg.state.sessions))
-      this.notifyTransitions(transitions(this.prevStatuses, msg.state.sessions))
+      const changes = transitions(this.prevStatuses, msg.state.sessions)
+      this.notifyTransitions(changes)
+      this.runRules(changes)
       this.prevStatuses = statusMap(msg.state.sessions)
       this.refreshAcks()
     }
@@ -333,6 +373,18 @@ export class Store {
       return res.ok && body.conversations ? { data: body.conversations } : { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // styledScreen reads the agent's screen with color, for the read-only
+  // terminal view.
+  async styledScreen(sessionId: string): Promise<{ screen?: string; message?: string }> {
+    try {
+      const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/terminal`)
+      const body = (await res.json().catch(() => ({}))) as { screen?: string } & SendRefusal
+      return res.ok ? { screen: body.screen ?? '' } : { message: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { message: e instanceof Error ? e.message : String(e) }
     }
   }
 

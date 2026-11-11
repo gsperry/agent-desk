@@ -1,0 +1,43 @@
+[36m❯ Agent Desk UI test.[0m
+  This message has two lines.
+  Reply with a short markdown list of the two lines you received.
+
+⏺ The message actually has three lines, not two:
+
+  - Agent Desk UI test.
+  - This message has two lines.
+  - Reply with a short markdown list of the two lines you received.
+
+✻ Baked for 3s · done 6:36 PM
+
+[36m❯ Queue test: run the shell command sleep 15 with your Bash tool, then reply with only FIRST.[0m
+
+  Ran 1 shell command
+
+[36m❯ Queued while you were busy: after FIRST, reply with only SECOND.[0m
+
+⏺ FIRST
+
+  SECOND
+
+✻ Sautéed for 18s · done 6:37 PM
+
+[36m❯ Permission prompt test: use your Bash tool to run exactly: touch /home/dev/src/web/notes.txt[0m
+
+  Creating empty notes file
+  ⎿  $ touch /home/dev/src/web/notes.txt
+
+[2m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+ Create empty notes file
+[2m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌[0m
+ touch /home/dev/src/web/notes.txt
+[2m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌[0m
+[1m Do you want to proceed?[0m
+[36m ❯ 1. Yes[0m
+   2. Yes, and always allow access to /home/dev/src/web from this project
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend

@@ -2558,3 +2558,83 @@ mark {
 .usage-conv .muted {
   font-size: 0.76rem;
 }
+
+/* Color terminal */
+
+.color-toggle {
+  margin-left: auto;
+  margin-right: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.styled-terminal-box {
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border-radius: 0.4rem;
+  background: var(--surface);
+}
+
+/* Rules */
+
+.rule-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+
+.rule-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.rule-line input:not([type='checkbox']),
+.rule-line select,
+.rule-edit textarea {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.rule-line input[aria-label='Rule name'] {
+  flex: 1;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: var(--reading-width);
+  width: calc(100% - 3rem);
+  margin: 0 auto 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.suggestion-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-text p {
+  margin: 0.2rem 0 0;
+  white-space: pre-wrap;
+}
+
+.suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

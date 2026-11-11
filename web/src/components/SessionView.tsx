@@ -12,6 +12,7 @@ import type { Changes, Item, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
 import { NotesPanel } from './NotesPanel'
 import { togglePin } from '../model/pins'
+import type { Suggestion } from '../model/rules'
 import { PinsContext, pinsFor, useNotebook } from '../pins-context'
 import { ChangesPanel } from './ChangesPanel'
 import { blockedReason } from '../model/compose'
@@ -37,6 +38,7 @@ interface Props {
   send: (id: string, text: string) => void
   dismiss: (id: string, clientId: string) => void
   readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
+  readStyled: (id: string) => Promise<{ screen?: string; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
@@ -50,6 +52,8 @@ interface Props {
   sessions: Session[]
   pasteImage: (image: Blob) => Promise<{ path?: string; error?: string }>
   exportConversation: (conversationId: string) => void
+  suggestion?: Suggestion
+  dismissSuggestion: (sessionId: string) => void
 }
 
 // The subagent list refreshes this often while a session is open.
@@ -263,6 +267,7 @@ export function SessionView(props: Props) {
             <LivePane
               sessionId={sessionId}
               read={readScreen}
+              readStyled={props.readStyled}
               answer={answer}
               onClose={
                 showPane
@@ -272,6 +277,50 @@ export function SessionView(props: Props) {
                   : undefined
               }
             />
+          )}
+          {props.suggestion && (
+            <div className="suggestion" role="status" aria-label="Suggested reply">
+              <div className="suggestion-text">
+                <span className="muted">Rule “{props.suggestion.ruleName}” suggests replying:</span>
+                <p>{props.suggestion.text}</p>
+              </div>
+              <div className="suggestion-actions">
+                <button
+                  type="button"
+                  className="send"
+                  disabled={blockedReason(session, connected, insideSession) !== null}
+                  title={blockedReason(session, connected, insideSession) ?? undefined}
+                  onClick={() => {
+                    if (!props.suggestion) return
+                    send(sessionId, props.suggestion.text)
+                    setSends((n) => n + 1)
+                    props.dismissSuggestion(sessionId)
+                  }}
+                >
+                  Send
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    if (!props.suggestion) return
+                    setRestore({ text: props.suggestion.text, nonce: Date.now() })
+                    props.dismissSuggestion(sessionId)
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    props.dismissSuggestion(sessionId)
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
           )}
           <Composer
             key={sessionId}

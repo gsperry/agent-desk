@@ -36,6 +36,8 @@ func (f *fakeClient) Type(context.Context, string, string) error { return nil }
 
 func (f *fakeClient) Read(context.Context, string) (string, error) { return "", nil }
 
+func (f *fakeClient) ReadStyled(context.Context, string) (string, error) { return "", nil }
+
 func (f *fakeClient) set(snap am.Snapshot, err error) {
 	f.mu.Lock()
 	f.snap, f.err = snap, err

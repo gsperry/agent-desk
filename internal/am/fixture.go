@@ -57,6 +57,15 @@ func (f Fixture) Read(_ context.Context, id string) (string, error) {
 	return string(data), err
 }
 
+// ReadStyled serves panes/<id>.ansi, or the plain screen when there is none.
+func (f Fixture) ReadStyled(ctx context.Context, id string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(f.Path), "panes", filepath.Base(id)+".ansi"))
+	if errors.Is(err, os.ErrNotExist) {
+		return f.Read(ctx, id)
+	}
+	return string(data), err
+}
+
 func (f Fixture) Type(ctx context.Context, id, text string) error {
 	snap, err := f.Snapshot(ctx)
 	if err != nil {

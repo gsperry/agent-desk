@@ -113,6 +113,9 @@ type fakePanes struct {
 }
 
 func (f *fakePanes) Screen(context.Context, string) (pane.Screen, error) { return f.screen, f.err }
+func (f *fakePanes) Styled(context.Context, string) (string, error) {
+	return "\x1b[1m" + f.screen.Text, f.err
+}
 func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
 	f.answer = a
 	return f.err
@@ -454,6 +457,8 @@ func TestPaneRoutes(t *testing.T) {
 	}{
 		{"screen", "GET", "/api/sessions/a1/pane", "", &fakePanes{screen: pane.Screen{Text: "hello"}}, "", 200, `"text":"hello"`},
 		{"screen refused", "GET", "/api/sessions/a1/pane", "", &fakePanes{err: &send.Refused{Reason: send.ReasonNotRunning}}, "", 409, "not_running"},
+		{"terminal", "GET", "/api/sessions/a1/terminal", "", &fakePanes{screen: pane.Screen{Text: "hi"}}, "", 200, `"screen":"\u001b[1mhi"`},
+		{"terminal refused", "GET", "/api/sessions/a1/terminal", "", &fakePanes{err: &send.Refused{Reason: send.ReasonNotRunning}}, "", 409, "not_running"},
 		{"answer", "POST", "/api/sessions/a1/answer", `{"action":"choose","index":1,"label":"No"}`, &fakePanes{}, "http://127.0.0.1:7317", 200, "ok"},
 		{"answer refused", "POST", "/api/sessions/a1/answer", `{"action":"key","key":"x"}`, &fakePanes{err: &send.Refused{Reason: "bad_key"}}, "http://127.0.0.1:7317", 409, "bad_key"},
 		{"answer bad body", "POST", "/api/sessions/a1/answer", `[`, &fakePanes{}, "http://127.0.0.1:7317", 400, "JSON"},

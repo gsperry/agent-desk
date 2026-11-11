@@ -74,6 +74,7 @@ type Sessions interface {
 
 type Reader interface {
 	Read(ctx context.Context, id string) (string, error)
+	ReadStyled(ctx context.Context, id string) (string, error)
 }
 
 // Screen is what the live pane shows.
@@ -116,6 +117,15 @@ func (a *Answerer) Screen(ctx context.Context, id string) (Screen, error) {
 		return Screen{}, err
 	}
 	return Screen{Text: tail(text, screenLines), Dialog: Parse(text)}, nil
+}
+
+// Styled returns the whole screen with its color escape sequences, for a
+// read-only terminal view.
+func (a *Answerer) Styled(ctx context.Context, id string) (string, error) {
+	if refused := a.check(id); refused != nil {
+		return "", refused
+	}
+	return a.Reader.ReadStyled(ctx, id)
 }
 
 func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {

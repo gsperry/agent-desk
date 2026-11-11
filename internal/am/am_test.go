@@ -146,6 +146,18 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadStyled(t *testing.T) {
+	r := &fakeRunner{out: []byte(`{"output":"\u001b[31mred\u001b[0m"}`)}
+	c := &CLI{Runner: r, Bin: "agent-manager"}
+	got, err := c.ReadStyled(context.Background(), "a1")
+	if err != nil || got != "\x1b[31mred\x1b[0m" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if strings.Join(r.args, " ") != "agent-manager read --styled --json -- a1" {
+		t.Fatalf("args = %v", r.args)
+	}
+}
+
 func TestConfigDir(t *testing.T) {
 	tests := []struct {
 		name, amDir, xdg, want string

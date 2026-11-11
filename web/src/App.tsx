@@ -60,7 +60,7 @@ function isTyping(target: EventTarget | null): boolean {
 function Desk({ token }: { token: string }) {
   const store = useMemo(() => new Store(token), [token])
   useEffect(() => store.start(), [store])
-  const { conn, data, pending, acks, prefs, permission, toast, seen } = useStore(store)
+  const { conn, data, pending, acks, prefs, permission, toast, seen, rules, suggestions } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
   const [historyRoute, setHistoryRoute] = useState<{ id: string | null } | null>(historyFromPath)
   const [conversations, setConversations] = useState<Conversation[] | null>(null)
@@ -219,6 +219,7 @@ function Desk({ token }: { token: string }) {
     store.dismiss(id, clientId)
   }, [store])
   const readScreen = useCallback((id: string) => store.screen(id), [store])
+  const readStyled = useCallback((id: string) => store.styledScreen(id), [store])
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
   const loadOptions = useCallback(() => store.spawnOptions(), [store])
   const readAgents = useCallback((id: string) => store.agents(id), [store])
@@ -245,6 +246,9 @@ function Desk({ token }: { token: string }) {
     const r = await store.conversations()
     if (r.data) setConversations(r.data)
     return r
+  }, [store])
+  const dismissSuggestion = useCallback((id: string) => {
+    store.dismissSuggestion(id)
   }, [store])
   const exportConversation = useCallback((id: string) => {
     void store.exportConversation(id)
@@ -397,6 +401,7 @@ function Desk({ token }: { token: string }) {
                 send={send}
                 dismiss={dismiss}
                 readScreen={readScreen}
+                readStyled={readStyled}
                 answer={answer}
                 openPath={openPath}
                 groups={amGroups}
@@ -409,6 +414,8 @@ function Desk({ token }: { token: string }) {
                 sessions={sessions}
                 pasteImage={pasteImage}
                 exportConversation={exportConversation}
+                suggestion={suggestions[selected]}
+                dismissSuggestion={dismissSuggestion}
               />
             ) : (
               <main className="main">
@@ -479,6 +486,10 @@ function Desk({ token }: { token: string }) {
               onSnippets={setSnippets}
               templates={templates}
               onTemplates={setTemplates}
+              rules={rules}
+              onRules={(r) => {
+                store.setRules(r)
+              }}
               onClose={() => {
                 setSettingsOpen(false)
               }}

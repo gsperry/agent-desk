@@ -132,6 +132,7 @@ type Sender interface {
 // Panes reads a session's screen and answers its dialogs.
 type Panes interface {
 	Screen(ctx context.Context, sessionID string) (pane.Screen, error)
+	Styled(ctx context.Context, sessionID string) (string, error)
 	Answer(ctx context.Context, sessionID string, a pane.Answer) error
 }
 
@@ -187,6 +188,7 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("GET /api/sessions/{id}/transcript", s.requireToken(http.HandlerFunc(s.transcriptWindow)))
 	s.mux.Handle("POST /api/sessions/{id}/send", s.requireToken(http.HandlerFunc(s.send)))
 	s.mux.Handle("GET /api/sessions/{id}/pane", s.requireToken(http.HandlerFunc(s.screen)))
+	s.mux.Handle("GET /api/sessions/{id}/terminal", s.requireToken(http.HandlerFunc(s.terminal)))
 	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
 	s.mux.Handle("GET /api/sessions/{id}/agents", s.requireToken(http.HandlerFunc(s.listAgents)))
 	s.mux.Handle("GET /api/sessions/{id}/agents/{agent}/transcript", s.requireToken(http.HandlerFunc(s.agentTranscript)))
@@ -313,6 +315,17 @@ func (s *Server) screen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sc)
+}
+
+// terminal serves the screen with color for the read-only terminal view.
+func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	screen, err := s.cfg.Panes.Styled(ctx, r.PathValue("id"))
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"screen": screen})
 }
 
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
