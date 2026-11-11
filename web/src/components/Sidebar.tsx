@@ -28,6 +28,8 @@ interface Props {
   onPrefs: (p: Partial<Prefs>) => void
   onRequestPermission: () => void
   onOpenSettings: () => void
+  search: string
+  onSearch: (text: string) => void
 }
 
 export function Sidebar(props: Props) {
@@ -46,6 +48,24 @@ export function Sidebar(props: Props) {
           <span className={`conn conn-${conn.kind}`} title={connTitle(conn)} />
         </span>
       </header>
+      <div className="search-box">
+        <input
+          id="search-box"
+          type="search"
+          value={props.search}
+          placeholder="Search transcripts  /"
+          aria-label="Search transcripts"
+          onChange={(e) => {
+            props.onSearch(e.target.value)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              props.onSearch('')
+              e.currentTarget.blur()
+            }
+          }}
+        />
+      </div>
       <Banners state={state} conn={conn} onStartManager={onStartManager} />
       <div className="filters">
         <button
@@ -108,7 +128,7 @@ export function Sidebar(props: Props) {
           </label>
         )}
         <NotifyControls {...props} />
-        <p className="keys">⌘K switch · j/k next that needs you</p>
+        <p className="keys">⌘K switch · j/k next that needs you · / search</p>
       </footer>
     </nav>
   )

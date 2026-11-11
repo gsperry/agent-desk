@@ -194,7 +194,7 @@ func pageMessage(p hub.Page) map[string]any {
 }
 
 // aroundRadius is how many items a search hit shows on each side.
-const aroundRadius = 40
+const aroundRadius = 12
 
 // transcriptWindow serves older pages for scrollback, or a search hit in
 // context with around=<uuid>.

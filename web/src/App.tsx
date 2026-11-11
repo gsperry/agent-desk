@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { takeToken } from './auth'
 import { SessionView } from './components/SessionView'
 import { Sidebar, type ViewOptions } from './components/Sidebar'
+import { SearchView } from './components/SearchView'
 import { Settings } from './components/Settings'
 import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
@@ -41,6 +42,21 @@ function Desk({ token }: { token: string }) {
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
   const [viewPrefs, setViewPrefs] = useState<ViewPrefs>(() => loadViewPrefs(localStorage))
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // searchText is the sidebar box; searchQuery is the search being shown,
+  // set once the text settles.
+  const [searchText, setSearchText] = useState('')
+  const [searchQuery, setSearchQuery] = useState<string | null>(null)
+  const [searchArchived, setSearchArchived] = useState(false)
+
+  useEffect(() => {
+    const q = searchText.trim()
+    const t = setTimeout(() => {
+      setSearchQuery(q.length >= 2 ? q : null)
+    }, 300)
+    return () => {
+      clearTimeout(t)
+    }
+  }, [searchText])
 
   useEffect(() => {
     saveViewPrefs(localStorage, viewPrefs)
@@ -60,6 +76,8 @@ function Desk({ token }: { token: string }) {
   const select = useCallback((id: string) => {
     history.pushState(null, '', `/s/${encodeURIComponent(id)}`)
     setSelected(id)
+    setSearchText('')
+    setSearchQuery(null)
   }, [])
 
   useEffect(() => {
@@ -94,6 +112,11 @@ function Desk({ token }: { token: string }) {
         return
       }
       if (switcher || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '/') {
+        e.preventDefault()
+        document.getElementById('search-box')?.focus()
+        return
+      }
       if (e.key === 'j' || e.key === 'k') {
         const id = nextAttention(walkOrder, acks, selected, e.key === 'j' ? 1 : -1)
         if (id) {
@@ -125,6 +148,8 @@ function Desk({ token }: { token: string }) {
   }, [store])
   const readScreen = useCallback((id: string) => store.screen(id), [store])
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
+  const runSearch = useCallback((q: string, archived: boolean) => store.search(q, archived), [store])
+  const around = useCallback((id: string, uuid: string) => store.around(id, uuid), [store])
   const openPath = useCallback(
     (id: string, ref: PathRef) => {
       void store.openPath(id, ref)
@@ -169,8 +194,24 @@ function Desk({ token }: { token: string }) {
           onOpenSettings={() => {
             setSettingsOpen(true)
           }}
+          search={searchText}
+          onSearch={setSearchText}
         />
-        {selected ? (
+        {searchQuery ? (
+          <SearchView
+            query={searchQuery}
+            archived={searchArchived}
+            onArchived={setSearchArchived}
+            run={runSearch}
+            around={around}
+            openPath={openPath}
+            onOpenSession={select}
+            onClose={() => {
+              setSearchText('')
+              setSearchQuery(null)
+            }}
+          />
+        ) : selected ? (
           data.sessions ? (
             <SessionView
               key={selected}

@@ -99,3 +99,22 @@ export interface Screen {
 }
 
 export type Answer = { action: 'choose'; index: number; label: string } | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }
+
+export interface SearchHit {
+  sessionId: string
+  sessionName: string
+  project: string
+  archived?: boolean
+  uuid: string
+  kind: ItemKind
+  tool?: string
+  time?: string
+  snippet: string
+}
+
+export interface SearchResult {
+  query: string
+  hits: SearchHit[]
+  truncated: boolean
+  searched: number
+}
