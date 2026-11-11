@@ -38,6 +38,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/tail`: offset follower (partial lines, truncation, replacement, deletion)
 - `internal/transcript`: tolerant JSONL parser to typed items
 - `internal/hub`: session poller (1 s plus hook-file events) and live transcripts
+- `internal/pane`: dialog parser and answers (allow-listed keys through `tmux -L agentmgr send-keys`)
 - `internal/send`: reply gate (status, dialog footer, composer draft, text cleaning) and delivery through `agent-manager type`
 - `internal/server`: HTTP, WebSocket, auth checks
 - `web/src/model`: pure view-model logic, covered by Vitest
