@@ -2773,3 +2773,170 @@ mark {
   display: block;
   margin: 0.3rem 0;
 }
+
+/* Phones: the session list and a view take turns, full screen. */
+
+.main-col {
+  display: contents;
+}
+
+.mobile-bar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  /* minmax(0, ...) lets the column shrink below wide content, such as a
+     terminal line, instead of pushing the page off screen. */
+  .desk {
+    grid-template-columns: minmax(0, 1fr);
+    height: 100dvh;
+  }
+
+  .desk.show-main .sidebar,
+  .desk.show-nav .main-col {
+    display: none;
+  }
+
+  .main-col {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .main-col > .main {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  .mobile-bar {
+    display: flex;
+    align-items: center;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-side);
+  }
+
+  .mobile-bar .link-button {
+    font-size: 1rem;
+    padding: 0.2rem 0;
+  }
+
+  .sidebar {
+    border-right: 0;
+    height: 100dvh;
+  }
+
+  .row {
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .keys {
+    display: none;
+  }
+
+  .session-head {
+    padding: 0.6rem 0.9rem 0.5rem;
+  }
+
+  .session-title {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
+
+  .session-title h1 {
+    /* Nearly the full width, so the chips after it wrap to the next line. */
+    flex: 1 1 calc(100% - 2rem);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .live-pane {
+    width: calc(100% - 1.5rem);
+  }
+
+  .reading {
+    padding: 0.9rem 0.9rem 2rem;
+  }
+
+  .activity-bar .segmented {
+    flex-wrap: wrap;
+  }
+
+  .composer {
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+
+  /* 16 px keeps iOS from zooming into a focused field. */
+  textarea,
+  input,
+  select {
+    font-size: 16px;
+  }
+
+  .live-option,
+  .live-cancel {
+    min-height: 44px;
+    font-size: 1rem;
+  }
+
+  .agents-panel {
+    width: 100%;
+  }
+
+  .overlay {
+    padding-top: 0;
+    align-items: stretch;
+  }
+
+  .settings,
+  .switcher,
+  .dialog {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .settings {
+    height: 100dvh;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+    padding: 0.75rem;
+  }
+
+  .usage-body {
+    padding: 0.9rem;
+  }
+
+  .usage-table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .catchup,
+  .suggestion {
+    width: calc(100% - 1.5rem);
+  }
+
+  .suggestion {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* No hover on touch screens: keep the pin visible, inside the edge. */
+  .pinnable > .pin-button {
+    right: 0;
+  }
+
+  .pin-button {
+    opacity: 0.4;
+  }
+}
