@@ -1000,3 +1000,109 @@ pre.code-body,
   gap: 1rem;
   margin-top: 0.4rem;
 }
+
+/* Attention and switcher */
+
+.filters {
+  padding: 0 0.75rem 0.25rem;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.filter.active {
+  border-color: var(--waiting);
+  background: var(--surface-2);
+}
+
+.badge-zero {
+  background: var(--subtle);
+}
+
+.row.attention .row-name {
+  font-weight: 600;
+}
+
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sidebar-foot p {
+  margin: 0;
+}
+
+.sidebar-foot .link-button {
+  align-self: flex-start;
+}
+
+.keys {
+  font-size: 0.72rem;
+  color: var(--subtle);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgb(0 0 0 / 25%);
+}
+
+.switcher {
+  width: min(36rem, calc(100% - 2rem));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--bg);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
+}
+
+.switcher input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.switcher ul {
+  max-height: 24rem;
+  margin: 0;
+  padding: 0.3rem 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 1rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.switch-row.active {
+  background: var(--surface-2);
+}

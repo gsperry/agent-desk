@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { takeToken } from './auth'
-import { Sidebar } from './components/Sidebar'
 import { SessionView } from './components/SessionView'
+import { Sidebar, type ViewOptions } from './components/Sidebar'
+import { Switcher } from './components/Switcher'
+import { attentionCount, nextAttention, ordered } from './model/attention'
+import { groupSessions } from './model/sidebar'
 import { Store, useStore } from './store'
 
 const token = takeToken()
@@ -11,33 +14,84 @@ export default function App() {
   return <Desk token={token} />
 }
 
-const noPending: never[] = []
-
 function sessionFromPath(): string | null {
   const m = /^\/s\/([^/]+)/.exec(window.location.pathname)
   return m?.[1] ? decodeURIComponent(m[1]) : null
 }
 
+const noPending: never[] = []
+
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+}
+
 function Desk({ token }: { token: string }) {
   const store = useMemo(() => new Store(token), [token])
   useEffect(() => store.start(), [store])
-  const { conn, data, pending } = useStore(store)
+  const { conn, data, pending, acks, prefs, permission } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
+  const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
+  const [switcher, setSwitcher] = useState(false)
+  const [visible, setVisible] = useState(document.visibilityState === 'visible')
 
-  useEffect(() => {
-    const onPop = () => {
-      setSelected(sessionFromPath())
-    }
-    window.addEventListener('popstate', onPop)
-    return () => {
-      window.removeEventListener('popstate', onPop)
-    }
-  }, [])
+  const sessions = useMemo(() => data.sessions?.sessions ?? [], [data.sessions])
+  const groups = useMemo(() => groupSessions(sessions, { ...view, acks }), [sessions, view, acks])
+  // j/k walk every session that needs the human, even when filters hide some.
+  const walkOrder = useMemo(() => ordered(groupSessions(sessions, { showArchived: false, acks })), [sessions, acks])
+  const attention = attentionCount(sessions, acks)
 
   const select = useCallback((id: string) => {
     history.pushState(null, '', `/s/${encodeURIComponent(id)}`)
     setSelected(id)
   }, [])
+
+  useEffect(() => {
+    const onPop = () => {
+      setSelected(sessionFromPath())
+    }
+    const onVisibility = () => {
+      setVisible(document.visibilityState === 'visible')
+    }
+    window.addEventListener('popstate', onPop)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+
+  useEffect(() => {
+    store.setOnOpen(select)
+    store.setViewing(selected, visible)
+  }, [store, select, selected, visible])
+
+  useEffect(() => {
+    document.title = attention > 0 ? `(${String(attention)}) Agent Desk` : 'Agent Desk'
+  }, [attention])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSwitcher((open) => !open)
+        return
+      }
+      if (switcher || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === 'j' || e.key === 'k') {
+        const id = nextAttention(walkOrder, acks, selected, e.key === 'j' ? 1 : -1)
+        if (id) {
+          e.preventDefault()
+          select(id)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [switcher, walkOrder, acks, selected, select])
+
   const follow = useCallback((id: string) => {
     store.follow(id)
   }, [store])
@@ -56,15 +110,28 @@ function Desk({ token }: { token: string }) {
 
   if (conn.kind === 'unauthorized') return <NoToken />
 
-  const session = data.sessions?.sessions.find((s) => s.id === selected)
+  const session = sessions.find((s) => s.id === selected)
   return (
     <div className="desk">
       <Sidebar
         state={data.sessions}
         conn={conn}
+        groups={groups}
+        acks={acks}
+        attention={attention}
+        view={view}
+        onView={setView}
         selected={selected}
         onSelect={select}
         onStartManager={() => store.startManager()}
+        prefs={prefs}
+        permission={permission}
+        onPrefs={(p) => {
+          store.setPrefs(p)
+        }}
+        onRequestPermission={() => {
+          void store.requestPermission()
+        }}
       />
       {selected ? (
         data.sessions ? (
@@ -89,8 +156,20 @@ function Desk({ token }: { token: string }) {
         )
       ) : (
         <main className="main">
-          <div className="empty">Pick a session on the left.</div>
+          <div className="empty">
+            {attention > 0 ? `${String(attention)} session${attention === 1 ? ' needs' : 's need'} you. Press j to go to the first.` : 'Pick a session on the left, or press ⌘K.'}
+          </div>
         </main>
+      )}
+      {switcher && (
+        <Switcher
+          sessions={sessions}
+          acks={acks}
+          onPick={select}
+          onClose={() => {
+            setSwitcher(false)
+          }}
+        />
       )}
     </div>
   )

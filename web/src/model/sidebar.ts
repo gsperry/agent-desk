@@ -1,4 +1,5 @@
 import type { Project, SessionView } from '../types'
+import { needsAttention, type Acks } from './attention'
 
 // Lower sorts first: what needs the human, then what is busy, then the rest.
 const statusRank: Record<string, number> = {
@@ -10,8 +11,6 @@ const statusRank: Record<string, number> = {
   idle: 5,
   dead: 6,
 }
-
-export const attentionStatuses = new Set(['waiting', 'errored', 'finished'])
 
 export function rank(status: string): number {
   return statusRank[status] ?? 7
@@ -26,21 +25,27 @@ export interface SidebarGroup {
 
 export interface SidebarOptions {
   showArchived: boolean
+  acks?: Acks
+  // onlyAttention keeps just the sessions that need the human.
+  onlyAttention?: boolean
 }
 
 // groupSessions files sessions under their project. Groups that need
 // attention come first, then groups with live sessions, then by name.
 export function groupSessions(sessions: SessionView[], opts: SidebarOptions): SidebarGroup[] {
   const byKey = new Map<string, SidebarGroup>()
+  const acks = opts.acks ?? {}
   for (const s of sessions) {
     if (s.archived && !opts.showArchived) continue
+    const attention = needsAttention(s, acks)
+    if (opts.onlyAttention && !attention) continue
     let g = byKey.get(s.project.key)
     if (!g) {
       g = { project: s.project, sessions: [], attention: 0 }
       byKey.set(s.project.key, g)
     }
     g.sessions.push(s)
-    if (attentionStatuses.has(s.status)) g.attention++
+    if (attention) g.attention++
   }
   const groups = [...byKey.values()]
   for (const g of groups) {

@@ -69,6 +69,9 @@ export function Composer({ session, connected, insideSession, onSend, restore }:
             if (isSendKey(e.nativeEvent)) {
               e.preventDefault()
               send()
+            } else if (e.key === 'Escape') {
+              // Leaving the composer hands j/k back to session navigation.
+              e.currentTarget.blur()
             }
           }}
         />
