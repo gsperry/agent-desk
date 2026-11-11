@@ -8,8 +8,11 @@ import { OpenPathContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
-import type { Item, SubAgent } from '../types'
+import type { Changes, Item, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
+import { ChangesPanel } from './ChangesPanel'
+import { blockedReason } from '../model/compose'
+import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
 import { ContextMeter } from './ContextMeter'
 import { LivePane } from './LivePane'
@@ -39,6 +42,10 @@ interface Props {
   seenMark?: { seq: number }
   readAgents: (id: string) => Promise<SubAgent[] | null>
   readAgentTranscript: (id: string, agentId: string) => Promise<Item[] | null>
+  readChanges: (id: string, mode: Changes['mode']) => Promise<{ data?: Changes; error?: string }>
+  conflicts: Conflict[]
+  sessions: Session[]
+  pasteImage: (image: Blob) => Promise<{ path?: string; error?: string }>
 }
 
 // The subagent list refreshes this often while a session is open.
@@ -59,6 +66,7 @@ export function SessionView(props: Props) {
   const [markAtOpen] = useState(props.seenMark)
   const [agents, setAgents] = useState<SubAgent[]>([])
   const [agentsOpen, setAgentsOpen] = useState(false)
+  const [changesOpen, setChangesOpen] = useState(false)
   const [openAgent, setOpenAgent] = useState<string | null>(null)
   const { readAgents } = props
   const isClaude = session?.tool === 'claude'
@@ -125,7 +133,23 @@ export function SessionView(props: Props) {
               <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
               {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
             <ContextMeter items={d.items} />
-            {counts.total > 0 && (
+            {props.conflicts.length > 0 && (
+            <span className="chip conflict-chip" title={conflictTitle(props.conflicts, props.sessions)}>
+              ⚠ {props.conflicts.length} shared file{props.conflicts.length === 1 ? '' : 's'}
+            </span>
+          )}
+          <button
+            type="button"
+            className="chip chip-button changes-toggle"
+            aria-pressed={changesOpen}
+            onClick={() => {
+              setChangesOpen(!changesOpen)
+              setAgentsOpen(false)
+            }}
+          >
+            Changes
+          </button>
+          {counts.total > 0 && (
               <button
                 type="button"
                 className="chip chip-button agents-toggle"
@@ -176,6 +200,7 @@ export function SessionView(props: Props) {
               live={session.running}
               followKey={sends}
             markAtOpen={markAtOpen}
+          filterable
               onLoadOlder={() => {
                 loadOlder(sessionId)
               }}
@@ -219,12 +244,28 @@ export function SessionView(props: Props) {
             connected={connected}
             insideSession={insideSession}
             restore={restore}
+          pasteImage={props.pasteImage}
             onSend={(text) => {
               send(sessionId, text)
               setSends((n) => n + 1)
             }}
           />
-          {agentsOpen && (
+          {changesOpen && (
+          <ChangesPanel
+            sessionId={sessionId}
+            canSend={blockedReason(session, connected, insideSession)}
+            load={props.readChanges}
+            onSend={(text) => {
+              send(sessionId, text)
+              setSends((n) => n + 1)
+              setChangesOpen(false)
+            }}
+            onClose={() => {
+              setChangesOpen(false)
+            }}
+          />
+        )}
+        {agentsOpen && (
             <AgentsPanel
               sessionId={sessionId}
               agents={agents}

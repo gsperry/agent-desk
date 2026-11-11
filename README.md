@@ -51,6 +51,14 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 - **Since you last looked:** sidebar rows with new activity get a dot, and opening the session shows a divider before what arrived since your last visit.
 - **Context meter:** the session header shows how much context the latest turn used and, once that model has auto-compacted in a transcript Agent Desk has read, how close it is to compacting again.
 
+## Review and steer
+
+- **Changes:** the Changes button shows the session's git changes, uncommitted or since its branch left the default branch. Click a diff line to comment; Send review sends all comments as one numbered prompt. Git runs read-only with external diff tools, text converters and fsmonitor disabled, so a repository's config cannot make it run commands.
+- **Shared files:** ⚠ on a sidebar row and in the session header means another live session wrote the same file in the last six hours.
+- **Activity filter:** above the transcript, show all activity, only shell commands, only file changes, or only errors. Risky shell commands (recursive deletes, force pushes, hard resets, `sudo` and others) carry a warning badge.
+- **Snippets:** the composer's ⋯ menu inserts a saved reply, or type `/name` and press Tab. Edit them in Settings; `{session}`, `{branch}`, `{project}` and `{directory}` are filled in.
+- **Images:** paste an image into the composer. It is saved owner-only under your user cache directory, its path is inserted for the agent to read, and it is removed after seven days.
+
 ## Replying
 
 Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.

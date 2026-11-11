@@ -5,7 +5,7 @@ import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } 
 import { expire, reconcile, type Pending } from './model/pending'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { browserNotifier, type Notifier, type Permission } from './notify'
-import type { Answer, Item, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, Changes, Item, Page, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -296,6 +296,33 @@ export class Store {
 
   async deleteGroup(path: string): Promise<string | null> {
     return (await this.post('/api/groups/delete', { path })).error ?? null
+  }
+
+  async changes(sessionId: string, mode: Changes['mode']): Promise<{ data?: Changes; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/changes?mode=${mode}`)
+      const body = (await res.json().catch(() => ({}))) as Changes & SendRefusal
+      return res.ok ? { data: body } : { error: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // paste stores an image for the composer and returns its path.
+  async paste(image: Blob): Promise<{ path?: string; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/paste', { method: 'POST', body: image })
+      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string }
+      return res.ok ? { path: body.path } : { error: body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async conflicts(): Promise<Record<string, { path: string; others: string[] }[]> | null> {
+    const res = await apiFetch(this.token, '/api/conflicts').catch(() => null)
+    if (!res?.ok) return null
+    return ((await res.json()) as { conflicts: Record<string, { path: string; others: string[] }[]> }).conflicts
   }
 
   async overview(): Promise<Record<string, Summary> | null> {

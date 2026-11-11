@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -21,11 +22,14 @@ import (
 
 	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
+	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
+	"github.com/gsperry/agent-desk/internal/paste"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/transcript"
@@ -66,6 +70,24 @@ type Config struct {
 	Lifecycle Lifecycle
 	// Overview summarizes every session for the home screen.
 	Overview Overview
+	// Changes reads a session's git changes.
+	Changes ChangesSource
+	// Conflicts finds files written by more than one live session.
+	Conflicts ConflictSource
+	// Pastes stores images pasted into the composer.
+	Pastes PasteStore
+}
+
+type PasteStore interface {
+	Save(data []byte) (string, error)
+}
+
+type ConflictSource interface {
+	Find(ctx context.Context) map[string][]conflicts.Conflict
+}
+
+type ChangesSource interface {
+	Changes(ctx context.Context, sessionID, mode string) (changes.Changes, error)
 }
 
 type Overview interface {
@@ -124,8 +146,8 @@ type Server struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil {
-		return nil, errors.New("sessions, manager, transcripts, sender, panes, opener, searcher, lifecycle and overview are required")
+	if cfg.Sessions == nil || cfg.Manager == nil || cfg.Transcripts == nil || cfg.Sender == nil || cfg.Panes == nil || cfg.Opener == nil || cfg.Searcher == nil || cfg.Lifecycle == nil || cfg.Overview == nil || cfg.Changes == nil || cfg.Conflicts == nil || cfg.Pastes == nil {
+		return nil, errors.New("every Config source is required")
 	}
 	if len(cfg.Token) < 32 {
 		return nil, errors.New("token must be at least 32 characters")
@@ -153,6 +175,9 @@ func New(cfg Config) (*Server, error) {
 	s.mux.Handle("POST /api/sessions/{id}/answer", s.requireToken(http.HandlerFunc(s.answer)))
 	s.mux.Handle("GET /api/sessions/{id}/agents", s.requireToken(http.HandlerFunc(s.listAgents)))
 	s.mux.Handle("GET /api/sessions/{id}/agents/{agent}/transcript", s.requireToken(http.HandlerFunc(s.agentTranscript)))
+	s.mux.Handle("GET /api/sessions/{id}/changes", s.requireToken(http.HandlerFunc(s.changes)))
+	s.mux.Handle("POST /api/paste", s.requireToken(http.HandlerFunc(s.paste)))
+	s.mux.Handle("GET /api/conflicts", s.requireToken(http.HandlerFunc(s.conflicts)))
 	s.mux.Handle("GET /api/overview", s.requireToken(http.HandlerFunc(s.overview)))
 	s.mux.Handle("GET /api/spawn-options", s.requireToken(http.HandlerFunc(s.spawnOptions)))
 	s.mux.Handle("POST /api/sessions", s.requireToken(http.HandlerFunc(s.spawn)))
@@ -285,6 +310,36 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) changes(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	c, err := s.cfg.Changes.Changes(ctx, r.PathValue("id"), r.URL.Query().Get("mode"))
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (s *Server) paste(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, paste.MaxBytes+1))
+	if err != nil {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "image is over 10 MB"})
+		return
+	}
+	path, err := s.cfg.Pastes.Save(data)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+}
+
+func (s *Server) conflicts(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, map[string]any{"conflicts": s.cfg.Conflicts.Find(ctx)})
 }
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {

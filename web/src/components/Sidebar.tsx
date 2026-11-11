@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ConnectionState } from '../api'
 import { needsAttention, type Acks } from '../model/attention'
+import { conflictTitle, type Conflicts } from '../model/conflicts'
 import { hasNew, type Seen } from '../model/seen'
 import { archivedCount, type SidebarGroup } from '../model/sidebar'
 import type { Permission } from '../notify'
@@ -19,6 +20,7 @@ interface Props {
   groups: SidebarGroup[]
   acks: Acks
   seen: Seen
+  conflicts: Conflicts
   attention: number
   view: ViewOptions
   onView: (v: ViewOptions) => void
@@ -151,6 +153,11 @@ export function Sidebar(props: Props) {
                       {glyph(s.status)}
                     </span>
                     <span className="row-name">{s.name}</span>
+                    {props.conflicts[s.id] && (
+                      <span className="conflict-mark" title={conflictTitle(props.conflicts[s.id] ?? [], sessions)} aria-label="shares files with another session">
+                        ⚠
+                      </span>
+                    )}
                     {s.id !== selected && hasNew(s, props.seen) && (
                       <span className="unread" title="New activity since you last looked" aria-label="new activity" />
                     )}

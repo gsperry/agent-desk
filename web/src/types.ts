@@ -168,3 +168,22 @@ export interface Summary {
   model?: string
   updated?: string
 }
+
+export interface ChangedFile {
+  path: string
+  oldPath?: string
+  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | (string & {})
+  added: number
+  removed: number
+  binary?: boolean
+  hunks: { oldStart: number; oldLines: number; newStart: number; newLines: number; lines: string[] }[]
+}
+
+export interface Changes {
+  repo: string
+  branch: string
+  mode: 'uncommitted' | 'branch'
+  base?: string
+  files: ChangedFile[]
+  truncated?: boolean
+}

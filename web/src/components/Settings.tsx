@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
+import { defaultSnippets, validName, type Snippet } from '../model/snippets'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 
 interface Props {
   prefs: ViewPrefs
   onChange: (p: ViewPrefs) => void
+  snippets: Snippet[]
+  onSnippets: (s: Snippet[]) => void
   onClose: () => void
 }
 
@@ -36,7 +39,7 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, onClose }: Props) {
   const set = (p: Partial<ViewPrefs>) => {
     onChange({ ...prefs, ...p })
   }
@@ -169,6 +172,60 @@ export function Settings({ prefs, onChange, onClose }: Props) {
             }}
           />
           <p className="muted setting-note">Failed tool calls always start expanded. Changes apply to blocks as they appear.</p>
+        </Section>
+        <Section title="Reply snippets">
+          <p className="muted setting-note">
+            Insert from the composer's ⋯ menu, or type /name and press Tab. {'{session}'}, {'{branch}'}, {'{project}'} and {'{directory}'} are filled in.
+          </p>
+          {snippets.map((sn, i) => (
+            <div key={i} className="snippet-edit">
+              <input
+                aria-label="Snippet name"
+                value={sn.name}
+                className={validName(sn.name) ? undefined : 'invalid'}
+                onChange={(e) => {
+                  onSnippets(snippets.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                }}
+              />
+              <textarea
+                aria-label="Snippet text"
+                rows={2}
+                value={sn.text}
+                onChange={(e) => {
+                  onSnippets(snippets.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))
+                }}
+              />
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  onSnippets(snippets.filter((_, j) => j !== i))
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div className="snippet-actions">
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                onSnippets([...snippets, { name: `snippet${String(snippets.length + 1)}`, text: '' }])
+              }}
+            >
+              Add snippet
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                onSnippets(defaultSnippets)
+              }}
+            >
+              Restore defaults
+            </button>
+          </div>
         </Section>
       </div>
     </div>

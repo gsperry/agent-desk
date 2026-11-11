@@ -41,6 +41,9 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/manage`: spawn, kill, revive, archive, move and groups through agent-manager, validated against current state
 - `internal/agents`: subagents of a conversation (`subagents/*.meta.json`), status from task notifications, and their transcripts
 - `internal/overview`: per-session summary from the transcript tail, cached by size and mtime
+- `internal/changes`: read-only git changes for a session (ext diff, textconv and fsmonitor disabled), parsed into hunks
+- `internal/conflicts`: files written by more than one live session, from transcript tails
+- `internal/paste`: pasted images, type sniffed from bytes, owner-only, cleaned after 7 days
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
 - `internal/pane`: dialog parser and answers (allow-listed keys through `tmux -L agentmgr send-keys`)

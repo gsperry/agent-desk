@@ -1932,3 +1932,264 @@ mark {
   margin-left: auto;
   font-size: 0.8rem;
 }
+
+/* Changes and review */
+
+.changes-panel {
+  width: min(64rem, 100%);
+}
+
+.changes-panel .agents-head {
+  gap: 0.75rem;
+}
+
+.changes-panel .agents-head strong {
+  margin-right: auto;
+}
+
+.changes-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 17rem 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.changes-meta {
+  grid-column: 1 / -1;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.changed-files {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  list-style: none;
+}
+
+.changed-file {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.35rem 0.75rem;
+  border: 0;
+  background: none;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.changed-file.active,
+.changed-file:hover {
+  background: var(--surface);
+}
+
+.changed-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.file-status {
+  width: 1rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--dim);
+}
+
+.file-status.status-added,
+.file-status.status-untracked {
+  color: var(--add-fg);
+}
+
+.file-status.status-deleted {
+  color: var(--del-fg);
+}
+
+.review-diff {
+  max-height: none;
+  margin: 0;
+  overflow: auto;
+  border-radius: 0;
+}
+
+.diff-clickable {
+  cursor: pointer;
+}
+
+.diff-clickable:hover td {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.review-comment td,
+.review-draft td {
+  padding: 0.4rem 0.6rem;
+  background: var(--info-bg);
+  font-family: var(--font-ui);
+  white-space: pre-wrap;
+}
+
+.review-comment td {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.review-draft textarea {
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.review-draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.3rem;
+}
+
+.changes-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.8rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.changes-foot > span:first-child {
+  margin-right: auto;
+}
+
+/* Shared-file warnings */
+
+.conflict-mark {
+  color: var(--warn);
+  font-size: 0.8rem;
+}
+
+.conflict-chip {
+  border-color: var(--warn);
+  color: var(--warn);
+  cursor: help;
+}
+
+/* Activity filter and risky commands */
+
+.activity-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.4rem 0;
+  pointer-events: none;
+}
+
+.activity-filter {
+  background: var(--bg);
+  pointer-events: auto;
+}
+
+.tool-risky {
+  border-color: var(--warn);
+}
+
+.risk-badge {
+  flex: none;
+  padding: 0 0.4rem;
+  border-radius: 0.5rem;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.72rem;
+}
+
+/* Snippets */
+
+.snippet-menu-wrap {
+  position: relative;
+}
+
+.snippet-button {
+  padding: 0.55rem 0.7rem;
+}
+
+.snippet-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.4rem);
+  z-index: 10;
+  width: 22rem;
+  max-height: 18rem;
+  margin: 0;
+  padding: 0.3rem 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.snippet-menu button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.4rem 0.8rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.snippet-menu button:hover {
+  background: var(--surface);
+}
+
+.snippet-menu .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet-edit {
+  display: grid;
+  grid-template-columns: 8rem 1fr auto;
+  align-items: start;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.snippet-edit input,
+.snippet-edit textarea {
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.snippet-edit input.invalid {
+  border-color: var(--error);
+}
+
+.snippet-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.6rem;
+}

@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/gsperry/agent-desk/internal/am"
+	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
@@ -29,6 +31,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/open"
 	"github.com/gsperry/agent-desk/internal/overview"
 	"github.com/gsperry/agent-desk/internal/pane"
+	"github.com/gsperry/agent-desk/internal/paste"
 	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
@@ -85,6 +88,10 @@ func run(o options) error {
 	}
 	poller.Activity = transcriptActivity(transcripts.Locator)
 	searcher := &search.Searcher{Sessions: poller, Locator: transcripts.Locator}
+	pastes, err := pasteStore(o.fixtures)
+	if err != nil {
+		return err
+	}
 	l, err := listen(o.port)
 	if err != nil {
 		return err
@@ -105,6 +112,12 @@ func run(o options) error {
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},
 		Overview:    &overview.Overview{Sessions: poller, Locator: transcripts.Locator},
+		Conflicts:   &conflicts.Finder{Sessions: poller, Locator: transcripts.Locator},
+		Pastes:      pastes,
+		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
+			Timeout: 15 * time.Second,
+			Env:     append(procrun.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0"),
+		}}},
 	})
 	if err != nil {
 		return err
@@ -125,6 +138,7 @@ func run(o options) error {
 	defer stop()
 	go poller.Run(ctx)
 	go transcripts.Run(ctx)
+	go cleanPastes(ctx, pastes)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	select {
@@ -194,6 +208,37 @@ func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*h
 		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
 		Sessions: sessions,
 	}, nil
+}
+
+// pasteStore keeps pasted images under the user cache directory, or the
+// fixture directory in fixture mode.
+func pasteStore(fixtures string) (paste.Store, error) {
+	if fixtures != "" {
+		// Agents read the path from anywhere, so it must be absolute.
+		dir, err := filepath.Abs(filepath.Join(fixtures, "pastes"))
+		return paste.Store{Dir: dir}, err
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return paste.Store{}, err
+	}
+	return paste.Store{Dir: filepath.Join(dir, "agent-desk", "pastes")}, nil
+}
+
+// cleanPastes removes week-old pasted images at start and once a day.
+func cleanPastes(ctx context.Context, s paste.Store) {
+	const age = 7 * 24 * time.Hour
+	s.Cleanup(age, time.Now())
+	t := time.NewTicker(24 * time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			s.Cleanup(age, now)
+		}
+	}
 }
 
 // keys presses dialog keys through agent-manager's tmux server, or records

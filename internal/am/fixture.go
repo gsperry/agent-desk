@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,12 +24,23 @@ type Fixture struct {
 	Path string
 }
 
+// Snapshot expands ${FIXTURES} in session directories to the fixture
+// directory, so tests can point a session at a repository they create.
 func (f Fixture) Snapshot(context.Context) (Snapshot, error) {
 	data, err := os.ReadFile(f.Path)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	return ParseSnapshot(data)
+	snap, err := ParseSnapshot(data)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if dir, err := filepath.Abs(filepath.Dir(f.Path)); err == nil {
+		for i := range snap.Sessions {
+			snap.Sessions[i].Directory = strings.ReplaceAll(snap.Sessions[i].Directory, "${FIXTURES}", dir)
+		}
+	}
+	return snap, nil
 }
 
 func (f Fixture) StartServe(context.Context) error { return nil }

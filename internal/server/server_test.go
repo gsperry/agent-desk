@@ -18,6 +18,8 @@ import (
 
 	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/am"
+	"github.com/gsperry/agent-desk/internal/changes"
+	"github.com/gsperry/agent-desk/internal/conflicts"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/manage"
 	"github.com/gsperry/agent-desk/internal/open"
@@ -163,6 +165,30 @@ func (f *fakeLifecycle) DeleteGroup(_ context.Context, path string) error {
 	return f.err
 }
 
+type fakeChanges struct{}
+
+func (fakeChanges) Changes(_ context.Context, id, mode string) (changes.Changes, error) {
+	if id == "norepo" {
+		return changes.Changes{}, &send.Refused{Reason: "not_repo"}
+	}
+	return changes.Changes{Repo: "/r", Mode: mode, Files: []changes.File{}}, nil
+}
+
+type fakePastes struct{}
+
+func (fakePastes) Save(data []byte) (string, error) {
+	if string(data) == "png" {
+		return "/cache/paste-1.png", nil
+	}
+	return "", errors.New("only PNG, JPEG, GIF and WebP images can be pasted")
+}
+
+type fakeConflicts struct{}
+
+func (fakeConflicts) Find(context.Context) map[string][]conflicts.Conflict {
+	return map[string][]conflicts.Conflict{"a1": {{Path: "/x", Others: []string{"b2"}}}}
+}
+
 type fakeOverview struct{}
 
 func (fakeOverview) Summaries(context.Context) map[string]overview.Summary {
@@ -208,6 +234,15 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	if cfg.Overview == nil {
 		cfg.Overview = fakeOverview{}
 	}
+	if cfg.Changes == nil {
+		cfg.Changes = fakeChanges{}
+	}
+	if cfg.Conflicts == nil {
+		cfg.Conflicts = fakeConflicts{}
+	}
+	if cfg.Pastes == nil {
+		cfg.Pastes = fakePastes{}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +251,7 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 }
 
 func TestNewRejectsShortToken(t *testing.T) {
-	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}}); err == nil {
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "short", Sessions: newFakeSource(), Manager: fakeManager{}, Transcripts: newFakeTranscripts(), Sender: &fakeSender{}, Panes: &fakePanes{}, Opener: &fakeOpener{}, Searcher: &fakeSearcher{}, Lifecycle: &fakeLifecycle{}, Overview: fakeOverview{}, Changes: fakeChanges{}, Conflicts: fakeConflicts{}, Pastes: fakePastes{}}); err == nil {
 		t.Fatal("expected error for short token")
 	}
 }
@@ -258,6 +293,10 @@ func TestRequestChecks(t *testing.T) {
 		{"search", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
 		{"search without token", "GET", "/api/search?q=flaky", "127.0.0.1:7317", "", "", 401},
 		{"transcript around a hit", "GET", "/api/sessions/a1/transcript?around=u-1", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"conflicts", "GET", "/api/conflicts", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"changes", "GET", "/api/sessions/a1/changes?mode=branch", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
+		{"changes outside a repo", "GET", "/api/sessions/norepo/changes", "127.0.0.1:7317", "", "Bearer " + testToken, 409},
+		{"changes without token", "GET", "/api/sessions/a1/changes", "127.0.0.1:7317", "", "", 401},
 		{"overview", "GET", "/api/overview", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
 		{"overview without token", "GET", "/api/overview", "127.0.0.1:7317", "", "", 401},
 		{"agents", "GET", "/api/sessions/a1/agents", "127.0.0.1:7317", "", "Bearer " + testToken, 200},
@@ -524,6 +563,34 @@ func TestLifecycleRoutes(t *testing.T) {
 			}
 			if tt.check != nil {
 				tt.check(t, f)
+			}
+		})
+	}
+}
+
+func TestPasteRoute(t *testing.T) {
+	tests := []struct {
+		name, body, origin string
+		want               int
+		wantBody           string
+	}{
+		{"saved", "png", "http://127.0.0.1:7317", 200, "paste-1.png"},
+		{"not an image", "<html>", "http://127.0.0.1:7317", 400, "only PNG"},
+		{"no origin", "png", "", 403, "forbidden"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{})
+			req := httptest.NewRequest("POST", "/api/paste", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 			}
 		})
 	}

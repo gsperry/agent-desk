@@ -1,0 +1,2 @@
+{"type":"user","uuid":"r-1","timestamp":"2026-11-10T07:00:00.000Z","promptSource":"typed","origin":{"kind":"human"},"message":{"role":"user","content":"Update the notes."}}
+{"type":"assistant","uuid":"r-2","timestamp":"2026-11-10T07:00:10.000Z","message":{"id":"msg_r1","content":[{"type":"text","text":"Updated notes.md."}]}}
