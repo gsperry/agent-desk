@@ -1,15 +1,40 @@
 import { useSyncExternalStore } from 'react'
 import { apiFetch, connect, type Connection, type ConnectionState } from './api'
+import { shouldNotify, statusMap, transitions, updateAcks, type Acks, type Transition } from './model/attention'
 import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } from './model/docs'
 import { expire, reconcile, type Pending } from './model/pending'
+import { browserNotifier, type Notifier, type Permission } from './notify'
 import type { Page, ServerMessage } from './types'
+
+export interface Prefs {
+  notify: boolean
+  notifyOnFinish: boolean
+}
 
 export interface StoreState {
   conn: ConnectionState
   data: AppData
   // pending holds replies per session until the transcript records them.
   pending: Record<string, Pending[]>
+  acks: Acks
+  prefs: Prefs
+  permission: Permission
 }
+
+const acksKey = 'agent-desk:acks'
+const prefsKey = 'agent-desk:prefs'
+
+function readJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? ({ ...fallback, ...(JSON.parse(raw) as object) }) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const glyphs: Record<string, string> = { waiting: '◆', errored: '✕', finished: '●' }
+const verbs: Record<string, string> = { waiting: 'is waiting for you', errored: 'hit an error', finished: 'finished its turn' }
 
 export interface SendRefusal {
   reason?: string
@@ -20,15 +45,77 @@ export interface SendRefusal {
 type Listener = () => void
 
 export class Store {
-  private state: StoreState = { conn: { kind: 'connecting' }, data: emptyData, pending: {} }
+  private state: StoreState
   private nextId = 0
+  private prevStatuses: Record<string, string> | null = null
+  private viewing: string | null = null
+  private visible = true
+  private readonly notifier: Notifier
+  private onOpen: (sessionId: string) => void = () => undefined
   private listeners = new Set<Listener>()
   private connection: Connection | null = null
   private followed = new Set<string>()
   private readonly token: string
 
-  constructor(token: string) {
+  constructor(token: string, notifier: Notifier = browserNotifier) {
     this.token = token
+    this.notifier = notifier
+    this.state = {
+      conn: { kind: 'connecting' },
+      data: emptyData,
+      pending: {},
+      acks: readJSON<Acks>(acksKey, {}),
+      prefs: readJSON<Prefs>(prefsKey, { notify: true, notifyOnFinish: false }),
+      permission: notifier.permission(),
+    }
+  }
+
+  // setOnOpen sets what a notification click does.
+  setOnOpen(f: (sessionId: string) => void) {
+    this.onOpen = f
+  }
+
+  // setViewing records which session is on screen and whether the page is
+  // visible, which decides what counts as seen and what needs a notification.
+  setViewing(sessionId: string | null, visible: boolean) {
+    this.viewing = sessionId
+    this.visible = visible
+    this.refreshAcks()
+  }
+
+  private refreshAcks() {
+    const sessions = this.state.data.sessions?.sessions ?? []
+    const acks = updateAcks(this.state.acks, sessions, this.visible ? this.viewing : null)
+    if (acks === this.state.acks) return
+    localStorage.setItem(acksKey, JSON.stringify(acks))
+    this.set({ ...this.state, acks })
+  }
+
+  setPrefs(prefs: Partial<Prefs>) {
+    const next = { ...this.state.prefs, ...prefs }
+    localStorage.setItem(prefsKey, JSON.stringify(next))
+    this.set({ ...this.state, prefs: next })
+  }
+
+  async requestPermission() {
+    const permission = await this.notifier.request()
+    this.set({ ...this.state, permission })
+    if (permission === 'granted') this.setPrefs({ notify: true })
+  }
+
+  private notifyTransitions(list: Transition[]) {
+    const { prefs } = this.state
+    if (!prefs.notify || this.notifier.permission() !== 'granted') return
+    for (const t of list) {
+      if (!shouldNotify(t, { onFinish: prefs.notifyOnFinish })) continue
+      // The reader is already looking at it.
+      if (this.visible && this.viewing === t.session.id) continue
+      const s = t.session
+      const where = [s.project.name, s.branch].filter(Boolean).join(' · ')
+      this.notifier.show(`${glyphs[t.to] ?? ''} ${s.name} ${verbs[t.to] ?? t.to}`.trim(), where, s.id, () => {
+        this.onOpen(s.id)
+      })
+    }
   }
 
   start() {
@@ -55,7 +142,13 @@ export class Store {
       for (const id of this.followed) this.connection?.send({ type: 'subscribe', sessionId: id })
     }
     const data = applyMessage(this.state.data, msg)
-    if (data !== this.state.data) this.set({ ...this.state, data, pending: this.reconciled(data) })
+    if (data === this.state.data) return
+    this.set({ ...this.state, data, pending: this.reconciled(data) })
+    if (msg.type === 'sessions') {
+      this.notifyTransitions(transitions(this.prevStatuses, msg.state.sessions))
+      this.prevStatuses = statusMap(msg.state.sessions)
+      this.refreshAcks()
+    }
   }
 
   private reconciled(data: AppData): Record<string, Pending[]> {

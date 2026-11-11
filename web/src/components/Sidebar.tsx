@@ -1,21 +1,37 @@
 import { useState } from 'react'
 import type { ConnectionState } from '../api'
-import { archivedCount, groupSessions } from '../model/sidebar'
+import { needsAttention, type Acks } from '../model/attention'
+import { archivedCount, type SidebarGroup } from '../model/sidebar'
+import type { Permission } from '../notify'
+import type { Prefs } from '../store'
 import type { State } from '../types'
 import { glyph } from './status'
+
+export interface ViewOptions {
+  showArchived: boolean
+  onlyAttention: boolean
+}
 
 interface Props {
   state: State | null
   conn: ConnectionState
+  groups: SidebarGroup[]
+  acks: Acks
+  attention: number
+  view: ViewOptions
+  onView: (v: ViewOptions) => void
   selected: string | null
   onSelect: (id: string) => void
   onStartManager: () => Promise<string | null>
+  prefs: Prefs
+  permission: Permission
+  onPrefs: (p: Partial<Prefs>) => void
+  onRequestPermission: () => void
 }
 
-export function Sidebar({ state, conn, selected, onSelect, onStartManager }: Props) {
-  const [showArchived, setShowArchived] = useState(false)
+export function Sidebar(props: Props) {
+  const { state, conn, groups, acks, attention, view, onView, selected, onSelect, onStartManager } = props
   const sessions = state?.sessions ?? []
-  const groups = groupSessions(sessions, { showArchived })
   const archived = archivedCount(sessions)
 
   return (
@@ -25,8 +41,23 @@ export function Sidebar({ state, conn, selected, onSelect, onStartManager }: Pro
         <span className={`conn conn-${conn.kind}`} title={connTitle(conn)} />
       </header>
       <Banners state={state} conn={conn} onStartManager={onStartManager} />
+      <div className="filters">
+        <button
+          type="button"
+          className={view.onlyAttention ? 'filter active' : 'filter'}
+          aria-pressed={view.onlyAttention}
+          onClick={() => {
+            onView({ ...view, onlyAttention: !view.onlyAttention })
+          }}
+        >
+          Needs you
+          <span className={attention > 0 ? 'badge' : 'badge badge-zero'}>{attention}</span>
+        </button>
+      </div>
       <div className="groups">
-        {state && groups.length === 0 && <p className="muted pad">No sessions. Start one in agent-manager.</p>}
+        {state && groups.length === 0 && (
+          <p className="muted pad">{view.onlyAttention ? 'Nothing needs you right now.' : 'No sessions. Start one in agent-manager.'}</p>
+        )}
         {groups.map((g) => (
           <section key={g.project.key} className="group">
             <h2 className="group-head" title={g.project.root ?? g.project.name}>
@@ -38,7 +69,7 @@ export function Sidebar({ state, conn, selected, onSelect, onStartManager }: Pro
                 <li key={s.id}>
                   <button
                     type="button"
-                    className={`row status-${s.status}${s.id === selected ? ' selected' : ''}${s.archived ? ' archived' : ''}`}
+                    className={`row status-${s.status}${s.id === selected ? ' selected' : ''}${s.archived ? ' archived' : ''}${needsAttention(s, acks) ? ' attention' : ''}`}
                     onClick={() => {
                       onSelect(s.id)
                     }}
@@ -57,22 +88,66 @@ export function Sidebar({ state, conn, selected, onSelect, onStartManager }: Pro
           </section>
         ))}
       </div>
-      {archived > 0 && (
-        <footer className="sidebar-foot">
+      <footer className="sidebar-foot">
+        {archived > 0 && (
           <label>
             <input
               type="checkbox"
-              checked={showArchived}
+              checked={view.showArchived}
               onChange={(e) => {
-                setShowArchived(e.target.checked)
+                onView({ ...view, showArchived: e.target.checked })
               }}
             />{' '}
             Show archived ({archived})
           </label>
-        </footer>
-      )}
+        )}
+        <NotifyControls {...props} />
+        <p className="keys">⌘K switch · j/k next that needs you</p>
+      </footer>
     </nav>
   )
+}
+
+function NotifyControls({ prefs, permission, onPrefs, onRequestPermission }: Props) {
+  switch (permission) {
+    case 'unsupported':
+      return null
+    case 'denied':
+      return <p className="muted">Notifications are blocked in this browser's site settings.</p>
+    case 'default':
+      return (
+        <button type="button" className="link-button" onClick={onRequestPermission}>
+          Turn on notifications
+        </button>
+      )
+    case 'granted':
+      return (
+        <>
+          <label>
+            <input
+              type="checkbox"
+              checked={prefs.notify}
+              onChange={(e) => {
+                onPrefs({ notify: e.target.checked })
+              }}
+            />{' '}
+            Notify when a session needs me
+          </label>
+          {prefs.notify && (
+            <label>
+              <input
+                type="checkbox"
+                checked={prefs.notifyOnFinish}
+                onChange={(e) => {
+                  onPrefs({ notifyOnFinish: e.target.checked })
+                }}
+              />{' '}
+              Also when a turn finishes
+            </label>
+          )}
+        </>
+      )
+  }
 }
 
 function connTitle(c: ConnectionState): string {

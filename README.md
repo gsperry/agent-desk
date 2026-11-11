@@ -36,6 +36,18 @@ Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (
 
 A reply is refused, with the reason, when it would land somewhere other than the agent's prompt: the session is waiting on a question or permission prompt, a dialog is on screen, or text is already typed into the agent's own prompt in the terminal. Answer those in agent-manager. A reply sent while the agent works is queued by Claude Code and shows as queued.
 
+## Sessions that need you
+
+A session needs you when it is waiting on a question or permission prompt, has errored, or has finished a turn you have not looked at yet. The sidebar's "Needs you" filter and the tab title show the count.
+
+| Key | Action |
+| --- | --- |
+| ⌘K / Ctrl+K | Switch to any session by name |
+| j / k | Next / previous session that needs you |
+| Esc | Leave the composer, so j and k work again |
+
+"Turn on notifications" in the sidebar enables browser notifications when a session starts waiting or errors, and optionally when a turn finishes. Notifications need an open Agent Desk tab. A session you are looking at does not notify.
+
 ## Development
 
 ```sh
@@ -65,7 +77,7 @@ go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl
 
 Agent Desk reads Claude Code's session transcripts (`~/.claude/projects/**/*.jsonl`). That format is undocumented and changes between releases. Records Agent Desk does not recognize are shown as collapsed raw events rather than dropped, but rendering can lag behind new Claude Code versions.
 
-Session status comes from agent-manager and only advances while agent-manager (its TUI or `agent-manager serve`) is running.
+Session status comes from agent-manager and only advances while agent-manager (its TUI or `agent-manager serve`) is running. It reaches Agent Desk about 2.3 s after a change, because agent-manager stores status on a 2 s cycle. Proposed fixes for this and other gaps are in [docs/upstream](docs/upstream/README.md).
 
 ## License
 

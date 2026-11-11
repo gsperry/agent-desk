@@ -46,6 +46,13 @@ describe('groupSessions', () => {
     expect(total).toBe(want)
   })
 
+  it('counts only unseen finished sessions and can filter to attention', () => {
+    const acks = { 'a-finished': true as const }
+    const groups = groupSessions(sessions, { showArchived: false, acks, onlyAttention: true })
+    expect(groups.map((g) => g.project.name)).toEqual(['gamma'])
+    expect(groupSessions(sessions, { showArchived: false, acks })[0]?.project.name).toBe('gamma')
+  })
+
   it('sorts unknown statuses last', () => {
     const g = groupSessions([s('x', 'p', 'mystery'), s('y', 'p', 'idle')], { showArchived: false })[0]
     expect(g?.sessions.map((x) => x.id)).toEqual(['y', 'x'])

@@ -43,13 +43,13 @@ test('a waiting session explains why it cannot take a reply', async ({ page }) =
   await open(page, 'a0000002')
   await expect(page.getByText('waiting on a question or permission prompt')).toBeVisible()
   await composer(page).fill('anything')
-  await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
 })
 
 test('a dialog on screen refuses the send and the text can be edited', async ({ page }) => {
   await open(page, 'a0000008')
   await composer(page).fill('pick nothing')
-  await page.getByRole('button', { name: 'Send' }).click()
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
   const failed = page.locator('.pending-failed')
   await expect(failed).toContainText('showing a dialog')
   await failed.getByRole('button', { name: 'Edit' }).click()
