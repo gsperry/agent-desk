@@ -33,3 +33,28 @@ jobs:
         run: make build
       - name: Smoke
         run: ./bin/agent-desk --version
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build
+        run: make build
+      - name: Install browser
+        run: cd web && npx playwright install --with-deps chromium
+      - name: Smoke test
+        run: make e2e
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: e2e-results
+          path: web/test-results/

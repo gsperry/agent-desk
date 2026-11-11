@@ -1,0 +1,12 @@
+{"type":"user","uuid":"e-1","timestamp":"2026-11-10T10:00:00.000Z","promptSource":"typed","origin":{"kind":"human"},"message":{"role":"user","content":"A plain prompt."}}
+this line is not json
+{"type":"assistant","uuid":"e-2","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"Half a rec
+{"type":"hologram","uuid":"e-3","payload":{"x":1}}
+{"uuid":"e-4","message":{"content":"no type field"}}
+{"type":"assistant","uuid":"e-5","message":{"id":"msg_2","role":"assistant","content":[{"type":"quantum_block","value":42},{"type":"text","text":"After an unknown block."}]}}
+{"type":"user","uuid":"e-6","message":{"role":"user","content":12345}}
+{"type":"assistant","uuid":"e-7","message":"not an object"}
+{"type":"user","uuid":"e-1","timestamp":"2026-11-10T10:00:00.000Z","promptSource":"typed","origin":{"kind":"human"},"message":{"role":"user","content":"A plain prompt."}}
+{"type":"system","uuid":"e-8","subtype":"brand_new_subtype","content":"Something new happened."}
+{"type":"attachment","uuid":"e-9","attachment":{"type":"brand_new_attachment"}}
+[1, 2, 3]

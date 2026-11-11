@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "manager_awake": true,
+  "sessions": [
+    {"id": "a0000001", "name": "api-orchestrator", "tool": "claude", "group": "", "directory": "/home/dev/src/api", "status": "working", "running": true, "archived": false, "agent_session_id": "001d8e4b-ce59-42da-b222-bf4ddaa3f1e8", "self": false},
+    {"id": "a0000002", "name": "web-compaction", "tool": "claude", "group": "", "directory": "/home/dev/src/web", "status": "waiting", "running": true, "archived": false, "branch": "am/compaction", "agent_session_id": "7e0c432a-0ee1-4f2a-8b04-93cbbd8c6102", "self": false},
+    {"id": "a0000003", "name": "probe", "tool": "claude", "group": "", "directory": "/tmp/probe", "status": "finished", "running": true, "archived": false, "agent_session_id": "e392f4f9-1ea2-4338-af11-af32d1ef84da", "self": false},
+    {"id": "a0000004", "name": "edge-cases", "tool": "claude", "group": "lab", "directory": "/home/dev/src/lab", "status": "idle", "running": true, "archived": false, "agent_session_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "self": false},
+    {"id": "a0000005", "name": "fresh-start", "tool": "claude", "group": "lab", "directory": "/home/dev/src/lab", "status": "starting", "running": true, "archived": false, "agent_session_id": "ffffffff-ffff-4fff-8fff-ffffffffffff", "self": false},
+    {"id": "a0000006", "name": "codex-helper", "tool": "codex", "group": "lab", "directory": "/home/dev/src/lab", "status": "idle", "running": true, "archived": false, "self": false},
+    {"id": "a0000007", "name": "old-spike", "tool": "claude", "group": "", "directory": "/home/dev/src/api", "status": "dead", "running": false, "archived": true, "agent_session_id": "001d8e4b-ce59-42da-b222-bf4ddaa3f1e8", "self": false}
+  ],
+  "terminals": [],
+  "groups": [{"path": "lab", "archived": false, "sessions": 3}]
+}

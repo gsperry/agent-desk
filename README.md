@@ -4,6 +4,10 @@ A local GUI for reading and driving the agent sessions that [agent-manager](http
 
 agent-manager stays the session engine: every agent runs in its tmux server, and closing Agent Desk leaves them all running. Agent Desk is the viewing and talking surface: transcripts rendered as documents, a proper composer, and notifications when a session needs you.
 
+![A session rendered in Agent Desk: the sidebar groups sessions by project with live status, and the transcript reads as a document](docs/screenshot.png)
+
+The screenshot shows anonymized fixture data (`make screenshot`).
+
 Status: early development. Milestones are in [docs/plan.md](docs/plan.md).
 
 ## Prerequisites
@@ -32,6 +36,15 @@ The binary prints a URL and opens it in your browser. The URL carries a token th
 make dev     # backend under air plus Vite, with hot reload on both
 make test    # Go and Vitest
 make lint    # gofmt, go vet, staticcheck, ESLint, tsc
+make e2e     # Playwright smoke test against fixture sessions
+```
+
+`--fixtures <dir>` serves sessions from `<dir>/snapshot.json` and transcripts from `<dir>/claude`, with no agent-manager or tmux. `testdata/fixtures/desk` is the set the smoke test uses.
+
+After a Claude Code upgrade, check the parser against your own transcripts. It prints counts and labels, never content:
+
+```sh
+go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl
 ```
 
 ## Security model

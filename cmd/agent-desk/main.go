@@ -14,11 +14,17 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/gsperry/agent-desk/internal/am"
+	"github.com/gsperry/agent-desk/internal/grouping"
+	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/locate"
+	procrun "github.com/gsperry/agent-desk/internal/run"
 	"github.com/gsperry/agent-desk/internal/server"
 	"github.com/gsperry/agent-desk/web"
 )
@@ -30,33 +36,60 @@ func main() {
 	noOpen := flag.Bool("no-open", false, "do not open the browser")
 	devOrigins := flag.String("dev-origin", "", "comma-separated extra trusted origins (development only)")
 	openBase := flag.String("open-base", "", "base URL to open instead of the server's own (development only)")
+	fixtures := flag.String("fixtures", "", "serve sessions from a fixture directory instead of agent-manager (testing only)")
 	showVersion := flag.Bool("version", false, "print the version")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
 		return
 	}
-	if err := run(*port, !*noOpen, splitList(*devOrigins), *openBase); err != nil {
+	err := run(options{
+		port:       *port,
+		open:       !*noOpen,
+		devOrigins: splitList(*devOrigins),
+		openBase:   *openBase,
+		fixtures:   *fixtures,
+	})
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(port int, open bool, devOrigins []string, openBase string) error {
+type options struct {
+	port       int
+	open       bool
+	devOrigins []string
+	openBase   string
+	fixtures   string
+}
+
+func run(o options) error {
 	token, err := sessionToken()
 	if err != nil {
 		return err
 	}
-	l, err := listen(port)
+	poller, client, err := newPoller(o.fixtures)
+	if err != nil {
+		return err
+	}
+	transcripts, err := newTranscripts(o.fixtures, poller, client)
+	if err != nil {
+		return err
+	}
+	l, err := listen(o.port)
 	if err != nil {
 		return err
 	}
 	addr := l.Addr().String()
 	s, err := server.New(server.Config{
-		Addr:       addr,
-		Token:      token,
-		Version:    version,
-		DevOrigins: devOrigins,
-		Assets:     web.Assets(),
+		Addr:        addr,
+		Token:       token,
+		Version:     version,
+		DevOrigins:  o.devOrigins,
+		Assets:      web.Assets(),
+		Sessions:    poller,
+		Manager:     client,
+		Transcripts: transcripts,
 	})
 	if err != nil {
 		return err
@@ -64,17 +97,19 @@ func run(port int, open bool, devOrigins []string, openBase string) error {
 	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 
 	base := "http://" + addr
-	if openBase != "" {
-		base = strings.TrimRight(openBase, "/")
+	if o.openBase != "" {
+		base = strings.TrimRight(o.openBase, "/")
 	}
 	url := base + "/#t=" + token
 	fmt.Printf("Agent Desk %s listening on http://%s\nOpen: %s\n", version, addr, url)
-	if open {
+	if o.open {
 		openBrowser(url)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go poller.Run(ctx)
+	go transcripts.Run(ctx)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	select {
@@ -85,6 +120,39 @@ func run(port int, open bool, devOrigins []string, openBase string) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+func newPoller(fixtures string) (*hub.Poller, am.Client, error) {
+	home, _ := os.UserHomeDir()
+	p := &hub.Poller{Resolver: &grouping.Resolver{Runner: procrun.Exec{Timeout: 3 * time.Second}, Home: home}}
+	if fixtures != "" {
+		f := am.Fixture{Path: filepath.Join(fixtures, "snapshot.json")}
+		p.Client = f
+		return p, f, nil
+	}
+	hooks, err := am.HooksDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	c := am.NewCLI()
+	p.Client, p.HooksDir = c, hooks
+	return p, c, nil
+}
+
+// newTranscripts reads Claude's transcripts, or <fixtures>/claude in
+// fixture mode.
+func newTranscripts(fixtures string, sessions *hub.Poller, client am.Client) (*hub.Transcripts, error) {
+	root := filepath.Join(fixtures, "claude")
+	if fixtures == "" {
+		var err error
+		if root, err = locate.DefaultRoot(); err != nil {
+			return nil, err
+		}
+	}
+	return &hub.Transcripts{
+		Locator:  &locate.Locator{DefaultRoot: root, Profile: client.ProfileVar},
+		Sessions: sessions,
+	}, nil
 }
 
 // sessionToken reads AGENT_DESK_TOKEN so `make dev` keeps one token across
