@@ -637,6 +637,41 @@ pre {
 
 /* Tool calls */
 
+.tool-group-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.15rem 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-group-row:hover .tool-group-summary {
+  color: var(--text);
+}
+
+.tool-group.tool-risky .tool-group-row {
+  color: var(--text);
+}
+
+.tool-group-failed {
+  color: var(--error);
+  font-size: 0.8rem;
+}
+
+.tool-group-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0.2rem 1.1rem;
+}
+
 .tool {
   border: 1px solid var(--border);
   border-radius: 0.45rem;
@@ -2219,7 +2254,7 @@ mark {
   display: flex;
   justify-content: flex-end;
   padding: 0.4rem 0;
-  pointer-events: none;
+  background: var(--bg);
 }
 
 .activity-filter {

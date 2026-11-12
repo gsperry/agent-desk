@@ -22,7 +22,7 @@ function outputTokens(it: Item): number | undefined {
 // liveActivity reads the current turn: everything after the last prompt
 // you sent. Usage repeats on each part of one assistant message, so tokens
 // count once per message.
-export function liveActivity(items: Item[]): Activity {
+export function liveActivity(items: Item[], dir?: string): Activity {
   let start = items.length
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i]?.kind === 'user') {
@@ -53,7 +53,7 @@ export function liveActivity(items: Item[]): Activity {
     if (!it) continue
     if (it.kind === 'tool_use') {
       if (it.tool?.id && results.has(it.tool.id)) break
-      const l = toolLabel(it)
+      const l = toolLabel(it, dir)
       step = l.summary ? `${l.name}: ${l.summary}` : l.name
       break
     }

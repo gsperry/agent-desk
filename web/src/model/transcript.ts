@@ -178,11 +178,25 @@ export interface ToolLabel {
 }
 
 // toolLabel is the one-line description a collapsed tool call shows.
-export function toolLabel(use: Item): ToolLabel {
+// mcpName shortens an MCP tool name for display: "plugin_x_playwright" is
+// the playwright server, and underscores in the tool read as spaces.
+function mcpName(server: string, tool: string): string {
+  const short = server.replace(/^plugin_/, '').split('_').at(-1) ?? server
+  return `${short} · ${tool.replace(/_/g, ' ')}`
+}
+
+// relative shows a path inside the session's directory relative to it.
+export function relativePath(path: string, dir?: string): string {
+  if (!dir) return path
+  const base = dir.endsWith('/') ? dir : dir + '/'
+  return path.startsWith(base) ? path.slice(base.length) : path
+}
+
+export function toolLabel(use: Item, dir?: string): ToolLabel {
   const name = use.tool?.name ?? 'tool'
   const input = (typeof use.tool?.input === 'object' && use.tool.input !== null ? use.tool.input : {}) as Record<string, unknown>
   const mcp = /^mcp__(.+?)__(.+)$/.exec(name)
-  const display = mcp ? `${mcp[1] ?? ''} · ${mcp[2] ?? ''}` : name
+  const display = mcp ? mcpName(mcp[1] ?? '', mcp[2] ?? '') : name
   let summary: string | undefined
   switch (name) {
     case 'Bash':
@@ -193,7 +207,7 @@ export function toolLabel(use: Item): ToolLabel {
     case 'MultiEdit':
     case 'Write':
     case 'NotebookEdit':
-      summary = str(input.file_path) ?? str(input.notebook_path)
+      summary = relativePath(str(input.file_path) ?? str(input.notebook_path) ?? '', dir) || undefined
       break
     case 'Grep':
       summary = [str(input.pattern), str(input.path)].filter(Boolean).join(' in ')

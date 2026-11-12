@@ -4,7 +4,7 @@ import type { Pending } from '../model/pending'
 import { buildHeader } from '../model/transcript'
 import type { SessionView as Session } from '../types'
 import type { PathRef } from '../model/paths'
-import { OpenPathContext } from '../session-context'
+import { OpenPathContext, SessionDirContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
@@ -143,6 +143,7 @@ export function SessionView(props: Props) {
 
   return (
     <OpenPathContext.Provider value={can(remoteInfo, 'local') ? openHere : null}>
+    <SessionDirContext.Provider value={session.directory}>
     <AgentLinksContext.Provider value={agentLinks}>
     <PinsContext.Provider value={session.agentSessionId ? pins : null}>
         <main className="main">
@@ -378,6 +379,7 @@ export function SessionView(props: Props) {
           {session.running && session.status === 'working' && (
             <LiveActivity
               items={d.items}
+              dir={session.directory}
               onInterrupt={
                 mayReply
                   ? () => props.interrupt(sessionId)
@@ -442,6 +444,7 @@ export function SessionView(props: Props) {
         </main>
     </PinsContext.Provider>
     </AgentLinksContext.Provider>
+    </SessionDirContext.Provider>
     </OpenPathContext.Provider>
   )
 }

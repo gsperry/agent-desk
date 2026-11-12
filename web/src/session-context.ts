@@ -8,3 +8,11 @@ export const OpenPathContext = createContext<((ref: PathRef) => void) | null>(nu
 export function useOpenPath(): ((ref: PathRef) => void) | null {
   return useContext(OpenPathContext)
 }
+
+// SessionDirContext is the session's directory, so paths inside it can be
+// shown relative to it.
+export const SessionDirContext = createContext<string | undefined>(undefined)
+
+export function useSessionDir(): string | undefined {
+  return useContext(SessionDirContext)
+}

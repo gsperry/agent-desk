@@ -5,14 +5,15 @@ import type { Item } from '../types'
 
 interface Props {
   items: Item[]
+  dir?: string
   // onInterrupt stops the turn, as Esc does; absent when not allowed.
   onInterrupt?: () => Promise<string | null>
 }
 
 // LiveActivity is the row above the composer while an agent works: how
 // long the turn has run, the tokens written, and the step it is on.
-export function LiveActivity({ items, onInterrupt }: Props) {
-  const activity = useMemo(() => liveActivity(items), [items])
+export function LiveActivity({ items, dir, onInterrupt }: Props) {
+  const activity = useMemo(() => liveActivity(items, dir), [items, dir])
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)

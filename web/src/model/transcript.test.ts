@@ -105,12 +105,20 @@ describe('toolLabel', () => {
     ['Agent', { name: 'Agent', input: { description: 'Study prior art', prompt: 'long' } }, 'Agent', 'Study prior art'],
     ['TodoWrite', { name: 'TodoWrite', input: { todos: [{}, {}] } }, 'TodoWrite', '2 todos'],
     ['AskUserQuestion', { name: 'AskUserQuestion', input: { questions: [{ question: 'Pick?' }] } }, 'AskUserQuestion', 'Pick?'],
-    ['MCP tool', { name: 'mcp__github__create_issue', input: { title: 'Bug' } }, 'github · create_issue', 'Bug'],
+    ['MCP tool', { name: 'mcp__github__create_issue', input: { title: 'Bug' } }, 'github · create issue', 'Bug'],
+    ['plugin MCP tool', { name: 'mcp__plugin_mcp-playwright_playwright__browser_run_code_unsafe', input: {} }, 'playwright · browser run code unsafe', ''],
     ['unknown tool', { name: 'Zap', input: { n: 1, target: 'here' } }, 'Zap', 'here'],
     ['no input', { name: 'Zap' }, 'Zap', ''],
   ])('%s', (_name, tool, wantName, wantSummary) => {
     const label = toolLabel({ seq: 0, kind: 'tool_use', tool: { id: 'x', ...tool } })
     expect(label).toEqual({ name: wantName, summary: wantSummary })
+  })
+
+  it('shows paths in the session directory relative to it', () => {
+    const read = (file_path: string) => toolLabel({ seq: 0, kind: 'tool_use', tool: { id: 'x', name: 'Read', input: { file_path } } }, '/repo/app')
+    expect(read('/repo/app/src/main.go').summary).toBe('src/main.go')
+    expect(read('/repo/application/x.go').summary).toBe('/repo/application/x.go')
+    expect(read('/etc/hosts').summary).toBe('/etc/hosts')
   })
 })
 
