@@ -436,8 +436,43 @@ pre {
 
 .session-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.session-title .status-chip {
+  font-weight: 600;
+}
+
+.session-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+
+.session-views {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+.session-views .chip-button {
+  border-color: transparent;
+  background: none;
+}
+
+.session-views .chip-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pr-link {
+  color: var(--accent);
+  font-size: 0.8rem;
 }
 
 .session-title h1 {
@@ -1730,15 +1765,64 @@ mark {
 }
 
 .session-actions {
+  position: relative;
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
 }
 
-.move-select {
-  padding: 0.05rem 0.3rem;
+.actions-toggle {
+  min-width: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
+
+.actions-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--card);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 25%);
+}
+
+.actions-menu > button {
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.actions-menu > button:hover,
+.actions-menu > button:focus-visible {
+  background: var(--surface-2);
+}
+
+.actions-move {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.88rem;
+}
+
+.actions-menu .actions-note {
+  margin: 0.2rem 0.6rem 0.1rem;
+  font-size: 0.75rem;
+}
+
 
 .actions-note {
   font-size: 0.72rem;

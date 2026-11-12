@@ -87,7 +87,7 @@ While an agent works, a row above the composer shows how long the turn has run, 
 ## Managing sessions
 
 - **New session:** ＋ in the sidebar header, or the ＋ on a project or group heading to prefill its directory and group. Pick the directory, name (or let the agent name itself), CLI, group, worktree, first prompt, and optionally model and effort.
-- **Stop, revive, archive, restore, move:** buttons in the session header. Stop asks first, since it interrupts the agent; the session stays listed and Revive resumes the same conversation.
+- **Stop, archive, restore, move, export:** the ⋯ menu in the session header; Revive is a button on a stopped session. Stop asks first, since it ends the agent's process; the session stays listed and Revive resumes the same conversation. To stop only the current turn, use Interrupt while it works.
 - **Groups:** "New group" in the sidebar footer; × on a group heading deletes it, moving its sessions to the root.
 
 Rename, delete, restart with a fresh context, and fork have no agent-manager command yet, so they stay in agent-manager's TUI (`r`, `d`, `R`, `f`). See [docs/upstream/session-commands.md](docs/upstream/session-commands.md).

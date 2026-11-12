@@ -156,14 +156,20 @@ export function SessionView(props: Props) {
                 {glyph(session.status)}
               </span>
               <h1>{session.name}</h1>
-              <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
-              {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
-            <ContextMeter items={d.items} />
+              <span className={`chip status-chip status-${session.status}`}>
+                {session.status}
+                {counts.running > 0 && session.status !== 'working' ? ` · ${String(counts.running)} agent${counts.running === 1 ? '' : 's'} running` : ''}
+              </span>
+              <span className="session-info">
+                {header.permissionMode && <span>{header.permissionMode}</span>}
+                <ContextMeter items={d.items} />
+              </span>
             {props.conflicts.length > 0 && (
             <span className="chip conflict-chip" title={conflictTitle(props.conflicts, props.sessions)}>
               ⚠ {props.conflicts.length} shared file{props.conflicts.length === 1 ? '' : 's'}
             </span>
           )}
+          <div className="session-views" role="group" aria-label="Views">
           <button
             type="button"
             className="chip chip-button changes-toggle"
@@ -239,6 +245,20 @@ export function SessionView(props: Props) {
                   Terminal
                 </button>
               )}
+              </div>
+              <SessionActions
+                session={session}
+                groups={props.groups}
+                act={props.act}
+                manage={can(remoteInfo, 'manage')}
+                onExport={
+                  isClaude && session.agentSessionId && d.items.length > 0
+                    ? () => {
+                        if (session.agentSessionId) props.exportConversation(session.agentSessionId)
+                      }
+                    : undefined
+                }
+              />
             </div>
             <div className="session-sub">
               {header.title && <span>{header.title}</span>}
@@ -246,20 +266,8 @@ export function SessionView(props: Props) {
                 {session.project.name}
                 {session.branch ? ` · ${session.branch}` : ''}
               </span>
-              {can(remoteInfo, 'manage') && <SessionActions session={session} groups={props.groups} act={props.act} />}
-              {isClaude && session.agentSessionId && d.items.length > 0 && (
-                <button
-                  type="button"
-                  className="chip chip-button export-button"
-                  onClick={() => {
-                    if (session.agentSessionId) props.exportConversation(session.agentSessionId)
-                  }}
-                >
-                  Export
-                </button>
-              )}
             {header.prLinks.map((pr) => (
-                <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
+                <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="pr-link">
                   PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
                 </a>
               ))}
