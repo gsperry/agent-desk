@@ -56,6 +56,7 @@ test('a reply refused for a dialog opens the terminal', async ({ page }) => {
 test('the terminal shows the screen in color, read-only, and keeps the answer buttons', async ({ page }) => {
   await open(page, 'a0000002')
   const pane = page.getByRole('region', { name: 'Terminal' })
+  await pane.getByRole('button', { name: 'Show screen' }).click()
   await pane.getByRole('button', { name: 'Color' }).click()
   const screen = pane.locator('.xterm-rows')
   await expect(screen).toContainText('Do you want to proceed?')
@@ -93,27 +94,27 @@ test('a "Type something" option takes a typed answer, and "Chat about this" is a
   }
 })
 
-test('a waiting session can hide the screen and keep the question', async ({ page }) => {
+test('a question shows without the raw screen until asked, and the choice is remembered', async ({ page }) => {
   await open(page, 'a0000002')
   const pane = page.getByRole('region', { name: 'Terminal' })
+  await expect(pane.locator('.live-head')).toContainText('Question')
+  await expect(pane.locator('.live-option')).toHaveCount(4)
+  await expect(pane.locator('.live-screen')).toHaveCount(0)
+  await expect(pane.getByRole('button', { name: 'Color' })).toHaveCount(0)
+  await pane.getByRole('button', { name: 'Show screen' }).click()
+  await expect(pane.locator('.live-screen')).toBeVisible()
+  // Remembered across reloads and sessions.
+  await page.reload()
   await expect(pane.locator('.live-screen')).toBeVisible()
   await pane.getByRole('button', { name: 'Hide screen' }).click()
   await expect(pane.locator('.live-screen')).toHaveCount(0)
-  await expect(pane.getByRole('button', { name: 'Color' })).toHaveCount(0)
   await expect(pane.locator('.live-option')).toHaveCount(4)
-  // Remembered across reloads and sessions.
-  await page.reload()
-  await expect(pane.locator('.live-option')).toHaveCount(4)
-  await expect(pane.locator('.live-screen')).toHaveCount(0)
   // The Terminal button still shows the screen of any session.
   await open(page, 'a0000001')
   const main = page.getByRole('main')
   await main.getByRole('button', { name: 'Terminal' }).click()
   await expect(pane.locator('.live-screen')).toBeVisible()
   await expect(pane.getByRole('button', { name: 'Hide screen' })).toHaveCount(0)
-  await open(page, 'a0000002')
-  await pane.getByRole('button', { name: 'Show screen' }).click()
-  await expect(pane.locator('.live-screen')).toBeVisible()
 })
 
 test('Enter or Cmd+Enter submits a typed answer', async ({ page }) => {
@@ -186,6 +187,20 @@ test('a several-answer question shows checkboxes and Next, and keys land on the 
     // Chat about this sits past Next: six presses down.
     await pane.getByRole('button', { name: /Chat about this/ }).click()
     await expect.poll(keys).toBe('a0000002 Down Down Down Down Down Down Enter\n')
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})
+
+test('a prompt with several questions shows its steps', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-multi-ticked.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const steps = page.getByRole('region', { name: 'Terminal' }).getByRole('list', { name: 'Questions' })
+    await expect(steps.getByRole('listitem')).toHaveText(['✓ Checks', 'Timing', 'Submit'])
+    await expect(page.getByRole('region', { name: 'Terminal' }).getByRole('button', { name: /Link check/ })).toHaveAttribute('aria-pressed', 'true')
   } finally {
     writeFileSync(panePath, original)
   }

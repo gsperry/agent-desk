@@ -234,29 +234,53 @@ func TestMultiSelect(t *testing.T) {
 	}
 }
 
-func TestMultiSelectTickedAndOnNext(t *testing.T) {
-	screen := strings.NewReplacer(
-		"❯ 1. [ ] Link check", "  1. [✔] Link check",
-		"  3. [ ] Screenshots", "  3. [✔] Screenshots",
-		"     Next", "   ❯ Next",
-	).Replace(read(t, "askq-multi.txt"))
-	d := Parse(screen)
-	if d == nil {
-		t.Fatal("no dialog")
+// Screens from a probe session on Claude Code 2.1.322: Enter ticks a box
+// ([✔]) and leaves the cursor; the cursor on Next is drawn at the margin;
+// answered questions are ☒ in the tab bar.
+func TestMultiSelectProbe(t *testing.T) {
+	initial := Parse(read(t, "askq-multi-initial.txt"))
+	if initial == nil || !initial.Multi || len(initial.Options) != 6 || !initial.Options[4].Next || initial.Options[5].Label != "Chat about this" {
+		t.Fatalf("initial: %+v", initial)
 	}
-	ticked := []bool{}
-	for _, o := range d.Options {
-		if o.Checked != nil {
-			ticked = append(ticked, *o.Checked)
-		}
+	if initial.Question != "Which checks should run before the docs release? Pick every one that applies." {
+		t.Fatalf("question = %q", initial.Question)
 	}
-	if !reflect.DeepEqual(ticked, []bool{true, false, true, false, false}) {
-		t.Fatalf("ticked = %v", ticked)
+	wantSteps := []Step{{Label: "Checks"}, {Label: "Timing"}, {Label: "Submit", Submit: true}}
+	if !reflect.DeepEqual(initial.Steps, wantSteps) {
+		t.Fatalf("steps = %+v", initial.Steps)
 	}
-	if !d.Options[5].Next || !d.Options[5].Selected {
-		t.Fatalf("Next not selected: %+v", d.Options[5])
+
+	ticked := Parse(read(t, "askq-multi-ticked.txt"))
+	if ticked == nil || ticked.Options[0].Checked == nil || !*ticked.Options[0].Checked || *ticked.Options[1].Checked || !ticked.Options[0].Selected {
+		t.Fatalf("ticked: %+v", ticked)
 	}
-	if got := strings.Join(d.Moves(0), " "); got != "Up Up Up Up Up Enter" {
+	// Ticking a box marks the question answered while it is still shown.
+	if !ticked.Steps[0].Done || ticked.Steps[1].Done {
+		t.Fatalf("ticked steps = %+v", ticked.Steps)
+	}
+
+	onNext := Parse(read(t, "askq-multi-on-next.txt"))
+	if onNext == nil || !onNext.Options[4].Next || !onNext.Options[4].Selected {
+		t.Fatalf("on next: %+v", onNext)
+	}
+	if got := strings.Join(onNext.Moves(0), " "); got != "Up Up Up Up Enter" {
 		t.Fatalf("moves back to the first option = %s", got)
+	}
+	if got := strings.Join(onNext.Moves(5), " "); got != "Down Enter" {
+		t.Fatalf("moves to Chat about this = %s", got)
+	}
+
+	step2 := Parse(read(t, "askq-multi-step2.txt"))
+	if step2 == nil || step2.Multi || step2.Question != "When should they run?" || !step2.Steps[0].Done {
+		t.Fatalf("step 2: %+v", step2)
+	}
+}
+
+func TestSingleQuestionHasNoSteps(t *testing.T) {
+	if d := Parse(read(t, "ask-question.txt")); d == nil || d.Steps != nil {
+		t.Fatalf("steps on a single question: %+v", d)
+	}
+	if d := Parse(read(t, "askq-review.txt")); d == nil || len(d.Steps) != 3 || !d.Steps[2].Submit {
+		t.Fatalf("review steps: %+v", d)
 	}
 }

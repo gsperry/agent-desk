@@ -108,6 +108,8 @@ export interface Dialog {
   footer: string
   /** Several answers: Enter ticks a checkbox and Next moves on. */
   multi?: boolean
+  /** The tabs of a prompt with several questions. */
+  steps?: { label: string; done?: boolean; submit?: boolean }[]
 }
 
 export interface Screen {

@@ -18,6 +18,18 @@ type Dialog struct {
 	// Multi is a question that takes several answers: its options are
 	// checkboxes that Enter ticks, and Next moves on.
 	Multi bool `json:"multi,omitempty"`
+	// Steps are the tabs of a prompt with several questions, in order.
+	Steps []Step `json:"steps,omitempty"`
+}
+
+// Step is one tab of a prompt with several questions. Done marks a
+// question with an answer; Submit is the final review step. The plain
+// screen does not show which tab is current (the terminal highlights it),
+// so neither does a Step.
+type Step struct {
+	Label  string `json:"label"`
+	Done   bool   `json:"done,omitempty"`
+	Submit bool   `json:"submit,omitempty"`
 }
 
 // Option is one entry in the dialog's list. Index is its position in the
@@ -48,6 +60,8 @@ var (
 	freeLabel = regexp.MustCompile(`^Type something`)
 	checkbox  = regexp.MustCompile(`^\[(.)\]\s+(.+)$`)
 	nextLine  = regexp.MustCompile(`^\s*(❯)?\s*Next\s*$`)
+	stepItem  = regexp.MustCompile(`^([☐☒✔])\s+(.+)$`)
+	gap       = regexp.MustCompile(`\s{2,}`)
 )
 
 // footerLines is how far up from the bottom the footer is looked for, the
@@ -87,6 +101,7 @@ func Parse(screen string) *Dialog {
 		return d
 	}
 	d.Question = question(lines, gaps, top, first, screenWidth(lines))
+	d.Steps = steps(lines, top, first)
 	return d
 }
 
@@ -308,6 +323,33 @@ func question(lines []string, gaps []bool, top, first, width int) string {
 		b.WriteString(text)
 	}
 	return b.String()
+}
+
+// steps reads the tab bar above a prompt with several questions, such as
+// "←  ☒ Checks  ☐ Timing  ✔ Submit  →". A bar with one tab is a single
+// question and gives no steps.
+func steps(lines []string, top, first int) []Step {
+	for i := first - 1; i >= top && i >= first-12; i-- {
+		t := strings.TrimSpace(lines[i])
+		t = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(t, "←"), "→"))
+		var out []Step
+		for _, item := range gap.Split(t, -1) {
+			m := stepItem.FindStringSubmatch(strings.TrimSpace(item))
+			if m == nil {
+				out = nil
+				break
+			}
+			out = append(out, Step{Label: m[2], Done: m[1] == "☒", Submit: m[1] == "✔"})
+		}
+		if len(out) == 0 {
+			continue
+		}
+		if len(out) < 2 {
+			return nil
+		}
+		return out
+	}
+	return nil
 }
 
 // unbar replaces the bar Claude Code draws down the left of a question

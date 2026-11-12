@@ -13,6 +13,8 @@ interface Props {
 const colorKey = 'agent-desk:terminal-color'
 // screenKey remembers whether a pane that opened by itself, because the
 // session waits, shows the screen or only the question and its answers.
+// Off unless chosen: the question is read off the screen and shown above
+// its answers, so the raw screen would repeat it.
 const screenKey = 'agent-desk:terminal-screen'
 
 // The live pane refreshes this often while open.
@@ -23,8 +25,7 @@ const refreshMs = 1000
 // opened by a waiting session, and the screen itself can be hidden.
 export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props) {
   const [color, setColor] = useState(() => localStorage.getItem(colorKey) === 'on')
-  const [screenOn, setScreenOn] = useState(() => localStorage.getItem(screenKey) !== 'off')
-  const showScreen = onClose !== undefined || screenOn
+  const [screenOn, setScreenOn] = useState(() => localStorage.getItem(screenKey) === 'on')
   const [screen, setScreen] = useState<Screen | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -74,10 +75,13 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
   }
 
   const dialog = screen?.dialog
+  const asking = dialog !== undefined && dialog.options.length > 0
+  // A screen whose question could not be read is always shown.
+  const showScreen = onClose !== undefined || screenOn || (screen !== null && !asking)
   return (
     <section className="live-pane" aria-label="Terminal">
       <header className="live-head">
-        <span>Terminal</span>
+        <span>{asking && onClose === undefined ? 'Question' : 'Terminal'}</span>
         {showScreen && (
           <button
             type="button"
@@ -92,7 +96,7 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
             {color ? 'Plain text' : 'Color'}
           </button>
         )}
-        {!onClose && (
+        {!onClose && asking && (
           <button
             type="button"
             className="link-button"
@@ -120,11 +124,19 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
             {screen?.text ?? 'Reading the screen…'}
           </pre>
         ))}
-      {!showScreen && !(dialog && dialog.options.length > 0) && (
-        <p className="muted live-hidden">Screen hidden. The session is waiting on the terminal.</p>
-      )}
+
       {dialog && dialog.options.length > 0 && (
         <div className="live-dialog">
+          {dialog.steps && dialog.steps.length > 1 && (
+            <ol className="live-steps" aria-label="Questions">
+              {dialog.steps.map((s) => (
+                <li key={s.label} className={s.done ? 'done' : undefined}>
+                  {s.done ? '✓ ' : ''}
+                  {s.label}
+                </li>
+              ))}
+            </ol>
+          )}
           {dialog.question && <p className="live-question">{dialog.question}</p>}
           {dialog.multi && <p className="muted live-multi-hint">Tick each answer that applies, then Next.</p>}
           <div className="live-options">

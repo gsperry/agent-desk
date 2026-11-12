@@ -1185,9 +1185,38 @@ pre.code-body,
 }
 
 .live-option.live-next {
+  justify-content: center;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
   font-weight: 600;
-  color: var(--accent);
 }
+
+.live-option.live-next .live-option-index {
+  color: inherit;
+}
+
+.live-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+.live-steps li {
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--dim);
+}
+
+.live-steps li.done {
+  color: var(--finished);
+}
+
 
 .live-check {
   color: var(--dim);
@@ -1195,11 +1224,6 @@ pre.code-body,
 
 .live-option.checked .live-check {
   color: var(--accent);
-}
-
-.live-hidden {
-  margin: 0.2rem 0;
-  font-size: 0.85rem;
 }
 
 .live-head {
