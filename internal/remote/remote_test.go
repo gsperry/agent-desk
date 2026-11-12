@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -35,7 +36,7 @@ func TestValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Enabled: true, Level: LevelReply, Host: "desk.tail1234.ts.net", Port: DefaultPort, TailscaleLogins: []string{"dev@example.com"}}
+	want := Settings{Enabled: true, Level: LevelReply, Host: "desk.tail1234.ts.net", Port: DefaultPort, Via: ViaTailscale, TailscaleLogins: []string{"dev@example.com"}, CloudflareEmails: []string{}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v", got)
 	}
@@ -46,11 +47,25 @@ func TestValidate(t *testing.T) {
 		{Enabled: true, Host: "bad host", TailscaleLogins: []string{"a@b"}},
 		{Enabled: true, Host: "desk.ts.net"},
 		{TailscaleLogins: []string{"two words"}},
+		{Via: "ssh"},
+		{Enabled: true, Host: "desk.example.com", Via: ViaCloudflare, CloudflareEmails: []string{"a@b"}},
+		{Enabled: true, Host: "desk.example.com", Via: ViaCloudflare, CloudflareTeam: "team", CloudflareAUD: strings.Repeat("a", 64)},
+		{Enabled: true, Host: "desk.example.com", Via: ViaCloudflare, CloudflareTeam: "team", CloudflareAUD: strings.Repeat("a", 64), TailscaleLogins: []string{"a@b"}},
+		{CloudflareTeam: "evil.com/x"},
+		{CloudflareAUD: "short"},
+		{CloudflareEmails: []string{"two words"}},
 	}
 	for _, b := range bad {
 		if _, err := b.Validate(); err == nil {
 			t.Errorf("%+v validated", b)
 		}
+	}
+	cf, err := Settings{Enabled: true, Host: "desk.example.com", Via: ViaCloudflare, CloudflareTeam: " Team.cloudflareaccess.com ", CloudflareAUD: strings.Repeat("a", 64), CloudflareEmails: []string{"Dev@Example.com"}}.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cf.CloudflareTeam != "team" || !cf.Allowed("dev@example.com") || cf.Allowed("eve@example.com") {
+		t.Fatalf("cloudflare settings: %+v", cf)
 	}
 	// Off needs no host or logins.
 	if _, err := (Settings{}).Validate(); err != nil {
@@ -109,7 +124,7 @@ func TestIdentify(t *testing.T) {
 			for _, v := range tt.values {
 				r.Header.Add(TailscaleHeader, v)
 			}
-			id, ok := Identify(r, s)
+			id, ok := Identify(r, s, nil)
 			if ok != tt.want || (ok && id.User != "dev@example.com") {
 				t.Fatalf("got %+v %v", id, ok)
 			}

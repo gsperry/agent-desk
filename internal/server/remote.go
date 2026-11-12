@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"slices"
 
 	"github.com/coder/websocket"
 
@@ -74,7 +73,7 @@ func (s *Server) requireRemote(need remote.Need, next http.HandlerFunc) http.Han
 			http.Error(w, "forbidden origin", http.StatusForbidden)
 			return
 		}
-		id, ok := remote.Identify(r, st)
+		id, ok := remote.Identify(r, st, s.cfg.Access)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -152,9 +151,9 @@ func (s *Server) setRemoteSettings(w http.ResponseWriter, r *http.Request) {
 
 // trackRemote records a remote WebSocket so a settings change can close
 // it; the returned function forgets it.
-func (s *Server) trackRemote(c *websocket.Conn, user, host string) func() {
+func (s *Server) trackRemote(c *websocket.Conn, rc remoteConn) func() {
 	s.remoteMu.Lock()
-	s.remoteConns[c] = remoteConn{user: user, host: host}
+	s.remoteConns[c] = rc
 	s.remoteMu.Unlock()
 	return func() {
 		s.remoteMu.Lock()
@@ -163,23 +162,28 @@ func (s *Server) trackRemote(c *websocket.Conn, user, host string) func() {
 	}
 }
 
-// remoteConn is who opened a remote WebSocket, and through which host.
-type remoteConn struct{ user, host string }
+// remoteConn is who opened a remote WebSocket, through which proxy and
+// host.
+type remoteConn struct{ user, via, host string }
 
-// stillAllowed reports whether settings still admit a remote user on host.
-func stillAllowed(st remote.Settings, user, host string) bool {
-	return st.Enabled && st.Host == host && slices.Contains(st.TailscaleLogins, user)
+func connOf(c remoteCaller) remoteConn {
+	return remoteConn{user: c.id.User, via: c.id.Via, host: c.settings.Host}
+}
+
+// stillAllowed reports whether settings still admit a remote connection.
+func stillAllowed(st remote.Settings, rc remoteConn) bool {
+	return st.Enabled && st.Host == rc.host && st.Proxy() == rc.via && st.Allowed(rc.user)
 }
 
 // DropRemote closes remote WebSockets the settings no longer allow: all of
 // them when remote access is off, else those whose login was removed or
-// whose host name changed.
+// whose proxy or host name changed.
 // Closing the listener does not end connections that were upgraded.
 func (s *Server) DropRemote(st remote.Settings) {
 	s.remoteMu.Lock()
 	var drop []*websocket.Conn
 	for c, rc := range s.remoteConns {
-		if !stillAllowed(st, rc.user, rc.host) {
+		if !stillAllowed(st, rc) {
 			drop = append(drop, c)
 		}
 	}

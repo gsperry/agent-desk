@@ -130,6 +130,7 @@ func run(o options) error {
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
 		Remote:      remoteAccess,
+		Access:      &remote.AccessKeys{},
 		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",

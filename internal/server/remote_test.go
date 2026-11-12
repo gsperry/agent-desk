@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -334,6 +335,9 @@ func TestStillAllowed(t *testing.T) {
 	moved.Host = "other.ts.net"
 	removed := on
 	removed.TailscaleLogins = []string{"someone@example.com"}
+	switched := on
+	switched.Via = remote.ViaCloudflare
+	switched.CloudflareEmails = []string{"dev@example.com"}
 	tests := []struct {
 		name string
 		st   remote.Settings
@@ -343,9 +347,10 @@ func TestStillAllowed(t *testing.T) {
 		{"turned off", off, false},
 		{"host changed", moved, false},
 		{"login removed", removed, false},
+		{"proxy changed", switched, false},
 	}
 	for _, tt := range tests {
-		if got := stillAllowed(tt.st, "dev@example.com", remoteHost); got != tt.want {
+		if got := stillAllowed(tt.st, remoteConn{user: "dev@example.com", via: remote.ViaTailscale, host: remoteHost}); got != tt.want {
 			t.Errorf("%s: %v", tt.name, got)
 		}
 	}
@@ -419,5 +424,54 @@ func TestSessionCommandsRoute(t *testing.T) {
 		if rec.Code != tt.want || !strings.Contains(rec.Body.String(), tt.wantBody) {
 			t.Errorf("%s: status %d body %s", tt.path, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// tokenVerifier accepts the token "good" for dev@example.com.
+type tokenVerifier struct{}
+
+func (tokenVerifier) Verify(token, team, aud string) (string, error) {
+	if token == "good" && team == "team" && aud == testAUD {
+		return "dev@example.com", nil
+	}
+	return "", errors.New("bad token")
+}
+
+const testAUD = "0123456789abcdef0123456789abcdef"
+
+func TestRemoteAdmissionCloudflare(t *testing.T) {
+	const host = "desk.example.com"
+	rc := &fakeRemote{cur: remote.Settings{
+		Enabled: true, Level: remote.LevelAnswer, Host: host, Via: remote.ViaCloudflare,
+		CloudflareTeam: "team", CloudflareAUD: testAUD, CloudflareEmails: []string{"dev@example.com"},
+		TailscaleLogins: []string{"dev@example.com"},
+	}}
+	s := newTestServer(t, Config{Remote: rc, Access: tokenVerifier{}})
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    int
+	}{
+		{"access token", map[string]string{remote.AccessHeader: "good"}, 200},
+		{"bad token", map[string]string{remote.AccessHeader: "forged"}, 401},
+		{"tailscale header does not count", map[string]string{remote.TailscaleHeader: "dev@example.com"}, 401},
+		{"email header does not count", map[string]string{"Cf-Access-Authenticated-User-Email": "dev@example.com"}, 401},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/whoami", nil)
+			req.Host = host
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+			s.RemoteHandler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d: %s", rec.Code, tt.want, rec.Body.String())
+			}
+			if tt.want == 200 && !strings.Contains(rec.Body.String(), `"via":"cloudflare"`) {
+				t.Fatalf("whoami: %s", rec.Body.String())
+			}
+		})
 	}
 }

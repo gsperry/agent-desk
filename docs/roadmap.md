@@ -52,7 +52,7 @@ Goal: supervise and correct work, not only chat.
 | 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |
 | 10.3 | Catch-up summaries (done, off by default) | [design/catch-up-summaries.md](design/catch-up-summaries.md) | Decided: opt-in, labelled as costing tokens |
 | 10.4 | Desktop app (built, see A2) | [design/desktop-app.md](design/desktop-app.md) | Signing and distribution |
-| 10.5 | Away from the desk | Tailscale built (R0 groundwork, R1); next Cloudflare Tunnel and Access (R2), then a hosted relay (R3) as its own decision. [design/away-from-desk.md](design/away-from-desk.md) | R3 |
+| 10.5 | Away from the desk (Tailscale and Cloudflare built) | R0 groundwork, R1 Tailscale, R2 Cloudflare Tunnel and Access. A hosted relay (R3) is its own decision. [design/away-from-desk.md](design/away-from-desk.md) | R3 |
 | 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Revisit after remote access |
 
 ## After M10
@@ -61,4 +61,4 @@ Goal: supervise and correct work, not only chat.
 | --- | --- | --- |
 | A1 | Slash command autocomplete (done) | Built-ins from the Claude Code binary (`tools/claudecommands`), custom commands, skills and enabled plugins; snippets in the same menu |
 | A2 | Desktop app (done) | Tauri shell in `desktop/` around the Go binary: window, native notifications, dock badge and menu-bar count, Control-Option-A. Unsigned local builds. See [design/desktop-app.md](design/desktop-app.md) |
-| A3 | Remote access over Cloudflare Tunnel (R2) | To discuss; see [design/away-from-desk.md](design/away-from-desk.md) |
+| A3 | Remote access over Cloudflare Tunnel (R2, done) | Access token verified in Agent Desk against the team's signing keys; see [design/away-from-desk.md](design/away-from-desk.md) |
