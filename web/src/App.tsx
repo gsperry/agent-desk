@@ -448,6 +448,7 @@ function Desk({ token }: { token: string }) {
                   readStyled={readStyled}
                   answer={answer}
                   interrupt={interrupt}
+                  loadOverview={loadOverview}
                   openPath={openPath}
                   groups={amGroups}
                   act={act}

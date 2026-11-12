@@ -12,8 +12,11 @@
   --border: #dde1e6;
   --text: #1f2328;
   --dim: #59636e;
-  --subtle: #8b949e;
+  --subtle: #656d77;
   --accent: #2f6fb3;
+  --accent-fill: #2f6fb3;
+  --on-accent: #ffffff;
+  --card: #ffffff;
   --code-bg: #f6f8fa;
 
   --working: #b5651d;
@@ -42,30 +45,33 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0f1115;
-  --bg-side: #15181e;
-  --surface: #1b1f26;
-  --surface-2: #232830;
-  --border: #2d333d;
-  --text: #d5dae2;
-  --dim: #98a0ac;
-  --subtle: #646c78;
-  --accent: #6f9fd0;
-  --code-bg: #161a20;
+  --bg: #181a1f;
+  --bg-side: #1d2026;
+  --surface: #23272e;
+  --surface-2: #2c3139;
+  --border: #454c58;
+  --text: #d9dee6;
+  --dim: #a7afba;
+  --subtle: #8b939f;
+  --accent: #7cb0e6;
+  --accent-fill: #3b6ea5;
+  --on-accent: #ffffff;
+  --card: #1f2228;
+  --code-bg: #1f2228;
 
-  --working: #d08442;
-  --waiting: #a78bd0;
-  --finished: #85b26f;
-  --idle: #646c78;
-  --error: #cc6a6a;
+  --working: #e3954d;
+  --waiting: #b89be3;
+  --finished: #92c47a;
+  --idle: #7d8592;
+  --error: #e57878;
 
   --add-bg: #17301d;
-  --add-fg: #85b26f;
+  --add-fg: #92c47a;
   --del-bg: #3a1c1c;
   --del-fg: #e08a8a;
 
-  --ok: #85b26f;
-  --warn: #d0a442;
+  --ok: #92c47a;
+  --warn: #dcb24f;
   --warn-bg: #2e2715;
   --error-bg: #3a1c1c;
   --info-bg: #182333;
@@ -74,30 +80,33 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #0f1115;
-    --bg-side: #15181e;
-    --surface: #1b1f26;
-    --surface-2: #232830;
-    --border: #2d333d;
-    --text: #d5dae2;
-    --dim: #98a0ac;
-    --subtle: #646c78;
-    --accent: #6f9fd0;
-    --code-bg: #161a20;
+    --bg: #181a1f;
+    --bg-side: #1d2026;
+    --surface: #23272e;
+    --surface-2: #2c3139;
+    --border: #454c58;
+    --text: #d9dee6;
+    --dim: #a7afba;
+    --subtle: #8b939f;
+    --accent: #7cb0e6;
+  --accent-fill: #3b6ea5;
+  --on-accent: #ffffff;
+  --card: #1f2228;
+    --code-bg: #1f2228;
 
-    --working: #d08442;
-    --waiting: #a78bd0;
-    --finished: #85b26f;
-    --idle: #646c78;
-    --error: #cc6a6a;
+    --working: #e3954d;
+    --waiting: #b89be3;
+    --finished: #92c47a;
+    --idle: #7d8592;
+    --error: #e57878;
 
     --add-bg: #17301d;
-    --add-fg: #85b26f;
+    --add-fg: #92c47a;
     --del-bg: #3a1c1c;
     --del-fg: #e08a8a;
 
-    --ok: #85b26f;
-    --warn: #d0a442;
+    --ok: #92c47a;
+    --warn: #dcb24f;
     --warn-bg: #2e2715;
     --error-bg: #3a1c1c;
     --info-bg: #182333;
@@ -675,6 +684,7 @@ pre {
 .tool {
   border: 1px solid var(--border);
   border-radius: 0.45rem;
+  background: var(--card);
   font-size: 0.88rem;
 }
 
@@ -913,8 +923,8 @@ pre {
 
 .markdown blockquote {
   padding-left: 0.8rem;
-  border-left: 3px solid var(--border);
-  color: var(--dim);
+  border-left: 3px solid var(--accent);
+  color: var(--text);
 }
 
 .markdown table {
@@ -1014,7 +1024,7 @@ pre.code-body,
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  background: var(--bg);
+  background: var(--card);
   color: var(--text);
   font: inherit;
   line-height: 1.5;
@@ -1031,15 +1041,22 @@ pre.code-body,
   padding: 0.55rem 1rem;
   border: 0;
   border-radius: 0.5rem;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   font-weight: 600;
   cursor: pointer;
 }
 
 .send:disabled {
-  opacity: 0.45;
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--subtle);
   cursor: default;
+}
+
+::placeholder {
+  color: var(--subtle);
+  opacity: 1;
 }
 
 .composer-hint {
@@ -1278,8 +1295,8 @@ pre.code-body,
 .live-option.live-next {
   justify-content: center;
   border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -1369,7 +1386,7 @@ pre.code-body,
   padding: 0.45rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 0.45rem;
-  background: var(--bg);
+  background: var(--card);
   text-align: left;
   cursor: pointer;
 }
@@ -1494,8 +1511,8 @@ pre.code-body,
 }
 
 .segmented button.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 .stepper {

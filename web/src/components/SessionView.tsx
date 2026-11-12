@@ -44,6 +44,7 @@ interface Props {
   readStyled: (id: string) => Promise<{ screen?: string; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
   interrupt: (id: string) => Promise<string | null>
+  loadOverview: () => Promise<Record<string, { promptAt?: string }> | null>
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
   act: (id: string, a: SessionAction) => Promise<string | null>
@@ -76,6 +77,8 @@ export function SessionView(props: Props) {
     },
     [openPath, sessionId],
   )
+  const { loadOverview } = props
+  const promptAt = useCallback(() => loadOverview().then((o) => o?.[sessionId]?.promptAt), [loadOverview, sessionId])
   const [sends, setSends] = useState(0)
   const [showPane, setShowPane] = useState(false)
   // Captured once, so the divider stays put while the session is marked
@@ -380,6 +383,7 @@ export function SessionView(props: Props) {
             <LiveActivity
               items={d.items}
               dir={session.directory}
+              promptAt={promptAt}
               onInterrupt={
                 mayReply
                   ? () => props.interrupt(sessionId)

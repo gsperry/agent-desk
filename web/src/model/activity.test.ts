@@ -38,6 +38,12 @@ describe('liveActivity', () => {
     expect(liveActivity([item('user'), item('thinking')]).step).toBe('Thinking')
   })
 
+  it('takes the start from promptAt when the prompt is not loaded, and leaves tokens out', () => {
+    const a = liveActivity([item('text', { time: '2026-11-12T11:05:00Z', messageId: 'm', meta: { usage: { outputTokens: 500 } } })], undefined, '2026-11-12T11:00:00Z')
+    expect(a.startedAt).toBe(Date.parse('2026-11-12T11:00:00Z'))
+    expect(a.outputTokens).toBe(0)
+  })
+
   it('copes with no prompt and no timestamps', () => {
     const a = liveActivity([item('text')])
     expect(a.startedAt).toBeUndefined()

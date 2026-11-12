@@ -6,14 +6,29 @@ import type { Item } from '../types'
 interface Props {
   items: Item[]
   dir?: string
+  // promptAt finds when the last prompt was sent, for a transcript whose
+  // loaded part does not reach back to it.
+  promptAt?: () => Promise<string | undefined>
   // onInterrupt stops the turn, as Esc does; absent when not allowed.
   onInterrupt?: () => Promise<string | null>
 }
 
 // LiveActivity is the row above the composer while an agent works: how
 // long the turn has run, the tokens written, and the step it is on.
-export function LiveActivity({ items, dir, onInterrupt }: Props) {
-  const activity = useMemo(() => liveActivity(items, dir), [items, dir])
+export function LiveActivity({ items, dir, promptAt, onInterrupt }: Props) {
+  const [lastPrompt, setLastPrompt] = useState<string | undefined>()
+  const hasPrompt = items.some((it) => it.kind === 'user')
+  useEffect(() => {
+    if (hasPrompt || !promptAt) return
+    let live = true
+    void promptAt().then((t) => {
+      if (live) setLastPrompt(t)
+    })
+    return () => {
+      live = false
+    }
+  }, [hasPrompt, promptAt])
+  const activity = useMemo(() => liveActivity(items, dir, lastPrompt), [items, dir, lastPrompt])
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)

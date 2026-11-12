@@ -21,18 +21,21 @@ function outputTokens(it: Item): number | undefined {
 
 // liveActivity reads the current turn: everything after the last prompt
 // you sent. Usage repeats on each part of one assistant message, so tokens
-// count once per message.
-export function liveActivity(items: Item[], dir?: string): Activity {
-  let start = items.length
+// count once per message. When the loaded items do not reach back to the
+// prompt, the turn's start comes from promptAt (the overview's record of
+// the last prompt) and tokens are left out, since they would be partial.
+export function liveActivity(items: Item[], dir?: string, promptAt?: string): Activity {
+  let start = -1
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i]?.kind === 'user') {
       start = i
       break
     }
   }
-  if (start === items.length) start = 0
-  const turn = items.slice(start)
-  const t = turn[0]?.time ? Date.parse(turn[0].time) : NaN
+  const whole = start >= 0
+  const turn = items.slice(Math.max(start, 0))
+  const at = whole ? turn[0]?.time : promptAt
+  const t = at ? Date.parse(at) : NaN
 
   const perMessage = new Map<string, number>()
   const results = new Set<string>()
@@ -45,7 +48,7 @@ export function liveActivity(items: Item[], dir?: string): Activity {
     if (it.kind === 'tool_result' && it.result) results.add(it.result.toolUseId)
   }
   let tokens = 0
-  for (const n of perMessage.values()) tokens += n
+  if (whole) for (const n of perMessage.values()) tokens += n
 
   let step = ''
   for (let i = turn.length - 1; i >= 0; i--) {
