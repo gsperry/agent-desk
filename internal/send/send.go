@@ -70,6 +70,9 @@ func (s *Sender) Send(ctx context.Context, id, text string) (Result, error) {
 	if refused := CheckPane(screen); refused != nil {
 		return Result{}, refused
 	}
+	if refused := CheckWaiting(session.Status, screen); refused != nil {
+		return Result{}, refused
+	}
 	err = s.Pane.Type(ctx, id, text)
 	s.Sessions.Trigger()
 	switch {

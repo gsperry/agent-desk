@@ -14,6 +14,8 @@ interface Props {
   session: SessionView
   connected: boolean
   insideSession: boolean
+  // asking is false when a session reading waiting shows no question.
+  asking?: boolean
   onSend: (text: string) => void
   // pasteImage stores a pasted image and returns its path.
   pasteImage?: (image: Blob) => Promise<{ path?: string; error?: string }>
@@ -24,10 +26,10 @@ interface Props {
 }
 
 // Composer is keyed by session, so each session gets its own draft.
-export function Composer({ session, connected, insideSession, onSend, pasteImage, restore, loadCommands }: Props) {
+export function Composer({ session, connected, insideSession, asking, onSend, pasteImage, restore, loadCommands }: Props) {
   const [text, setText] = useState(() => loadDraft(localStorage, session.id))
   const area = useRef<HTMLTextAreaElement>(null)
-  const blocked = blockedReason(session, connected, insideSession)
+  const blocked = blockedReason(session, connected, insideSession, asking)
   const snippets = useSnippets()
   const [menu, setMenu] = useState(false)
   const vars = { session: session.name, branch: session.branch, project: session.project.name, directory: session.directory }
@@ -165,7 +167,7 @@ export function Composer({ session, connected, insideSession, onSend, pasteImage
           ref={area}
           value={text}
           rows={1}
-          placeholder={session.status === 'waiting' ? 'Answer the question above first' : `Reply to ${session.name}`}
+          placeholder={session.status === 'waiting' && asking !== false ? 'Answer the question above first' : `Reply to ${session.name}`}
           aria-label={`Reply to ${session.name}`}
           aria-controls={suggestions.length > 0 ? 'slash-menu' : undefined}
           aria-autocomplete="list"

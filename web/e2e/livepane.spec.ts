@@ -225,3 +225,37 @@ test('Cancel is refused when no question is on screen', async ({ page }) => {
   expect(res.status()).toBe(409)
   expect(keys()).toBe('')
 })
+
+test('a session left at waiting with no question on screen takes a reply, and the pane stays closed', async ({ page }) => {
+  // agent-manager keeps "waiting" after a declined question; the screen is
+  // back at the empty prompt.
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  rmSync(panePath)
+  try {
+    await open(page, 'a0000002')
+    const box = page.getByRole('textbox', { name: /Reply to/ })
+    await expect(box).toHaveAttribute('placeholder', 'Reply to web-compaction')
+    await expect(page.getByRole('region', { name: 'Terminal' })).toHaveCount(0)
+    await box.fill('Go with the second option.')
+    await box.press('Enter')
+    await expect(box).toHaveValue('')
+    await expect(page.getByRole('main').locator('.card.user').filter({ hasText: 'Go with the second option.' })).toBeVisible()
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})
+
+test('during a question, the Terminal button shows and hides the raw screen', async ({ page }) => {
+  await open(page, 'a0000002')
+  const pane = page.getByRole('region', { name: 'Terminal' })
+  const terminal = page.getByRole('main').getByRole('button', { name: 'Terminal' })
+  await expect(pane.locator('.live-option')).toHaveCount(4)
+  await expect(pane.locator('.live-screen')).toHaveCount(0)
+  await terminal.click()
+  await expect(pane.locator('.live-screen')).toBeVisible()
+  await expect(terminal).toHaveAttribute('aria-pressed', 'true')
+  await terminal.click()
+  await expect(pane.locator('.live-screen')).toHaveCount(0)
+  await expect(pane.locator('.live-option')).toHaveCount(4)
+})

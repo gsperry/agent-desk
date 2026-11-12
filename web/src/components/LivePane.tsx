@@ -8,14 +8,13 @@ interface Props {
   answer: (id: string, a: Answer) => Promise<string | null>
   readStyled: (id: string) => Promise<{ screen?: string; message?: string }>
   onClose?: () => void
+  // screenOn shows the raw screen in a pane opened by a question; the
+  // session view holds it so its Terminal button can toggle it too.
+  screenOn: boolean
+  onScreenOn: (on: boolean) => void
 }
 
 const colorKey = 'agent-desk:terminal-color'
-// screenKey remembers whether a pane that opened by itself, because the
-// session waits, shows the screen or only the question and its answers.
-// Off unless chosen: the question is read off the screen and shown above
-// its answers, so the raw screen would repeat it.
-const screenKey = 'agent-desk:terminal-screen'
 
 // The live pane refreshes this often while open.
 const refreshMs = 1000
@@ -23,9 +22,8 @@ const refreshMs = 1000
 // LivePane shows the agent's terminal screen and answers dialogs on it. It
 // is the one place Agent Desk shows terminal text. Without onClose it was
 // opened by a waiting session, and the screen itself can be hidden.
-export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props) {
+export function LivePane({ sessionId, read, answer, readStyled, onClose, screenOn, onScreenOn }: Props) {
   const [color, setColor] = useState(() => localStorage.getItem(colorKey) === 'on')
-  const [screenOn, setScreenOn] = useState(() => localStorage.getItem(screenKey) === 'on')
   const [screen, setScreen] = useState<Screen | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -103,8 +101,7 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
             aria-pressed={!screenOn}
             title="Applies whenever a waiting session opens the terminal"
             onClick={() => {
-              localStorage.setItem(screenKey, screenOn ? 'off' : 'on')
-              setScreenOn(!screenOn)
+              onScreenOn(!screenOn)
             }}
           >
             {screenOn ? 'Hide screen' : 'Show screen'}

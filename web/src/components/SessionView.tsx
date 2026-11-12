@@ -67,6 +67,13 @@ interface Props {
 // The subagent list refreshes this often while a session is open.
 const agentsRefreshMs = 5000
 
+// A session reading waiting has its screen checked this often.
+const waitingCheckMs = 1500
+
+// screenKey remembers whether a pane a question opened shows the raw
+// screen or only the question and its answers.
+const screenKey = 'agent-desk:terminal-screen'
+
 export function SessionView(props: Props) {
   const { session, sessionId, doc, pending, connected, insideSession, follow, unfollow, loadOlder, send, dismiss, readScreen, answer, openPath } = props
   const remoteInfo = useRemote()
@@ -131,10 +138,41 @@ export function SessionView(props: Props) {
   const d = doc ?? loadingDoc
   const header = useMemo(() => buildHeader(d.items), [d.items])
 
-  // The pane opens on its own when the agent waits, or when a reply was
-  // refused because a dialog is on screen that the status did not show.
+  // A session reading waiting is asked about its screen: agent-manager sets
+  // waiting when a question or permission prompt opens and leaves it there
+  // when the user declines one, so the agent can be back at its prompt.
+  // Until the screen is read, a question is assumed.
+  // The server checks the screen again before any text is typed.
+  const waiting = session?.running === true && session.status === 'waiting'
+  const [checked, setChecked] = useState<{ sessionId: string; asking: boolean } | null>(null)
+  const asking = waiting && checked?.sessionId === sessionId ? checked.asking : undefined
+  useEffect(() => {
+    if (!waiting) return
+    let live = true
+    const check = () => {
+      void readScreen(sessionId).then((r) => {
+        if (live && r.screen) setChecked({ sessionId, asking: (r.screen.dialog?.options.length ?? 0) > 0 })
+      })
+    }
+    check()
+    const t = setInterval(check, waitingCheckMs)
+    return () => {
+      live = false
+      clearInterval(t)
+    }
+  }, [waiting, readScreen, sessionId])
+  const questionUp = waiting && asking !== false
+  // The pane opens on its own for a question, or when a reply was refused
+  // because a dialog is on screen that the status did not show.
   const dialogRefusal = pending.some((p) => p.state === 'failed' && p.reason === 'dialog')
-  const paneOpen = session?.running === true && (showPane || session.status === 'waiting' || dialogRefusal)
+  const forced = questionUp || dialogRefusal
+  const paneOpen = session?.running === true && (showPane || forced)
+  // In a pane a question opened, the raw screen is hidden unless chosen.
+  const [screenOn, setScreenOnState] = useState(() => localStorage.getItem(screenKey) === 'on')
+  const setScreenOn = useCallback((on: boolean) => {
+    localStorage.setItem(screenKey, on ? 'on' : 'off')
+    setScreenOnState(on)
+  }, [])
 
   if (!session) {
     return (
@@ -237,9 +275,13 @@ export function SessionView(props: Props) {
                 <button
                   type="button"
                   className="chip chip-button terminal-toggle"
-                  aria-pressed={paneOpen}
+                  aria-pressed={forced && !showPane ? screenOn : paneOpen}
+                  title={forced && !showPane ? 'Show or hide the raw screen under the question' : undefined}
                   onClick={() => {
-                    setShowPane(!showPane)
+                    // A question keeps the pane open; the button then shows
+                    // or hides the raw screen.
+                    if (forced && !showPane) setScreenOn(!screenOn)
+                    else setShowPane(!showPane)
                   }}
                 >
                   Terminal
@@ -334,6 +376,8 @@ export function SessionView(props: Props) {
               read={readScreen}
               readStyled={props.readStyled}
               answer={answer}
+              screenOn={screenOn}
+              onScreenOn={setScreenOn}
               onClose={
                 showPane
                   ? () => {
@@ -353,8 +397,8 @@ export function SessionView(props: Props) {
                 <button
                   type="button"
                   className="send"
-                  disabled={blockedReason(session, connected, insideSession) !== null}
-                  title={blockedReason(session, connected, insideSession) ?? undefined}
+                  disabled={blockedReason(session, connected, insideSession, asking) !== null}
+                  title={blockedReason(session, connected, insideSession, asking) ?? undefined}
                   onClick={() => {
                     if (!props.suggestion) return
                     send(sessionId, props.suggestion.text)
@@ -405,6 +449,7 @@ export function SessionView(props: Props) {
               session={session}
               connected={connected}
               insideSession={insideSession}
+              asking={asking}
               restore={restore}
               pasteImage={can(remoteInfo, 'local') ? props.pasteImage : undefined}
               loadCommands={props.loadCommands}
@@ -419,7 +464,7 @@ export function SessionView(props: Props) {
           {changesOpen && (
           <ChangesPanel
             sessionId={sessionId}
-            canSend={mayReply ? blockedReason(session, connected, insideSession) : 'Replies are off for remote devices at this level.'}
+            canSend={mayReply ? blockedReason(session, connected, insideSession, asking) : 'Replies are off for remote devices at this level.'}
             load={props.readChanges}
             onSend={(text) => {
               send(sessionId, text)
