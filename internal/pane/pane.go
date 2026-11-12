@@ -44,7 +44,7 @@ const maxScan = 40
 
 // Parse finds a dialog on a plain-text screen, or returns nil.
 func Parse(screen string) *Dialog {
-	lines := nonBlank(screen)
+	lines, gaps := nonBlank(screen)
 	footer := -1
 	for i := len(lines) - 1; i >= max(len(lines)-footerLines, 0); i-- {
 		if footerPattern.MatchString(lines[i]) {
@@ -71,7 +71,7 @@ func Parse(screen string) *Dialog {
 	if first < 0 {
 		return d
 	}
-	d.Question = question(lines, top, first)
+	d.Question = question(lines, gaps, top, first, screenWidth(lines))
 	return d
 }
 
@@ -186,26 +186,95 @@ func isSibling(line string, col int) bool {
 	return !unicode.IsSpace(r[col])
 }
 
-// question is the nearest line above the options that reads like a prompt.
-func question(lines []string, top, first int) string {
+// maxQuestionLines bounds how much text above the options is taken as the
+// question.
+const maxQuestionLines = 12
+
+// question is the block of text just above the options: the nearest line
+// that is not a separator, and the lines above it at the same indentation,
+// up to a separator, a tab bar, a box edge, the input prompt or a change of
+// indentation. The terminal wraps long questions over several lines; those
+// are joined with spaces, while lines that ended early keep their breaks
+// and blank lines become paragraph breaks.
+func question(lines []string, gaps []bool, top, first, width int) string {
+	last := -1
 	for i := first - 1; i >= top && i >= first-4; i-- {
-		l := strings.TrimSpace(lines[i])
-		if l == "" || separator.MatchString(l) {
-			continue
+		if !separator.MatchString(lines[i]) {
+			last = i
+			break
 		}
-		return l
 	}
-	return ""
+	if last < 0 {
+		return ""
+	}
+	indent := indentOf(lines[last])
+	start := last
+	for i := last - 1; i >= top && last-i < maxQuestionLines; i-- {
+		if indentOf(lines[i]) != indent || !questionLine(lines[i]) {
+			break
+		}
+		start = i
+	}
+	var b strings.Builder
+	for i := start; i <= last; i++ {
+		text := strings.TrimSpace(lines[i])
+		if i > start {
+			prev := []rune(strings.TrimRight(lines[i-1], " "))
+			word, _, _ := strings.Cut(text, " ")
+			switch {
+			case gaps[i]:
+				b.WriteString("\n\n")
+			case len(prev)+1+len([]rune(word)) > width:
+				b.WriteString(" ")
+			default:
+				b.WriteString("\n")
+			}
+		}
+		b.WriteString(text)
+	}
+	return b.String()
 }
 
-func nonBlank(screen string) []string {
-	var out []string
-	for _, l := range strings.Split(screen, "\n") {
-		if strings.TrimSpace(l) != "" {
-			out = append(out, strings.TrimRight(l, " \t"))
-		}
+// questionLine reports whether a line can be part of a question: not a
+// separator, tab bar, box edge or the input prompt.
+func questionLine(l string) bool {
+	t := strings.TrimSpace(l)
+	if separator.MatchString(l) || strings.HasPrefix(t, "❯") || strings.HasPrefix(t, "←") {
+		return false
 	}
-	return out
+	return !strings.ContainsAny(t, "☐☒✔│╭╰┃")
+}
+
+func indentOf(l string) int {
+	return len(l) - len(strings.TrimLeft(l, " "))
+}
+
+// screenWidth is the terminal width, from the widest line; separators span
+// it.
+func screenWidth(lines []string) int {
+	w := 0
+	for _, l := range lines {
+		w = max(w, len([]rune(l)))
+	}
+	return w
+}
+
+// nonBlank returns the screen's non-blank lines, and for each whether blank
+// lines came before it.
+func nonBlank(screen string) ([]string, []bool) {
+	var out []string
+	var gaps []bool
+	gap := false
+	for _, l := range strings.Split(screen, "\n") {
+		if strings.TrimSpace(l) == "" {
+			gap = len(out) > 0
+			continue
+		}
+		out = append(out, strings.TrimRight(l, " \t"))
+		gaps = append(gaps, gap)
+		gap = false
+	}
+	return out, gaps
 }
 
 func atoi(s string) int {

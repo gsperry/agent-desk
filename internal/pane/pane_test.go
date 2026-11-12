@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -42,7 +43,7 @@ func TestParse(t *testing.T) {
 			file:     "trust-dialog.txt",
 			labels:   []string{"No, exit", "Yes, I trust this folder"},
 			selected: 0,
-			question: "Security guide",
+			question: "Accessing workspace:\n/private/tmp/probe\nQuick safety check: Is this a project you created or one you trust?\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide",
 		},
 		{
 			file:     "ask-question.txt",
@@ -81,7 +82,7 @@ func TestParse(t *testing.T) {
 			file:     "auto-mode-dialog.txt",
 			labels:   []string{"Yes", "Not now", "Don't show again"},
 			selected: 0,
-			question: "Auto mode works better when it knows your environment. Takes about a minute.",
+			question: "Teach auto mode about your environment?\nAuto mode works better when it knows your environment. Takes about a minute.",
 		},
 	}
 	for _, tt := range tests {
@@ -145,5 +146,38 @@ func TestParseIgnoresEarlierNumberedLists(t *testing.T) {
 	d := Parse(screen)
 	if d == nil || !reflect.DeepEqual(labels(d), []string{"Yes", "No"}) || d.Question != "Do it?" {
 		t.Fatalf("%+v", d)
+	}
+}
+
+// A question longer than the terminal is wrapped over several lines; the
+// whole of it is the question, joined back into one paragraph, and blank
+// lines between paragraphs are kept. Constructed in the layout of
+// ask-question.txt, 60 columns wide.
+func TestLongQuestion(t *testing.T) {
+	sep := strings.Repeat("─", 60)
+	screen := strings.Join([]string{
+		"❯ Ask me which deployment target to use.",
+		sep,
+		" ☐ Target",
+		"Which environment should the release go to first? Staging",
+		"runs the full suite, production skips it.",
+		"",
+		"Pick one.",
+		"❯ 1. Staging",
+		"     Safer",
+		"  2. Production",
+		"     Faster",
+		"  3. Type something.",
+		sep,
+		"  4. Chat about this",
+		"Enter to select · ↑/↓ to navigate · Esc to cancel",
+	}, "\n")
+	d := Parse(screen)
+	if d == nil {
+		t.Fatal("no dialog")
+	}
+	want := "Which environment should the release go to first? Staging runs the full suite, production skips it.\n\nPick one."
+	if d.Question != want {
+		t.Fatalf("question = %q\nwant      %q", d.Question, want)
 	}
 }

@@ -137,3 +137,33 @@ test('the send key submits a typed answer', async ({ page }) => {
     writeFileSync(panePath, original)
   }
 })
+
+test('a question wrapped over several terminal lines is shown whole', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  const sep = '─'.repeat(60)
+  writeFileSync(
+    panePath,
+    [
+      sep,
+      ' ☐ Target',
+      'Which environment should the release go to first? Staging',
+      'runs the full suite, production skips it.',
+      '❯ 1. Staging',
+      '  2. Production',
+      '  3. Type something.',
+      sep,
+      '  4. Chat about this',
+      'Enter to select · ↑/↓ to navigate · Esc to cancel',
+    ].join('\n'),
+  )
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await expect(pane.locator('.live-question')).toHaveText(
+      'Which environment should the release go to first? Staging runs the full suite, production skips it.',
+    )
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})

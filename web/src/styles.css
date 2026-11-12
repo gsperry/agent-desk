@@ -1209,6 +1209,8 @@ pre.code-body,
 .live-question {
   margin: 0 0 0.4rem;
   font-weight: 600;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .live-options {
