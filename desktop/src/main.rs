@@ -54,11 +54,65 @@ fn show(app: &AppHandle) {
     }
 }
 
-/// start runs the bundled server through the user's login shell, so it sees
-/// the same PATH (agent-manager, tmux, code) as in a terminal; an app opened
-/// from Finder otherwise gets a minimal PATH. The shell starts from a clean
-/// environment, as a new terminal does, so nothing from whatever launched
-/// the app (a tmux session, an agent's variables) reaches the server. The
+/// clean_shell is the user's shell with a clean environment, as a new
+/// terminal starts, so nothing from whatever launched the app (a tmux
+/// session, an agent's variables) reaches the server.
+fn clean_shell(shell: &str) -> Command {
+    let mut cmd = Command::new(shell);
+    cmd.env_clear()
+        .env("SHELL", shell)
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+    for key in [
+        "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
+    ] {
+        if let Some(v) = std::env::var_os(key) {
+            cmd.env(key, v);
+        }
+    }
+    cmd
+}
+
+/// terminal_path is the PATH an interactive terminal has. A login shell
+/// alone skips ~/.zshrc, where installers often add their directory (Claude
+/// Code's ~/.local/bin among them), so the shell is run interactively once,
+/// with a marker around the value and a timeout, in case the rc file
+/// prints, prompts or hangs.
+fn terminal_path(shell: &str) -> Option<String> {
+    const MARK: &str = "__AGENT_DESK_PATH__";
+    let mut child = clean_shell(shell)
+        .arg("-ilc")
+        .arg(format!(
+            r#"printf '
+{MARK}%s{MARK}
+' "$PATH""#
+        ))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let mut out = child.stdout.take()?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = std::io::Read::read_to_string(&mut out, &mut s);
+        let _ = tx.send(s);
+    });
+    let got = rx.recv_timeout(Duration::from_secs(5));
+    let _ = child.kill();
+    let _ = child.wait();
+    let text = got.ok()?;
+    let start = text.find(MARK)? + MARK.len();
+    let end = start + text[start..].find(MARK)?;
+    let path = text[start..end].trim();
+    (!path.is_empty()).then(|| path.to_string())
+}
+
+/// start runs the bundled server through the user's login shell, with the
+/// PATH an interactive terminal has, so it finds agent-manager, tmux, code
+/// and the agent CLIs (claude) as a terminal would; an app opened from
+/// Finder otherwise gets a minimal PATH. The shell starts from a clean
+/// environment. The
 /// server's log goes to ~/Library/Logs/Agent Desk/server.log. It returns
 /// the server and the address with its token, which only stdout carries.
 /// The port is fixed (7318, next to the terminal default 7317) because the
@@ -68,23 +122,18 @@ fn start() -> Result<(Child, String), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let server = exe.parent().ok_or("no app directory")?.join("agent-desk");
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let mut cmd = Command::new(&shell);
-    cmd.env_clear()
-        .env("SHELL", &shell)
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
-    for key in [
-        "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
-    ] {
-        if let Some(v) = std::env::var_os(key) {
-            cmd.env(key, v);
-        }
+    let mut cmd = clean_shell(&shell);
+    // The login profile runs again and may add to this PATH; it keeps what
+    // the interactive shell found.
+    if let Some(path) = terminal_path(&shell) {
+        cmd.env("AGENT_DESK_PATH", path);
     }
     let log = server_log()
         .map(Stdio::from)
         .unwrap_or_else(|_| Stdio::null());
     let mut child = cmd
         .arg("-lc")
-        .arg(r#"exec "$0" --no-open --port 7318"#)
+        .arg(r#"[ -n "$AGENT_DESK_PATH" ] && PATH="$AGENT_DESK_PATH" && unset AGENT_DESK_PATH; exec "$0" --no-open --port 7318"#)
         .arg(&server)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
