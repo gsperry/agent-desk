@@ -1168,6 +1168,11 @@ pre.code-body,
   border-top: 1px solid var(--border);
 }
 
+.live-hidden {
+  margin: 0.2rem 0;
+  font-size: 0.85rem;
+}
+
 .live-head {
   display: flex;
   justify-content: space-between;

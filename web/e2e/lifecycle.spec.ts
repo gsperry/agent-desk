@@ -32,7 +32,10 @@ test('a new session starts from the form and opens', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Start' })).toBeDisabled()
   await dialog.getByPlaceholder('/path/to/project').fill('/tmp')
   await dialog.getByPlaceholder('Left empty, the agent names it').fill('e2e-new')
-  await dialog.getByRole('button', { name: 'Start' }).click()
+  await expect(dialog.getByRole('button', { name: 'Start' })).toBeEnabled()
+  // The send key in the first prompt starts it, as Start does.
+  await dialog.getByLabel('First prompt').fill('List the files.')
+  await dialog.getByLabel('First prompt').press('ControlOrMeta+Enter')
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('main').getByRole('heading', { name: 'e2e-new' })).toBeVisible()
   await expect(nav(page).getByText('e2e-new')).toBeVisible()

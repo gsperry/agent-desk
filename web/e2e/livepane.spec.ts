@@ -92,3 +92,44 @@ test('a "Type something" option takes a typed answer, and "Chat about this" is a
     writeFileSync(panePath, original)
   }
 })
+
+test('a waiting session can hide the screen and keep the question', async ({ page }) => {
+  await open(page, 'a0000002')
+  const pane = page.getByRole('region', { name: 'Terminal' })
+  await expect(pane.locator('.live-screen')).toBeVisible()
+  await pane.getByRole('button', { name: 'Hide screen' }).click()
+  await expect(pane.locator('.live-screen')).toHaveCount(0)
+  await expect(pane.getByRole('button', { name: 'Color' })).toHaveCount(0)
+  await expect(pane.locator('.live-option')).toHaveCount(4)
+  // Remembered across reloads and sessions.
+  await page.reload()
+  await expect(pane.locator('.live-option')).toHaveCount(4)
+  await expect(pane.locator('.live-screen')).toHaveCount(0)
+  // The Terminal button still shows the screen of any session.
+  await open(page, 'a0000001')
+  const main = page.getByRole('main')
+  await main.getByRole('button', { name: 'Terminal' }).click()
+  await expect(pane.locator('.live-screen')).toBeVisible()
+  await expect(pane.getByRole('button', { name: 'Hide screen' })).toHaveCount(0)
+  await open(page, 'a0000002')
+  await pane.getByRole('button', { name: 'Show screen' }).click()
+  await expect(pane.locator('.live-screen')).toBeVisible()
+})
+
+test('the send key submits a typed answer', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-free-initial.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await pane.getByRole('button', { name: /^3 Type something/ }).click()
+    const box = pane.getByRole('textbox', { name: 'Your answer' })
+    await box.fill('Blue')
+    await box.press('ControlOrMeta+Enter')
+    await expect(box).toHaveCount(0)
+    await expect.poll(keys).toBe('a0000002 Down Down\n')
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})

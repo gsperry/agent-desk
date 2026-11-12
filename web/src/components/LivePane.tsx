@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Answer, Screen } from '../types'
 import { StyledTerminal } from './StyledTerminal'
+import { isSendKey } from '../model/compose'
 
 interface Props {
   sessionId: string
@@ -11,14 +12,20 @@ interface Props {
 }
 
 const colorKey = 'agent-desk:terminal-color'
+// screenKey remembers whether a pane that opened by itself, because the
+// session waits, shows the screen or only the question and its answers.
+const screenKey = 'agent-desk:terminal-screen'
 
 // The live pane refreshes this often while open.
 const refreshMs = 1000
 
 // LivePane shows the agent's terminal screen and answers dialogs on it. It
-// is the one place Agent Desk shows terminal text.
+// is the one place Agent Desk shows terminal text. Without onClose it was
+// opened by a waiting session, and the screen itself can be hidden.
 export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props) {
   const [color, setColor] = useState(() => localStorage.getItem(colorKey) === 'on')
+  const [screenOn, setScreenOn] = useState(() => localStorage.getItem(screenKey) !== 'off')
+  const showScreen = onClose !== undefined || screenOn
   const [screen, setScreen] = useState<Screen | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -62,30 +69,50 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
     <section className="live-pane" aria-label="Terminal">
       <header className="live-head">
         <span>Terminal</span>
-        <button
-          type="button"
-          className="link-button color-toggle"
-          aria-pressed={color}
-          title="Show the screen in color, read-only"
-          onClick={() => {
-            localStorage.setItem(colorKey, color ? 'off' : 'on')
-            setColor(!color)
-          }}
-        >
-          {color ? 'Plain text' : 'Color'}
-        </button>
+        {showScreen && (
+          <button
+            type="button"
+            className="link-button color-toggle"
+            aria-pressed={color}
+            title="Show the screen in color, read-only"
+            onClick={() => {
+              localStorage.setItem(colorKey, color ? 'off' : 'on')
+              setColor(!color)
+            }}
+          >
+            {color ? 'Plain text' : 'Color'}
+          </button>
+        )}
+        {!onClose && (
+          <button
+            type="button"
+            className="link-button"
+            aria-pressed={!screenOn}
+            title="Applies whenever a waiting session opens the terminal"
+            onClick={() => {
+              localStorage.setItem(screenKey, screenOn ? 'off' : 'on')
+              setScreenOn(!screenOn)
+            }}
+          >
+            {screenOn ? 'Hide screen' : 'Show screen'}
+          </button>
+        )}
         {onClose && (
           <button type="button" className="link-button" onClick={onClose}>
             Hide
           </button>
         )}
       </header>
-      {color ? (
-        <StyledTerminal sessionId={sessionId} read={readStyled} />
-      ) : (
-        <pre ref={pre} className="live-screen">
-          {screen?.text ?? 'Reading the screen…'}
-        </pre>
+      {showScreen &&
+        (color ? (
+          <StyledTerminal sessionId={sessionId} read={readStyled} />
+        ) : (
+          <pre ref={pre} className="live-screen">
+            {screen?.text ?? 'Reading the screen…'}
+          </pre>
+        ))}
+      {!showScreen && !(dialog && dialog.options.length > 0) && (
+        <p className="muted live-hidden">Screen hidden. The session is waiting on the terminal.</p>
       )}
       {dialog && dialog.options.length > 0 && (
         <div className="live-dialog">
@@ -128,6 +155,9 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
                   if (e.key === 'Escape') {
                     e.stopPropagation()
                     setTyping(null)
+                  } else if (isSendKey(e.nativeEvent)) {
+                    e.preventDefault()
+                    e.currentTarget.form?.requestSubmit()
                   }
                 }}
               />
