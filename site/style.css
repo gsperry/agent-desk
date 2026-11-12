@@ -201,6 +201,12 @@ h3 {
   text-align: left;
 }
 
+.shot.phone {
+  justify-self: center;
+  width: 100%;
+  max-width: 20rem;
+}
+
 .hero-shot {
   width: 100%;
 }

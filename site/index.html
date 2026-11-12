@@ -37,7 +37,8 @@
           <strong>Agent Desk</strong> is a local GUI over
           <a href="https://agent-manager.dev">agent-manager</a>. Every Claude Code session reads as a
           document. Answer a waiting agent with one click, review its diff and send notes back, and see the
-          whole fleet at a glance. Every agent keeps running in tmux; closing Agent Desk stops nothing.
+          whole fleet at a glance, at your desk or from your phone. Every agent keeps running in tmux; closing
+          Agent Desk stops nothing.
         </p>
         <div class="cta">
           <a class="button primary" href="#install">Install</a>
@@ -50,7 +51,7 @@
       </div>
       <figure class="shot hero-shot">
         <figcaption>A session as a document: prompt, reply, tool calls and diffs</figcaption>
-        <img src="/img/session.png" width="1440" height="900" alt="Agent Desk showing a session: the sidebar groups sessions by project with live status, and the transcript shows a prompt, the agent's reply, a code edit as a diff and test runs">
+        <img src="/img/session.png" width="1440" height="900" alt="Agent Desk showing a session: the sidebar groups sessions by project with live status; the transcript shows a prompt, the agent's reply, its file reads folded into one line, a code edit as a diff and a test run; a row above the composer shows the agent working, with Interrupt">
       </figure>
     </section>
 
@@ -73,12 +74,12 @@
       <div class="feature flip">
         <div class="feature-text">
           <h3>Answer without attaching</h3>
-          <p>When an agent stops on a permission prompt or a question, the terminal opens under its transcript with a button for each option. Agent Desk reads the screen again before it presses a key, and refuses if the choice changed.</p>
-          <p class="small">Replies go through <code>agent-manager type</code>, and are refused with a reason when they would land anywhere but the agent's prompt.</p>
+          <p>When an agent stops on a permission prompt or a question, Agent Desk shows the question under its transcript with a button for each answer: checkboxes when it takes several, a text box for your own words, and each step of a multi-part prompt. It reads the screen again before it presses a key, and refuses if the choice changed.</p>
+          <p class="small">Enter sends a reply, as in Claude Code, through <code>agent-manager type</code>; a reply is refused with a reason when it would land anywhere but the agent's prompt. While an agent works, a live row shows how long, the tokens written and the current step, with Interrupt to stop the turn.</p>
         </div>
         <figure class="shot">
           <figcaption>A waiting agent, answered with one click</figcaption>
-          <img src="/img/waiting.png" width="1440" height="900" loading="lazy" alt="A session waiting on a permission prompt: the failed test run, the agent's explanation, the terminal screen and a button for each answer">
+          <img src="/img/waiting.png" width="1440" height="900" loading="lazy" alt="A session waiting on a permission prompt: the failed test run, the agent's explanation, and the question with the file it would edit and a button for each answer">
         </figure>
       </div>
 
@@ -106,9 +107,23 @@
         </figure>
       </div>
 
+      <div class="feature">
+        <div class="feature-text">
+          <h3>Away from the desk</h3>
+          <p>Check on your agents and answer a waiting one from your phone or another computer, through Tailscale or a Cloudflare Tunnel behind Cloudflare Access. Remote access is off until you turn it on at the desk, and you choose what remote devices may do: read and answer, also reply, or also start and stop sessions.</p>
+          <p class="small">Remote devices never see your local link. The proxy vouches for who they are, Agent Desk checks that identity on every request, and only the people you list get in.</p>
+        </div>
+        <figure class="shot phone">
+          <figcaption>Answering from a phone</figcaption>
+          <img src="/img/phone.png" width="390" height="818" loading="lazy" alt="Agent Desk on a phone: a session waiting on a permission prompt, with the question and a button for each answer">
+        </figure>
+      </div>
+
       <ul class="more">
         <li><strong>Search</strong> every transcript: prompts, replies, thinking and tool output.</li>
+        <li><strong>Desktop app</strong> for macOS: its own window, native notifications, the "needs you" count on the dock and in the menu bar, and Control-Option-A to bring it forward.</li>
         <li><strong>Notifications</strong> when a session waits, errors or finishes, and a "needs you" count in the tab.</li>
+        <li><strong>Slash commands</strong> complete as you type: Claude Code's own, your custom commands, skills and enabled plugins.</li>
         <li><strong>Snippets</strong> for replies you send often, with <code>/name</code> and Tab.</li>
         <li><strong>Rules</strong> that notify you or suggest a reply when a session reaches a status. You always press Send.</li>
         <li><strong>Pins and notes</strong> per conversation, kept in your browser.</li>
@@ -134,8 +149,8 @@
       <p class="eyebrow">Local and safe</p>
       <h2>Your agents, your machine, nobody else.</h2>
       <div class="grid">
-        <div class="card"><h3>Loopback only</h3><p>Listens on 127.0.0.1. Every request needs a token that changes on each start, and must name the server's own host; state-changing requests must come from its own origin.</p></div>
-        <div class="card"><h3>No telemetry</h3><p>No analytics, no network calls beyond localhost. This page has none either.</p></div>
+        <div class="card"><h3>Loopback by default</h3><p>Listens on 127.0.0.1. Every request needs a token that changes on each start, and must name the server's own host; state-changing requests must come from its own origin. Remote access, off until you turn it on at the desk, arrives through an owner-only socket with an identity checked on every request.</p></div>
+        <div class="card"><h3>No telemetry</h3><p>No analytics, and no network calls of its own. The one exception is opt-in: with Cloudflare remote access, it fetches your team's public signing keys from Cloudflare. This page has no analytics either.</p></div>
         <div class="card"><h3>No API keys</h3><p>Agent Desk never asks for a key and never calls a model API. Optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.</p></div>
         <div class="card"><h3>Read-only transcripts</h3><p>Nothing is ever written under <code>~/.claude</code>. Agent Desk reads Claude Code's files and runs local CLIs, nothing more.</p></div>
       </div>
@@ -160,7 +175,7 @@
 <span class="prompt">$</span> agent-desk
 <span class="out">Agent Desk listening on http://127.0.0.1:7317</span></code></pre>
       </div>
-      <p class="small">It opens in your browser. Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
+      <p class="small">It opens in your browser. On macOS, <code>make desktop</code> builds the desktop app instead (it needs Rust and the Tauri CLI). Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
     </section>
   </main>
 
