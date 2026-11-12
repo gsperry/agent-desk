@@ -61,6 +61,9 @@ fn show(app: &AppHandle) {
 /// the app (a tmux session, an agent's variables) reaches the server. The
 /// server's log goes to ~/Library/Logs/Agent Desk/server.log. It returns
 /// the server and the address with its token, which only stdout carries.
+/// The port is fixed (7318, next to the terminal default 7317) because the
+/// page's storage (drafts, reading positions, pins, settings) belongs to its
+/// origin, port included; a busy port still falls back to a free one.
 fn start() -> Result<(Child, String), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let server = exe.parent().ok_or("no app directory")?.join("agent-desk");
@@ -81,7 +84,7 @@ fn start() -> Result<(Child, String), String> {
         .unwrap_or_else(|_| Stdio::null());
     let mut child = cmd
         .arg("-lc")
-        .arg(r#"exec "$0" --no-open --port 0"#)
+        .arg(r#"exec "$0" --no-open --port 7318"#)
         .arg(&server)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

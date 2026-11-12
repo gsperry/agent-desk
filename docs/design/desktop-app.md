@@ -12,7 +12,7 @@ A macOS app around Agent Desk: its own window and dock icon, native notification
 - The login shell starts from a clean environment (HOME, USER, SHELL, TMPDIR and locale only), as a new terminal does, so variables from whatever launched the app never reach the server. The server's log goes to `~/Library/Logs/Agent Desk/server.log` (owner-only, restarted past 1 MB); the token only travels on stdout.
 - The shell accepts only a `127.0.0.1` address from the server. The server's checks stay as they are: Host and Origin checks pass unchanged and the token travels in the fragment.
 - The page gets two commands and nothing else (`desktop/capabilities/page.json`, remote URL `http://127.0.0.1:*`): `notify` (title and body, truncated) and `set_badge` (a count, shown on the dock icon and in the menu bar). The web app detects the shell (`window.__TAURI__`) and uses them in place of the browser's Notification API; in a browser nothing changes.
-- The app runs its own server on a free port, next to any `agent-desk` started from a terminal. Remote access is served by whichever started first; the other reports the socket as in use.
+- The app runs its own server on port 7318 (a free one if that is taken), next to any `agent-desk` started from a terminal. The port stays the same between launches because the page keeps drafts, reading positions and settings per origin. Remote access is served by whichever started first; the other reports the socket as in use.
 
 ## Limits
 
