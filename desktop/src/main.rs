@@ -2,22 +2,29 @@
 // free 127.0.0.1 port, opens a window on the address it prints, and stops
 // the server when the app quits. Agents keep running in agent-manager.
 //
-// The page may call two commands, granted in capabilities/page.json:
+// Closing the window hides it, so notifications and the counts keep
+// working; the dock icon, the menu-bar item and Control-Option-A bring it
+// back. The page may call two commands, granted in capabilities/page.json:
 // notify (a native notification, which the web view cannot show) and
-// set_badge (the dock badge).
+// set_badge (the dock badge and the menu-bar count).
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 struct Server(Mutex<Option<Child>>);
 
+const TRAY: &str = "main";
+
 #[tauri::command]
-fn notify(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
     let title: String = title.chars().take(200).collect();
     let body: String = body.chars().take(500).collect();
     app.notification()
@@ -29,9 +36,22 @@ fn notify(app: tauri::AppHandle, title: String, body: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-fn set_badge(window: tauri::WebviewWindow, count: i64) -> Result<(), String> {
-    let badge = if count > 0 { Some(count.min(999)) } else { None };
+fn set_badge(app: AppHandle, window: tauri::WebviewWindow, count: i64) -> Result<(), String> {
+    let count = count.clamp(0, 999);
+    let badge = (count > 0).then_some(count);
+    if let Some(tray) = app.tray_by_id(TRAY) {
+        let _ = tray.set_title(badge.map(|n| n.to_string()));
+    }
     window.set_badge_count(badge).map_err(|e| e.to_string())
+}
+
+/// show brings the window forward, unhiding it if it was closed.
+fn show(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
 }
 
 /// start runs the bundled server through the user's login shell, so it sees
@@ -40,10 +60,7 @@ fn set_badge(window: tauri::WebviewWindow, count: i64) -> Result<(), String> {
 /// address with its token.
 fn start() -> Result<(Child, String), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let server = exe
-        .parent()
-        .ok_or("no app directory")?
-        .join("agent-desk");
+    let server = exe.parent().ok_or("no app directory")?.join("agent-desk");
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let mut child = Command::new(shell)
         .arg("-lc")
@@ -72,13 +89,47 @@ fn start() -> Result<(Child, String), String> {
     }
 }
 
+fn tray(app: &AppHandle) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "show", "Show Agent Desk", true, Some("Ctrl+Alt+A"))?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Agent Desk", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &quit])?;
+    TrayIconBuilder::with_id(TRAY)
+        .icon(tauri::include_image!("icons/tray.png"))
+        .icon_as_template(true)
+        .tooltip("Agent Desk")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => show(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .build(app)?;
+    Ok(())
+}
+
 fn main() {
+    let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyA);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, s, event| {
+                    if *s == shortcut && event.state() == ShortcutState::Pressed {
+                        show(app);
+                    }
+                })
+                .build(),
+        )
         .manage(Server(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![notify, set_badge])
-        .setup(|app| {
-            let (child, url) = start().map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+        .setup(move |app| {
+            let (child, url) = start().map_err(Box::<dyn std::error::Error>::from)?;
             *app.state::<Server>().0.lock().unwrap() = Some(child);
             let url: tauri::Url = url.parse()?;
             if url.host_str() != Some("127.0.0.1") {
@@ -89,15 +140,22 @@ fn main() {
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(420.0, 500.0)
                 .build()?;
+            tray(app.handle())?;
+            // Another app may own the shortcut; the menu-bar item still works.
+            if let Err(e) = app.global_shortcut().register(shortcut) {
+                eprintln!("agent-desk: Control-Option-A is taken: {e}");
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("could not build Agent Desk");
-    app.run(|handle, event| {
-        if let RunEvent::Exit = event {
+    app.run(|handle, event| match event {
+        RunEvent::Reopen { .. } => show(handle),
+        RunEvent::Exit => {
             if let Some(mut child) = handle.state::<Server>().0.lock().unwrap().take() {
                 let _ = child.kill();
             }
         }
+        _ => {}
     });
 }

@@ -60,5 +60,5 @@ Goal: supervise and correct work, not only chat.
 | Step | Feature | Notes |
 | --- | --- | --- |
 | A1 | Slash command autocomplete (done) | Built-ins from the Claude Code binary (`tools/claudecommands`), custom commands, skills and enabled plugins; snippets in the same menu |
-| A2 | Desktop app (done: window, native notifications, dock badge) | Tauri shell in `desktop/` around the Go binary; unsigned local builds. Next: menu-bar count, global hotkey. See [design/desktop-app.md](design/desktop-app.md) |
+| A2 | Desktop app (done) | Tauri shell in `desktop/` around the Go binary: window, native notifications, dock badge and menu-bar count, Control-Option-A. Unsigned local builds. See [design/desktop-app.md](design/desktop-app.md) |
 | A3 | Remote access over Cloudflare Tunnel (R2) | To discuss; see [design/away-from-desk.md](design/away-from-desk.md) |
