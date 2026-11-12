@@ -1,24 +1,24 @@
 # Desktop app
 
-Status: design only. Needs the owner's decisions below, and a newer Rust toolchain.
+Status: built for macOS as unsigned local builds (`make desktop`).
 
 ## What
 
-A macOS app around Agent Desk: its own window and dock icon, notifications without a browser tab, a dock badge with the number of sessions that need you, a menu-bar count, and a global hotkey to bring it forward.
+A macOS app around Agent Desk: its own window and dock icon, native notifications, the number of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward from anywhere.
 
 ## Shape
 
-- Tauri 2 shell in `desktop/`. The Go binary stays the whole app; the shell runs it as a sidecar (`agent-desk --no-open --port 0`), reads the URL with its token from stdout, and loads it in the webview. Quitting the app stops the sidecar and leaves every agent running.
-- The web app detects the shell (`window.__TAURI__`) and, there only, sends notifications and the attention count through Tauri's notification and badge APIs instead of the browser's. In a browser nothing changes.
-- The server's checks stay as they are: the webview loads `http://127.0.0.1:<port>`, so Host and Origin checks pass unchanged, and the token travels in the fragment as today.
-- The global hotkey and menu-bar item come from Tauri's global-shortcut and tray APIs.
+- Tauri 2 shell in `desktop/`. The Go binary stays the whole app. The shell bundles it as a sidecar, runs it through the user's login shell (`$SHELL -lc`) so it finds `agent-manager`, `tmux` and `code` on the same PATH as a terminal, reads the `Open:` line with the token from stdout, and loads that address in its window. Closing the window hides it, so notifications and counts keep coming; the dock icon, the menu-bar item and the shortcut bring it back. Quitting (menu bar or ⌘Q) stops the server and leaves every agent running.
+- The shell accepts only a `127.0.0.1` address from the server. The server's checks stay as they are: Host and Origin checks pass unchanged and the token travels in the fragment.
+- The page gets two commands and nothing else (`desktop/capabilities/page.json`, remote URL `http://127.0.0.1:*`): `notify` (title and body, truncated) and `set_badge` (a count, shown on the dock icon and in the menu bar). The web app detects the shell (`window.__TAURI__`) and uses them in place of the browser's Notification API; in a browser nothing changes.
+- The app runs its own server on a free port, next to any `agent-desk` started from a terminal. Remote access is served by whichever started first; the other reports the socket as in use.
 
-## Finding from a spike
+## Limits
 
-Tauri 2's current dependencies do not build with the installed Rust 1.82: cargo fails to parse a dependency manifest (`cssparser-macros`), which needs edition 2024 support (Rust 1.85 or later). Building the shell needs `rustup update`. The spike lives outside the repository, in `/tmp/agentdesk-research/tauri-spike`.
+- Clicking a notification brings the app forward but does not open the session.
+- The shortcut is fixed. If another app holds it, the app starts without it.
+- Unsigned: macOS Gatekeeper blocks a copy downloaded from elsewhere. Builds are for the machine that made them.
 
-## Decisions needed
+## Next
 
-1. Update Rust (`rustup update stable`) on this machine.
-2. Signing and distribution: unsigned local builds only, or a Developer ID certificate and notarization for others to install.
-3. Whether a Rust project belongs in this repository (`desktop/`) or in a separate one, since the rest of the build is Go and Node only.
+- Signing and notarization, if the app is to be shared.

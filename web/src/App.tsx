@@ -27,6 +27,7 @@ import { SnippetsContext } from './snippets-context'
 import { RemoteContext, localInfo, type RemoteInfo, type RemoteLevel } from './remote-context'
 import type { RemoteSettings } from './components/RemoteAccess'
 import { ViewPrefsContext } from './viewprefs-context'
+import { setBadge } from './notify'
 
 const token = takeToken()
 
@@ -200,6 +201,7 @@ function Desk({ token }: { token: string }) {
 
   useEffect(() => {
     document.title = attention > 0 ? `(${String(attention)}) Agent Desk` : 'Agent Desk'
+    setBadge(attention)
   }, [attention])
 
   useEffect(() => {
