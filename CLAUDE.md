@@ -7,13 +7,14 @@ Background: [docs/integration-notes.md](docs/integration-notes.md) (how agent-ma
 ## Hard rules
 
 - **Never write to `~/.claude`.** Transcripts are read-only input.
-- **Never call the Anthropic API or any model API, and never ask for or read an API key.** Users run Claude Code on their own provider setup (Anthropic, Vertex AI, Bedrock), which the local CLIs already carry. Agent Desk only reads local files and runs local CLIs (`agent-manager`, `tmux`, `code`).
+- **Never call the Anthropic API or any model API, and never ask for or read an API key.** Users run Claude Code on their own provider setup (Anthropic, Vertex AI, Bedrock), which the local CLIs already carry. Agent Desk only reads local files and runs local CLIs (`agent-manager`, `tmux`, `code`), apart from the one network call below.
+- **The one network call is Cloudflare Access signing keys** (`internal/remote/access.go`): fetched from `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` only while remote access through Cloudflare is on, only when a token names a key not yet held, at most once a minute, no redirects. Agent Desk itself makes no other network call.
 - **The one model call is catch-up summaries** (`internal/summary`): the user's own `claude -p`, only after the user turns summaries on in Settings and presses Catch me up, with no tools, no MCP servers, no session persistence and a one-line system prompt. Off by default, labelled as costing tokens. Never from a timer, a rule or a test (fixture mode answers with a canned result).
 - **Do not fork or vendor agent-manager.** Integrate through its CLI. Gaps that need upstream changes go in `docs/upstream/` as PR proposals.
 - **Every tmux call names the socket**: `tmux -L agentmgr`. A bare `tmux` hits the user's own server.
 - **The JSONL parser is tolerant.** Unknown or malformed records become raw items. Never crash on input, never silently drop a record. New record shapes get an anonymized sample in `testdata/` with the Claude Code version it came from.
 - **Send through `agent-manager type`**, gated on status and on a dialog check of the pane. Never `send`, which labels text as coming from another agent. A typed answer to a dialog's text option goes through `agent-manager type` too, only after a fresh read of the pane confirms that option is selected.
-- Keep the server's checks: loopback bind, token on every API request and WebSocket, Host check on every request, Origin check on state-changing requests and upgrades. The remote listener (off by default, an owner-only Unix socket; TCP only in fixture mode) keeps Host and HTTPS Origin checks, takes identity from the proxy instead of the token, and gates every route on its declared level; remote settings change only from the local listener.
+- Keep the server's checks: loopback bind, token on every API request and WebSocket, Host check on every request, Origin check on state-changing requests and upgrades. The remote listener (off by default, an owner-only Unix socket; TCP only in fixture mode) keeps Host and HTTPS Origin checks, takes identity from the configured proxy only (Tailscale's login header, or a Cloudflare Access token verified in Agent Desk) instead of the token, and gates every route on its declared level; remote settings change only from the local listener.
 
 ## Commands
 
@@ -51,7 +52,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/export`: transcript to Markdown
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
 - `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
-- `internal/remote`: remote access levels, settings (owner-only file) and the Tailscale identity check
+- `internal/remote`: remote access levels, settings (owner-only file), the Tailscale identity check and Cloudflare Access token verification
 - `internal/commands`: slash commands for autocomplete: built-ins generated from the Claude Code binary, custom commands, skills and enabled plugins (read-only)
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only

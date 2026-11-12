@@ -3029,6 +3029,14 @@ mark {
   margin: 0.3rem 0;
 }
 
+.remote-config {
+  overflow-x: auto;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+}
+
 /* Phones: the session list and a view take turns, full screen. */
 
 .main-col {
