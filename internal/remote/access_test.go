@@ -262,17 +262,86 @@ func TestIdentifyCloudflare(t *testing.T) {
 			}
 		})
 	}
-	// Under Tailscale, an Access token counts for nothing.
+	// Under Tailscale, a request that came through Cloudflare counts for
+	// nothing, even with a login header.
 	ts := s
 	ts.Via = ViaTailscale
-	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set(AccessHeader, "good")
-	if _, ok := Identify(r, ts, fakeVerifier{"dev@example.com"}); ok {
-		t.Fatal("access token accepted under tailscale")
+	for _, h := range []string{AccessHeader, "Cf-Ray", "Cf-Connecting-Ip"} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set(TailscaleHeader, "dev@example.com")
+		r.Header.Set(h, "good")
+		if _, ok := Identify(r, ts, fakeVerifier{"dev@example.com"}); ok {
+			t.Fatalf("%s accepted under tailscale", h)
+		}
 	}
 }
 
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+func TestAccessKeysSkipsTinyExponent(t *testing.T) {
+	ks := newKeyServer(t)
+	k, _ := rsa.GenerateKey(rand.Reader, 2048)
+	ks.extra = []map[string]string{{"kid": "e1", "kty": "RSA", "n": b64(k.N.Bytes()), "e": b64([]byte{1})}}
+	tok := sign(t, k, map[string]any{"alg": "RS256", "kid": "e1"}, goodClaims())
+	if _, err := ks.verifier().Verify(tok, "team", testAUD); err == nil {
+		t.Fatal("exponent 1 accepted")
+	}
+}
+
+func TestAccessKeysAge(t *testing.T) {
+	ks := newKeyServer(t, "k1")
+	v := ks.verifier()
+	now := testNow
+	v.Now = func() time.Time { return now }
+	at := func(when time.Time) string {
+		c := goodClaims()
+		c["exp"] = when.Add(time.Hour).Unix()
+		return sign(t, ks.keys["k1"], map[string]any{"alg": "RS256", "kid": "k1"}, c)
+	}
+	if _, err := v.Verify(at(now), "team", testAUD); err != nil {
+		t.Fatal(err)
+	}
+	// A day later the set is refreshed; while Cloudflare is down the held
+	// key keeps working.
+	now = now.Add(25 * time.Hour)
+	ks.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ks.hits.Add(1)
+		http.Error(w, "down", http.StatusBadGateway)
+	})
+	if _, err := v.Verify(at(now), "team", testAUD); err != nil {
+		t.Fatalf("held key during an outage: %v", err)
+	}
+	if n := ks.hits.Load(); n != 2 {
+		t.Fatalf("%d fetches", n)
+	}
+	// Once Cloudflare answers without the key, it stops working.
+	now = now.Add(2 * time.Minute)
+	ks.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		other, _ := rsa.GenerateKey(rand.Reader, 2048)
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
+			"kid": "k2", "kty": "RSA", "n": b64(other.N.Bytes()), "e": b64(big.NewInt(int64(other.E)).Bytes()),
+		}}})
+	})
+	if _, err := v.Verify(at(now), "team", testAUD); err == nil {
+		t.Fatal("withdrawn key still accepted")
+	}
+}
+
+func TestAccessKeysTeamChange(t *testing.T) {
+	ks := newKeyServer(t, "k1")
+	v := ks.verifier()
+	tok := sign(t, ks.keys["k1"], map[string]any{"alg": "RS256", "kid": "k1"}, goodClaims())
+	if _, err := v.Verify(tok, "team", testAUD); err != nil {
+		t.Fatal(err)
+	}
+	// Another team's keys are fetched afresh, and its issuer does not match.
+	if _, err := v.Verify(tok, "other", testAUD); err == nil {
+		t.Fatal("token verified for another team")
+	}
+	if n := ks.hits.Load(); n != 2 {
+		t.Fatalf("team change did not refetch: %d fetches", n)
+	}
 }

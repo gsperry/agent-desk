@@ -235,7 +235,7 @@ export function RemoteAccess({ load, save }: Props) {
       {via === 'tailscale' ? (
         <p className="muted setting-note">
           Then, once, on this Mac: <code>tailscale serve --bg --https=443 {target}</code>. Open{' '}
-          <code>https://{form.host || 'your-mac.tail1234.ts.net'}/</code> on a device signed in to your tailnet.
+          <code>https://{form.host || 'your-mac.tail1234.ts.net'}/</code> on a device signed in to your tailnet. If you used a Cloudflare Tunnel before, stop it.
         </p>
       ) : (
         <div className="muted setting-note">
@@ -244,7 +244,7 @@ export function RemoteAccess({ load, save }: Props) {
           </p>
           <pre className="remote-config">{cloudflaredIngress(form.host, onSocket ? address : `http://${address}`, team, form.cloudflareAud ?? '')}</pre>
           <p>
-            Agent Desk checks the token Access signs for every request, using your team&apos;s public signing keys from <code>{team || 'your-team'}.cloudflareaccess.com</code>. That is the only call it makes to Cloudflare.
+            Agent Desk checks the token Access signs for every request, using your team&apos;s public signing keys from <code>{team || 'your-team'}.cloudflareaccess.com</code>. That is the only call it makes to Cloudflare. Run <code>cloudflared</code> as your own account, and stop <code>tailscale serve</code> if you used it before.
           </p>
         </div>
       )}

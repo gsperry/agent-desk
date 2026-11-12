@@ -133,7 +133,9 @@ func (s Settings) Validate() (Settings, error) {
 	if s.CloudflareEmails, err = tidyLogins(s.CloudflareEmails, "an email"); err != nil {
 		return s, err
 	}
-	s.CloudflareTeam = strings.ToLower(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s.CloudflareTeam), ".cloudflareaccess.com")))
+	team := strings.ToLower(strings.TrimSpace(s.CloudflareTeam))
+	team = strings.TrimSuffix(strings.TrimPrefix(team, "https://"), "/")
+	s.CloudflareTeam = strings.TrimSuffix(team, ".cloudflareaccess.com")
 	s.CloudflareAUD = strings.TrimSpace(s.CloudflareAUD)
 	if s.CloudflareTeam != "" && !teamName.MatchString(s.CloudflareTeam) {
 		return s, fmt.Errorf("%q is not a Cloudflare team name", s.CloudflareTeam)
@@ -285,6 +287,10 @@ type Identity struct {
 // tailnet users. Requests from tagged devices carry none.
 const TailscaleHeader = "Tailscale-User-Login"
 
+// cloudflareHeaders are set by Cloudflare's edge on every request it
+// forwards.
+var cloudflareHeaders = []string{"Cf-Ray", "Cf-Connecting-Ip", AccessHeader}
+
 // Identify returns the identity of a remote request, or false. Only the
 // configured proxy's identity counts. Tailscale sets the login header on
 // every request it proxies. Cloudflare Access signs a token for every
@@ -294,6 +300,13 @@ func Identify(r *http.Request, s Settings, v Verifier) (Identity, bool) {
 	var user string
 	switch s.Proxy() {
 	case ViaTailscale:
+		// Requests that came through Cloudflare's edge never count as
+		// Tailscale, even if a tunnel left running forwards a login header.
+		for _, h := range cloudflareHeaders {
+			if r.Header.Get(h) != "" {
+				return Identity{}, false
+			}
+		}
 		values := r.Header.Values(TailscaleHeader)
 		if len(values) != 1 {
 			return Identity{}, false

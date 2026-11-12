@@ -64,6 +64,12 @@ func TestValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, in := range []string{"team", "Team.CloudflareAccess.com", "https://team.cloudflareaccess.com/", " TEAM "} {
+		v, err := Settings{CloudflareTeam: in}.Validate()
+		if err != nil || v.CloudflareTeam != "team" {
+			t.Errorf("team %q: %q %v", in, v.CloudflareTeam, err)
+		}
+	}
 	if cf.CloudflareTeam != "team" || !cf.Allowed("dev@example.com") || cf.Allowed("eve@example.com") {
 		t.Fatalf("cloudflare settings: %+v", cf)
 	}
@@ -95,6 +101,13 @@ func TestStore(t *testing.T) {
 	}
 	if got := st.Get(); got.Level != LevelManage {
 		t.Fatalf("invalid save changed settings: %+v", got)
+	}
+	// A file saved before Cloudflare support has no via: it means Tailscale.
+	if err := os.WriteFile(p, []byte(`{"enabled":true,"level":"reply","host":"desk.ts.net","port":7327,"tailscaleLogins":["a@b.c"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := (&Store{Path: p}).Get(); !got.Enabled || got.Via != ViaTailscale || !got.Allowed("a@b.c") {
+		t.Fatalf("older file: %+v", got)
 	}
 	// A hand-edited invalid file falls back to the defaults.
 	if err := os.WriteFile(p, []byte(`{"enabled":true,"level":"root"}`), 0o600); err != nil {

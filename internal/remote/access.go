@@ -29,8 +29,8 @@ type Verifier interface {
 
 // AccessKeys verifies Access tokens against the team's public signing keys.
 // The keys are fetched from https://<team>.cloudflareaccess.com, only when
-// a token names a key not yet held, and at most once a minute. This is the
-// only network call Agent Desk makes for remote access.
+// a token names a key not yet held or the held set is a day old, and at
+// most once a minute. This is the only network call Agent Desk makes.
 type AccessKeys struct {
 	// Client fetches the keys. Nil uses a client with a 10 second timeout
 	// that does not follow redirects.
@@ -40,15 +40,21 @@ type AccessKeys struct {
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 
-	mu      sync.Mutex
-	team    string
-	keys    map[string]*rsa.PublicKey
-	lastTry time.Time
+	mu       sync.Mutex
+	team     string
+	keys     map[string]*rsa.PublicKey
+	fetched  time.Time
+	lastTry  time.Time
+	inflight bool
 }
 
 // refetchEvery bounds key fetches, so tokens naming unknown keys cannot
 // make Agent Desk call Cloudflare in a loop.
 const refetchEvery = time.Minute
+
+// maxAge is how long a fetched key set is trusted before it is refreshed,
+// so a key Cloudflare withdraws stops working within a day.
+const maxAge = 24 * time.Hour
 
 // leeway allows for clock drift between Cloudflare and the desk.
 const leeway = time.Minute
@@ -153,28 +159,48 @@ func audienceHas(raw json.RawMessage, aud string) bool {
 	return false
 }
 
-// key returns the signing key with id kid, fetching the team's keys when
-// it is not held and the last fetch was long enough ago.
+// key returns the signing key with id kid. It fetches the team's keys when
+// kid is not held or the set is older than maxAge, at most once a minute
+// and one fetch at a time; the fetch runs outside the lock, so requests
+// with held keys never wait on it. A held key stays usable while a refresh
+// is not allowed yet or fails.
 func (a *AccessKeys) key(team, kid string) (*rsa.PublicKey, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.team != team {
-		a.team, a.keys, a.lastTry = team, nil, time.Time{}
-	}
-	if k, ok := a.keys[kid]; ok {
-		return k, nil
+		a.team, a.keys, a.fetched, a.lastTry = team, nil, time.Time{}, time.Time{}
 	}
 	now := a.now()
-	if !a.lastTry.IsZero() && now.Sub(a.lastTry) < refetchEvery {
+	held, ok := a.keys[kid]
+	if ok && now.Sub(a.fetched) < maxAge {
+		a.mu.Unlock()
+		return held, nil
+	}
+	if a.inflight || (!a.lastTry.IsZero() && now.Sub(a.lastTry) < refetchEvery) {
+		a.mu.Unlock()
+		if ok {
+			return held, nil
+		}
 		return nil, errors.New("unknown signing key")
 	}
-	a.lastTry = now
+	a.lastTry, a.inflight = now, true
+	a.mu.Unlock()
+
 	keys, err := a.fetch(team)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.inflight = false
+	if a.team != team {
+		return nil, errors.New("cloudflare access settings changed")
+	}
 	if err != nil {
+		if ok {
+			return held, nil
+		}
 		return nil, fmt.Errorf("fetching cloudflare access keys: %w", err)
 	}
-	a.keys = keys
-	if k, ok := keys[kid]; ok {
+	a.keys, a.fetched = keys, now
+	if k, found := keys[kid]; found {
 		return k, nil
 	}
 	return nil, errors.New("unknown signing key")

@@ -41,7 +41,7 @@ A setting with three levels, cumulative:
 
 ## Phone push notifications (deferred)
 
-Not built for now: they need an outside service (APNs, ntfy or similar), which breaks "no network calls beyond localhost". The roadmap keeps a row to revisit, likely as a separate opt-in.
+Not built for now: they need an outside service (APNs, ntfy or similar), which the hard rules do not allow (the only network call is fetching Cloudflare Access signing keys). The roadmap keeps a row to revisit, likely as a separate opt-in.
 
 ## R2 as built
 

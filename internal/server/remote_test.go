@@ -475,3 +475,46 @@ func TestRemoteAdmissionCloudflare(t *testing.T) {
 		})
 	}
 }
+
+func TestStillAllowedCloudflare(t *testing.T) {
+	on := remote.Settings{Enabled: true, Host: "desk.example.com", Via: remote.ViaCloudflare, CloudflareTeam: "team", CloudflareAUD: testAUD, CloudflareEmails: []string{"dev@example.com"}}
+	rc := remoteConn{user: "dev@example.com", via: remote.ViaCloudflare, host: "desk.example.com", team: "team", aud: testAUD}
+	newTeam := on
+	newTeam.CloudflareTeam = "other"
+	newAUD := on
+	newAUD.CloudflareAUD = "fedcba9876543210fedcba9876543210"
+	tests := []struct {
+		name string
+		st   remote.Settings
+		want bool
+	}{
+		{"unchanged", on, true},
+		{"team changed", newTeam, false},
+		{"audience changed", newAUD, false},
+	}
+	for _, tt := range tests {
+		if got := stillAllowed(tt.st, rc); got != tt.want {
+			t.Errorf("%s: %v", tt.name, got)
+		}
+	}
+}
+
+// Under Cloudflare, X-Forwarded-Host comes from the client, so it never
+// names the host, even on the socket.
+func TestForwardedHostIgnoredUnderCloudflare(t *testing.T) {
+	rc := &fakeRemote{cur: remote.Settings{
+		Enabled: true, Level: remote.LevelAnswer, Host: "desk.example.com", Via: remote.ViaCloudflare,
+		CloudflareTeam: "team", CloudflareAUD: testAUD, CloudflareEmails: []string{"dev@example.com"},
+	}}
+	s := newTestServer(t, Config{Remote: rc, Access: tokenVerifier{}})
+	req := httptest.NewRequest("GET", "/api/whoami", nil)
+	req.Host = "localhost"
+	req.Header.Set("X-Forwarded-Host", "desk.example.com")
+	req.Header.Set(remote.AccessHeader, "good")
+	req = req.WithContext(OnSocket(req.Context()))
+	rec := httptest.NewRecorder()
+	s.RemoteHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+}
