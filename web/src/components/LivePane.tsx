@@ -126,20 +126,35 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
       {dialog && dialog.options.length > 0 && (
         <div className="live-dialog">
           {dialog.question && <p className="live-question">{dialog.question}</p>}
+          {dialog.multi && <p className="muted live-multi-hint">Tick each answer that applies, then Next.</p>}
           <div className="live-options">
             {dialog.options.map((o) => (
               <button
                 key={o.index}
                 type="button"
-                className={o.selected ? 'live-option selected' : 'live-option'}
+                className={['live-option', o.selected && 'selected', o.next && 'live-next', o.checked && 'checked'].filter(Boolean).join(' ')}
                 disabled={busy}
+                aria-pressed={o.checked}
                 title={o.free ? 'Answer in your own words' : undefined}
                 onClick={() => {
                   if (o.free) setTyping({ index: o.index, label: o.label, text: typing?.index === o.index ? typing.text : '' })
                   else send({ action: 'choose', index: o.index, label: o.label })
                 }}
               >
-                <span className="live-option-index">{o.index + 1}</span> {o.label}
+                {o.next ? (
+                  <span className="live-option-index">→</span>
+                ) : (
+                  <span className="live-option-index">{o.number ?? o.index + 1}</span>
+                )}
+                {o.checked !== undefined && (
+                  <span className="live-check" aria-hidden="true">
+                    {o.checked ? '☑' : '☐'}
+                  </span>
+                )}{' '}
+                <span className="live-option-text">
+                  {o.label}
+                  {o.description && <span className="live-option-desc">{o.description}</span>}
+                </span>
               </button>
             ))}
           </div>

@@ -15,15 +15,28 @@ type Dialog struct {
 	Question string   `json:"question,omitempty"`
 	Options  []Option `json:"options"`
 	Footer   string   `json:"footer"`
+	// Multi is a question that takes several answers: its options are
+	// checkboxes that Enter ticks, and Next moves on.
+	Multi bool `json:"multi,omitempty"`
 }
 
+// Option is one entry in the dialog's list. Index is its position in the
+// list as the arrow keys walk it, which is what answers are given in.
 type Option struct {
 	Index    int    `json:"index"`
 	Label    string `json:"label"`
 	Selected bool   `json:"selected"`
+	// Number is the number the screen shows, if any; Next has none.
+	Number int `json:"number,omitempty"`
 	// Free options are a text field in the dialog ("Type something."):
 	// they are answered with text, not a key press.
 	Free bool `json:"free,omitempty"`
+	// Checked is set on a checkbox option, true when it is ticked.
+	Checked *bool `json:"checked,omitempty"`
+	// Next moves a several-answer question on to its next step.
+	Next bool `json:"next,omitempty"`
+	// Description is the dimmer text under the label, when there is one.
+	Description string `json:"description,omitempty"`
 }
 
 var (
@@ -33,6 +46,8 @@ var (
 	// freeLabel is an option that is a text field. "Chat about this" is not
 	// one: choosing it declines the question and returns to the prompt.
 	freeLabel = regexp.MustCompile(`^Type something`)
+	checkbox  = regexp.MustCompile(`^\[(.)\]\s+(.+)$`)
+	nextLine  = regexp.MustCompile(`^\s*(❯)?\s*Next\s*$`)
 )
 
 // footerLines is how far up from the bottom the footer is looked for, the
@@ -100,6 +115,7 @@ func reviewScreen(lines []string) bool {
 func numberedOptions(lines []string, top, footer int, d *Dialog) int {
 	want := 0
 	var opts []Option
+	var lineOf []int
 	first := -1
 	for i := footer - 1; i >= top; i-- {
 		m := numbered.FindStringSubmatch(lines[i])
@@ -110,7 +126,10 @@ func numberedOptions(lines []string, top, footer int, d *Dialog) int {
 		if want != 0 && n != want-1 {
 			break
 		}
-		opts = append(opts, option(n-1, m[4], m[2] != ""))
+		o := option(n-1, m[4], m[2] != "")
+		o.Number = n
+		opts = append(opts, o)
+		lineOf = append(lineOf, i)
 		want, first = n, i
 		if n == 1 {
 			break
@@ -119,10 +138,59 @@ func numberedOptions(lines []string, top, footer int, d *Dialog) int {
 	if want != 1 {
 		return -1
 	}
+	// A several-answer question lists Next, unnumbered, among the options;
+	// it takes its place in the arrow-key order.
+	next := -1
+	for i := first + 1; i < footer; i++ {
+		if nextLine.MatchString(lines[i]) {
+			next = i
+			break
+		}
+	}
+	// The lines between an option and the next one, indented past its
+	// label, describe it.
+	for i := range opts {
+		end := footer
+		if i > 0 {
+			end = lineOf[i-1]
+		}
+		if next > lineOf[i] && next < end {
+			end = next
+		}
+		opts[i].Description = description(lines, lineOf[i], end)
+	}
 	for i := len(opts) - 1; i >= 0; i-- {
+		if next >= 0 && lineOf[i] > next {
+			d.Options = append(d.Options, Option{Label: "Next", Next: true, Selected: nextLine.FindStringSubmatch(lines[next])[1] != ""})
+			next = -1
+		}
 		d.Options = append(d.Options, opts[i])
 	}
+	if next >= 0 {
+		d.Options = append(d.Options, Option{Label: "Next", Next: true, Selected: nextLine.FindStringSubmatch(lines[next])[1] != ""})
+	}
+	for i := range d.Options {
+		d.Options[i].Index = i
+		if d.Options[i].Checked != nil || d.Options[i].Next {
+			d.Multi = true
+		}
+	}
 	return first
+}
+
+// description joins the lines after an option's line, up to end, that are
+// indented past the option's number.
+func description(lines []string, at, end int) string {
+	indent := indentOf(strings.Replace(lines[at], "❯", " ", 1))
+	var parts []string
+	for i := at + 1; i < end; i++ {
+		l := lines[i]
+		if separator.MatchString(l) || indentOf(l) <= indent+2 {
+			break
+		}
+		parts = append(parts, strings.TrimSpace(l))
+	}
+	return strings.Join(parts, " ")
 }
 
 // markedOptions reads an unnumbered list: the line holding the selection
@@ -155,7 +223,13 @@ func markedOptions(lines []string, top, footer int, d *Dialog) int {
 
 func option(index int, label string, selected bool) Option {
 	label = strings.TrimSpace(label)
-	return Option{Index: index, Label: label, Selected: selected, Free: freeLabel.MatchString(label)}
+	o := Option{Index: index, Label: label, Selected: selected}
+	if m := checkbox.FindStringSubmatch(label); m != nil {
+		ticked := m[1] != " "
+		o.Label, o.Checked = m[2], &ticked
+	}
+	o.Free = freeLabel.MatchString(o.Label)
+	return o
 }
 
 // textColumn is where the label starts on a line with the marker.
@@ -207,17 +281,18 @@ func question(lines []string, gaps []bool, top, first, width int) string {
 	if last < 0 {
 		return ""
 	}
-	indent := indentOf(lines[last])
+	indent := indentOf(unbar(lines[last]))
 	start := last
 	for i := last - 1; i >= top && last-i < maxQuestionLines; i-- {
-		if indentOf(lines[i]) != indent || !questionLine(lines[i]) {
+		l := unbar(lines[i])
+		if indentOf(l) != indent || !questionLine(l) {
 			break
 		}
 		start = i
 	}
 	var b strings.Builder
 	for i := start; i <= last; i++ {
-		text := strings.TrimSpace(lines[i])
+		text := strings.TrimSpace(unbar(lines[i]))
 		if i > start {
 			prev := []rune(strings.TrimRight(lines[i-1], " "))
 			word, _, _ := strings.Cut(text, " ")
@@ -233,6 +308,18 @@ func question(lines []string, gaps []bool, top, first, width int) string {
 		b.WriteString(text)
 	}
 	return b.String()
+}
+
+// unbar replaces the bar Claude Code draws down the left of a question
+// (│ or ▎) with a space, keeping the text where it was.
+func unbar(l string) string {
+	t := strings.TrimLeft(l, " ")
+	for _, bar := range []string{"│", "▎", "┃"} {
+		if rest, ok := strings.CutPrefix(t, bar); ok && !strings.Contains(rest, bar) {
+			return l[:len(l)-len(t)] + " " + rest
+		}
+	}
+	return l
 }
 
 // questionLine reports whether a line can be part of a question: not a

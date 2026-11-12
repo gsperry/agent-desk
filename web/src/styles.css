@@ -1168,6 +1168,35 @@ pre.code-body,
   border-top: 1px solid var(--border);
 }
 
+.live-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.live-option-desc {
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.live-multi-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+}
+
+.live-option.live-next {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.live-check {
+  color: var(--dim);
+}
+
+.live-option.checked .live-check {
+  color: var(--accent);
+}
+
 .live-hidden {
   margin: 0.2rem 0;
   font-size: 0.85rem;

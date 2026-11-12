@@ -43,7 +43,7 @@ test('drafts are kept per session', async ({ page }) => {
 
 test('a waiting session explains why it cannot take a reply', async ({ page }) => {
   await open(page, 'a0000002')
-  await expect(page.getByText('waiting on a question or permission prompt')).toBeVisible()
+  await expect(page.getByText('The agent is waiting on a question. Choose an answer above.')).toBeVisible()
   await composer(page).fill('anything')
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
 })

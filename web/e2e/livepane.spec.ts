@@ -167,3 +167,26 @@ test('a question wrapped over several terminal lines is shown whole', async ({ p
     writeFileSync(panePath, original)
   }
 })
+
+test('a several-answer question shows checkboxes and Next, and keys land on the right row', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-multi.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await expect(pane.locator('.live-question')).toHaveText(
+      'Release window for the docs site: which checks do you want before it ships? Everything runs again after the deploy.',
+    )
+    await expect(pane.getByText('Tick each answer that applies, then Next.')).toBeVisible()
+    await expect(pane.locator('.live-option')).toHaveCount(7)
+    await expect(pane.locator('.live-next')).toHaveText(/Next/)
+    await expect(pane.getByRole('button', { name: /^6\s+Chat about this/ })).toBeVisible()
+    await expect(pane.locator('.live-option-desc').first()).toHaveText('Follow every link in the built site and report the broken ones.')
+    // Chat about this sits past Next: six presses down.
+    await pane.getByRole('button', { name: /Chat about this/ }).click()
+    await expect.poll(keys).toBe('a0000002 Down Down Down Down Down Down Enter\n')
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})

@@ -181,3 +181,82 @@ func TestLongQuestion(t *testing.T) {
 		t.Fatalf("question = %q\nwant      %q", d.Question, want)
 	}
 }
+
+// A several-answer question: checkbox options, an unnumbered Next between
+// the last option and "Chat about this", and a question behind a bar that
+// wraps. Constructed in the layout of a Claude Code 2.1.322 screen, with
+// neutral text.
+func TestMultiSelect(t *testing.T) {
+	d := Parse(read(t, "askq-multi.txt"))
+	if d == nil || !d.Multi {
+		t.Fatalf("not a several-answer dialog: %+v", d)
+	}
+	wantQ := "Release window for the docs site: which checks do you want before it ships? Everything runs again after the deploy."
+	if d.Question != wantQ {
+		t.Fatalf("question = %q", d.Question)
+	}
+	type row struct {
+		label      string
+		number     int
+		free, next bool
+		checkbox   bool
+	}
+	want := []row{
+		{"Link check", 1, false, false, true},
+		{"Spelling", 2, false, false, true},
+		{"Screenshots", 3, false, false, true},
+		{"Load test", 4, false, false, true},
+		{"Type something", 5, true, false, true},
+		{"Next", 0, false, true, false},
+		{"Chat about this", 6, false, false, false},
+	}
+	if len(d.Options) != len(want) {
+		t.Fatalf("options = %+v", d.Options)
+	}
+	for i, w := range want {
+		o := d.Options[i]
+		if o.Index != i || o.Label != w.label || o.Number != w.number || o.Free != w.free || o.Next != w.next || (o.Checked != nil) != w.checkbox {
+			t.Errorf("option %d = %+v, want %+v", i, o, w)
+		}
+		if o.Checked != nil && *o.Checked {
+			t.Errorf("option %d ticked", i)
+		}
+	}
+	if d.Options[0].Description != "Follow every link in the built site and report the broken ones." || d.Options[4].Description != "" || d.Options[6].Description != "" {
+		t.Fatalf("descriptions: %q / %q / %q", d.Options[0].Description, d.Options[4].Description, d.Options[6].Description)
+	}
+	// "Chat about this" is past Next: six presses down, not five.
+	if got := strings.Join(d.Moves(6), " "); got != "Down Down Down Down Down Down Enter" {
+		t.Fatalf("moves to Chat about this = %s", got)
+	}
+	if got := strings.Join(d.Moves(5), " "); got != "Down Down Down Down Down Enter" {
+		t.Fatalf("moves to Next = %s", got)
+	}
+}
+
+func TestMultiSelectTickedAndOnNext(t *testing.T) {
+	screen := strings.NewReplacer(
+		"❯ 1. [ ] Link check", "  1. [✔] Link check",
+		"  3. [ ] Screenshots", "  3. [✔] Screenshots",
+		"     Next", "   ❯ Next",
+	).Replace(read(t, "askq-multi.txt"))
+	d := Parse(screen)
+	if d == nil {
+		t.Fatal("no dialog")
+	}
+	ticked := []bool{}
+	for _, o := range d.Options {
+		if o.Checked != nil {
+			ticked = append(ticked, *o.Checked)
+		}
+	}
+	if !reflect.DeepEqual(ticked, []bool{true, false, true, false, false}) {
+		t.Fatalf("ticked = %v", ticked)
+	}
+	if !d.Options[5].Next || !d.Options[5].Selected {
+		t.Fatalf("Next not selected: %+v", d.Options[5])
+	}
+	if got := strings.Join(d.Moves(0), " "); got != "Up Up Up Up Up Enter" {
+		t.Fatalf("moves back to the first option = %s", got)
+	}
+}

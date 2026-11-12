@@ -165,7 +165,7 @@ export function Composer({ session, connected, insideSession, onSend, pasteImage
           ref={area}
           value={text}
           rows={1}
-          placeholder={`Reply to ${session.name}`}
+          placeholder={session.status === 'waiting' ? 'Answer the question above first' : `Reply to ${session.name}`}
           aria-label={`Reply to ${session.name}`}
           aria-controls={suggestions.length > 0 ? 'slash-menu' : undefined}
           aria-autocomplete="list"
