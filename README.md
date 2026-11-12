@@ -76,7 +76,7 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 
 ## Replying
 
-Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.
+Each session has a composer under its transcript. Enter sends through `agent-manager type`, as in Claude Code; Cmd+Enter, Ctrl+Enter or Shift+Enter adds a line. On a phone, Return adds a line and the Send button sends. Drafts are kept per session.
 
 Type `/` to autocomplete: Claude Code's built-in commands, your and the project's custom commands and skills, enabled plugins' commands and skills, and your snippets. Arrow keys move, Tab or Enter picks, Esc closes. A slash command is sent as typed and runs as it would in the terminal.
 
@@ -92,7 +92,7 @@ Rename, delete, restart with a fresh context, and fork have no agent-manager com
 
 ## Answering prompts
 
-When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered. ⌘Enter (Ctrl+Enter elsewhere) sends from the reply box, a typed answer and a new session's first prompt.
+When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered.
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 

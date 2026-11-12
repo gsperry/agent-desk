@@ -116,7 +116,7 @@ test('a waiting session can hide the screen and keep the question', async ({ pag
   await expect(pane.locator('.live-screen')).toBeVisible()
 })
 
-test('the send key submits a typed answer', async ({ page }) => {
+test('Enter or Cmd+Enter submits a typed answer', async ({ page }) => {
   const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
   const original = readFileSync(panePath, 'utf8')
   writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-free-initial.txt'), 'utf8'))

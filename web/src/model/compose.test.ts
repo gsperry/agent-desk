@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView } from '../types'
-import { blockedReason, isSendKey } from './compose'
+import { blockedReason, enterAction, nativeNewline, type EnterKey } from './compose'
 
 const session = (status: string, running = true): SessionView => ({
   id: 's',
@@ -34,15 +34,25 @@ describe('blockedReason', () => {
   })
 })
 
-describe('isSendKey', () => {
-  const k = (key: string, metaKey = false, ctrlKey = false, isComposing = false) => ({ key, metaKey, ctrlKey, isComposing })
+describe('enterAction', () => {
+  const k = (mods: Partial<EnterKey> = {}, key = 'Enter'): EnterKey => ({ key, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mods })
   it.each([
-    ['Cmd+Enter', k('Enter', true), true],
-    ['Ctrl+Enter', k('Enter', false, true), true],
-    ['plain Enter', k('Enter'), false],
-    ['Cmd+Enter while composing', k('Enter', true, false, true), false],
-    ['Cmd+K', k('k', true), false],
-  ])('%s', (_name, e, want) => {
-    expect(isSendKey(e)).toBe(want)
+    ['Enter sends', k(), false, 'send'],
+    ['Shift+Enter adds a line', k({ shiftKey: true }), false, 'newline'],
+    ['Cmd+Enter adds a line', k({ metaKey: true }), false, 'newline'],
+    ['Ctrl+Enter adds a line', k({ ctrlKey: true }), false, 'newline'],
+    ['Option+Enter adds a line', k({ altKey: true }), false, 'newline'],
+    ['Enter on a touch screen adds a line', k(), true, 'newline'],
+    ['Enter while composing is left alone', k({ isComposing: true }), false, null],
+    ['other keys are left alone', k({ metaKey: true }, 'k'), false, null],
+  ] as const)('%s', (_name, e, touch, want) => {
+    expect(enterAction(e, touch)).toBe(want)
+  })
+
+  it('lets the browser insert Shift+Enter and touch Enter', () => {
+    expect(nativeNewline(k({ shiftKey: true }))).toBe(true)
+    expect(nativeNewline(k(), true)).toBe(true)
+    expect(nativeNewline(k({ metaKey: true }))).toBe(false)
+    expect(nativeNewline(k({ metaKey: true }), true)).toBe(false)
   })
 })

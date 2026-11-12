@@ -36,3 +36,17 @@ test('on a phone a waiting session can be answered without scrolling sideways', 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(1)
 })
+
+test.describe('with a touch screen', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test('Return adds a line and the Send button sends', async ({ page }) => {
+    await page.goto(`${base}/s/a0000011#t=${token}`)
+    const box = page.getByRole('textbox', { name: 'Reply to reviewer' })
+    await box.fill('first')
+    await box.press('Enter')
+    await box.pressSequentially('second')
+    await expect(box).toHaveValue('first\nsecond')
+    await expect(page.locator('.composer-hint')).toHaveCount(0)
+  })
+})

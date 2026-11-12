@@ -3,7 +3,7 @@ import { formProblem } from '../model/spawn'
 import { applyTemplate, templateFrom, type Template } from '../model/templates'
 import type { SessionView, SpawnOptions, SpawnRequest } from '../types'
 import { Dialog } from './Dialog'
-import { isSendKey } from '../model/compose'
+import { enterAction, insertNewline, isTouch, nativeNewline } from '../model/compose'
 
 interface Props {
   initial: SpawnRequest
@@ -238,9 +238,14 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
               set({ prompt: e.target.value })
             }}
             onKeyDown={(e) => {
-              if (isSendKey(e.nativeEvent)) {
+              const touch = isTouch()
+              const enter = enterAction(e.nativeEvent, touch)
+              if (enter === 'send') {
                 e.preventDefault()
                 submit()
+              } else if (enter === 'newline' && !nativeNewline(e.nativeEvent, touch)) {
+                e.preventDefault()
+                insertNewline(e.currentTarget)
               }
             }}
           />
