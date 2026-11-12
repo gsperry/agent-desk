@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Answer, Screen } from '../types'
 import { StyledTerminal } from './StyledTerminal'
-import { isSendKey } from '../model/compose'
 
 interface Props {
   sessionId: string
@@ -33,6 +32,7 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
   const [typing, setTyping] = useState<{ index: number; label: string; text: string } | null>(null)
   const [tick, setTick] = useState(0)
   const pre = useRef<HTMLPreElement>(null)
+  const answerBox = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     let live = true
@@ -53,6 +53,15 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
   useLayoutEffect(() => {
     if (pre.current) pre.current.scrollTop = pre.current.scrollHeight
   }, [screen?.text])
+
+  // The answer box grows with its text.
+  const answerText = typing?.text
+  useLayoutEffect(() => {
+    const box = answerBox.current
+    if (!box) return
+    box.style.height = 'auto'
+    box.style.height = `${String(box.scrollHeight)}px`
+  }, [answerText])
 
   const send = (a: Answer) => {
     setBusy(true)
@@ -142,9 +151,13 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
                 if (typing.text.trim()) send({ action: 'text', index: typing.index, label: typing.label, text: typing.text })
               }}
             >
-              <input
+              {/* A textarea so long answers wrap and the box grows; the
+                  answer is still one line, since Enter submits it. */}
+              <textarea
+                ref={answerBox}
+                rows={1}
                 aria-label="Your answer"
-                placeholder="Your answer, one line"
+                placeholder="Your answer, sent as one line"
                 autoFocus
                 maxLength={2000}
                 value={typing.text}
@@ -155,7 +168,7 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
                   if (e.key === 'Escape') {
                     e.stopPropagation()
                     setTyping(null)
-                  } else if (isSendKey(e.nativeEvent)) {
+                  } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                     e.preventDefault()
                     e.currentTarget.form?.requestSubmit()
                   }

@@ -125,6 +125,10 @@ test('the send key submits a typed answer', async ({ page }) => {
     const pane = page.getByRole('region', { name: 'Terminal' })
     await pane.getByRole('button', { name: /^3 Type something/ }).click()
     const box = pane.getByRole('textbox', { name: 'Your answer' })
+    const oneRow = (await box.boundingBox())?.height ?? 0
+    // A long answer wraps and the box grows to show all of it.
+    await box.fill('Blue, '.repeat(60))
+    await expect.poll(async () => (await box.boundingBox())?.height ?? 0).toBeGreaterThan(oneRow * 2)
     await box.fill('Blue')
     await box.press('ControlOrMeta+Enter')
     await expect(box).toHaveCount(0)
