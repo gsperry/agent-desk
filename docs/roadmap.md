@@ -1,5 +1,7 @@
 # Roadmap after v1
 
+Status 2026-11-11: every buildable row is done. Rows marked deferred wait on a decision from the owner.
+
 Milestones M7 to M10. Each lands on a local feature branch with step commits and is squash-merged into `main`. Nothing is pushed until reviewed.
 
 Constraints that apply to every milestone: the hard rules in [CLAUDE.md](../CLAUDE.md), anonymized fixtures only in `testdata/`, no sends or spawns against real sessions in tests, and screenshots from fixtures only.
@@ -48,12 +50,12 @@ Goal: supervise and correct work, not only chat.
 
 | Step | Feature | Approach | Needs a decision |
 | --- | --- | --- | --- |
-| 10.1 | Live terminal (read-only, done) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Whether to allow typing later |
-| 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Which rules may send without confirmation |
+| 10.1 | Live terminal (read-only, done) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Deferred (2026-11-11): typing |
+| 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Deferred (2026-11-11): rules that send without a click |
 | 10.3 | Catch-up summaries (done, off by default) | [design/catch-up-summaries.md](design/catch-up-summaries.md) | Decided: opt-in, labelled as costing tokens |
-| 10.4 | Desktop app (built, see A2) | [design/desktop-app.md](design/desktop-app.md) | Signing and distribution |
-| 10.5 | Away from the desk (Tailscale and Cloudflare built) | R0 groundwork, R1 Tailscale, R2 Cloudflare Tunnel and Access. A hosted relay (R3) is its own decision. [design/away-from-desk.md](design/away-from-desk.md) | R3 |
-| 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Revisit after remote access |
+| 10.4 | Desktop app (built, see A2) | [design/desktop-app.md](design/desktop-app.md) | Deferred (2026-11-11): signing and notarization |
+| 10.5 | Away from the desk (Tailscale and Cloudflare built) | R0 groundwork, R1 Tailscale, R2 Cloudflare Tunnel and Access. A hosted relay (R3) is its own decision. [design/away-from-desk.md](design/away-from-desk.md) | Deferred (2026-11-11): R3 hosted relay, its own project |
+| 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Deferred (2026-11-11): needs an outside service such as ntfy, and a rule amendment |
 
 ## After M10
 
