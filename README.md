@@ -80,7 +80,7 @@ Each session has a composer under its transcript. Enter sends through `agent-man
 
 Type `/` to autocomplete: Claude Code's built-in commands, your and the project's custom commands and skills, enabled plugins' commands and skills, and your snippets. Arrow keys move, Tab or Enter picks, Esc closes. A slash command is sent as typed and runs as it would in the terminal.
 
-A reply is refused, with the reason, when it would land somewhere other than the agent's prompt: the session is waiting on a question or permission prompt, a dialog is on screen, or text is already typed into the agent's own prompt in the terminal. Prompts and dialogs open the Terminal panel described below. A reply sent while the agent works is queued by Claude Code and shows as queued.
+A reply is refused, with the reason, when it would land somewhere other than the agent's prompt: a question, permission prompt or dialog is on screen, or text is already typed into the agent's own prompt in the terminal. A session agent-manager still marks as waiting after you declined its question takes replies again once its screen is back at the prompt. Prompts and dialogs open the Terminal panel described below. A reply sent while the agent works is queued by Claude Code and shows as queued.
 
 While an agent works, a row above the composer shows how long the turn has run, the tokens it has written and its current step. **Interrupt** stops the turn, as Esc does in the terminal.
 
@@ -94,7 +94,7 @@ Rename, delete, restart with a fresh context, and fork have no agent-manager com
 
 ## Answering prompts
 
-When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered.
+When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session; while a question is open it shows or hides the raw screen under it. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered.
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 

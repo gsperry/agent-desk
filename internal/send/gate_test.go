@@ -55,7 +55,7 @@ func TestCheckStatus(t *testing.T) {
 		{"working queues in Claude", running("working"), false, ""},
 		{"finished", running("finished"), false, ""},
 		{"errored", running("errored"), false, ""},
-		{"waiting", running("waiting"), false, ReasonWaiting},
+		{"waiting is decided from the screen", running("waiting"), false, ""},
 		{"starting", running("starting"), false, ReasonStarting},
 		{"dead", &hub.SessionView{Status: "dead"}, false, ReasonNotRunning},
 		{"not running", &hub.SessionView{Status: "idle", Running: false}, false, ReasonNotRunning},
@@ -130,5 +130,49 @@ func TestIsDraft(t *testing.T) {
 		if got := isDraft(tt.line); got != tt.want {
 			t.Errorf("isDraft(%q) = %v, want %v", tt.line, got, tt.want)
 		}
+	}
+}
+
+func TestAtPrompt(t *testing.T) {
+	rule := strings.Repeat("─", 40)
+	tests := []struct {
+		name   string
+		screen string
+		want   bool
+	}{
+		{"empty prompt", rule + "\n❯ \n" + rule + "\n", true},
+		{"prompt padded with a no-break space", rule + "\n❯ \n" + rule + "\n  ⏵⏵ auto mode on\n", true},
+		{"draft in the prompt", rule + "\n❯ hello\n" + rule + "\n", false},
+		{"a dialog option", rule + "\n❯ 1. Yes\n  2. No\n" + rule + "\n", false},
+		{"no rules", "❯ \n", false},
+	}
+	for _, tt := range tests {
+		if got := AtPrompt(tt.screen); got != tt.want {
+			t.Errorf("%s: %v", tt.name, got)
+		}
+	}
+	if CheckWaiting("waiting", rule+"\n❯ 1. Yes\n"+rule+"\n") == nil {
+		t.Error("waiting with a dialog was allowed")
+	}
+	if CheckWaiting("idle", "anything") != nil {
+		t.Error("an idle session was refused")
+	}
+}
+
+// The idle screen captured from Claude Code counts as at the prompt.
+func TestAtPromptRealScreen(t *testing.T) {
+	data, err := os.ReadFile("../pane/testdata/idle.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !AtPrompt(string(data)) {
+		t.Fatal("captured idle screen not seen as at the prompt")
+	}
+	perm, err := os.ReadFile("../pane/testdata/permission.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if AtPrompt(string(perm)) {
+		t.Fatal("permission dialog seen as at the prompt")
 	}
 }

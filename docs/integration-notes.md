@@ -58,6 +58,7 @@ Failure modes:
 - **Status only advances while a manager runs.** `manager_awake` is false when no TUI or `agent-manager serve` holds a fresh poller heartbeat. Agent Desk shows a banner and offers `agent-manager serve --background` (supported, headless, macOS and Linux).
 - **`finished` clears to `idle` only in the TUI** (entering the session or the `mark_idle` key). There is no CLI or MCP path. Agent Desk keeps its own per-session "seen" mark. Upstream gap, see below.
 - **Not every dialog reads as `waiting`.** The workspace trust dialog read `waiting`. Claude's "Teach auto mode about your environment?" dialog read `finished`.
+- **`waiting` outlives the dialog.** The hooks write `waiting` on `Notification` (`permission_prompt`, `elicitation_dialog`) and nothing writes over it when the user declines: Esc, "No, and tell Claude what to do differently" and "Chat about this" end the turn without `Stop`. The agent is back at its prompt, waiting for text, while the status still reads `waiting` until the next prompt or tool call. Agent Desk decides such a session from its screen.
 - **Latency.** Agent Desk polls on every `hooks/<id>.status` write and every second, but the stored status changes only on agent-manager's 2 s poll. Measured on the probe (M1): hook write to Agent Desk took 2.25 s for `working` and 2.30 s for `finished`. Upstream gap 3 removes the wait.
 
 ## 3. Sending text
@@ -85,7 +86,7 @@ Rules Agent Desk follows (`internal/send`):
 
 - Pass text as one argv element after a `--` separator: `type --json -- <id> <text>`. agent-manager reads flags anywhere before `--`, so a message starting with `--help` would otherwise be a flag.
 - Normalize line endings and strip control characters other than newline and tab. ESC matters: text holding `ESC[201~` would end the bracketed paste early and arrive as keystrokes.
-- Refuse to send when status is `waiting`, `starting` or `dead`.
+- Refuse to send when status is `starting` or `dead`. When it is `waiting`, send only if the screen shows the empty prompt box (a line holding only `❯` between the last two rules), since `waiting` can outlive a declined dialog.
 - Read the screen (`agent-manager read`) before every send. Refuse when one of the last 8 non-blank lines shows a dialog footer (`Enter to confirm`, `Enter to select`, `Esc to cancel`), which covers dialogs that read `finished`. Refuse when the composer between the last two horizontal rules holds text, since the paste would append to it. Claude pads the empty prompt with a no-break space, so the check trims Unicode whitespace.
 - Treat exit 3 as "maybe sent" and let the transcript reconcile it.
 - A dialog can appear in the ~200 ms between the screen check and the paste. Upstream gap 1 closes that window.

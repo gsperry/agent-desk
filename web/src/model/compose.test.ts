@@ -29,6 +29,12 @@ describe('blockedReason', () => {
     else expect(got).toContain(want)
   })
 
+  it('lets a waiting session take a reply once its screen shows no question', () => {
+    expect(blockedReason(session('waiting'), true, false, true)).toContain('waiting on a question')
+    expect(blockedReason(session('waiting'), true, false, undefined)).toContain('waiting on a question')
+    expect(blockedReason(session('waiting'), true, false, false)).toBeNull()
+  })
+
   it('blocks a session that is not running', () => {
     expect(blockedReason(session('idle', false), true, false)).toContain('Revive')
   })

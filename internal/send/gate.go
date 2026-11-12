@@ -65,7 +65,11 @@ func Clean(text string) (string, *Refused) {
 }
 
 // CheckStatus refuses statuses where typed text would not reach the
-// agent's prompt.
+// agent's prompt. "waiting" is not refused here: agent-manager sets it when
+// a question or permission prompt opens, and nothing resets it when the
+// user declines one (Esc, "No, and tell Claude what to do differently",
+// "Chat about this"), so the agent can be back at its prompt while the
+// status still reads waiting. CheckWaiting decides from the screen.
 func CheckStatus(s *hub.SessionView, insideSession bool) *Refused {
 	switch {
 	case s == nil:
@@ -76,10 +80,44 @@ func CheckStatus(s *hub.SessionView, insideSession bool) *Refused {
 		return &Refused{ReasonNotRunning, "This session is not running. Revive it in agent-manager first."}
 	case s.Status == "starting":
 		return &Refused{ReasonStarting, "The agent is still starting. Try again in a moment."}
-	case s.Status == "waiting":
-		return &Refused{ReasonWaiting, "The agent is waiting on a question or permission prompt in its terminal. Text sent now would answer it. Answer it in agent-manager."}
 	}
 	return nil
+}
+
+// CheckWaiting lets a session whose status reads waiting take text only
+// when its screen shows the empty prompt box: positive evidence the
+// question is gone, beyond the absence of a dialog footer.
+func CheckWaiting(status, screen string) *Refused {
+	if status != "waiting" || AtPrompt(screen) {
+		return nil
+	}
+	return &Refused{ReasonWaiting, "The agent is waiting on a question or permission prompt. Choose an answer instead; text sent now would answer it."}
+}
+
+// AtPrompt reports whether the screen shows the agent's empty prompt box:
+// a line holding only the prompt marker between the last two rules.
+func AtPrompt(screen string) bool {
+	var lines []string
+	for _, l := range strings.Split(screen, "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+	var rules []int
+	for i, l := range lines {
+		if ruleLine.MatchString(l) {
+			rules = append(rules, i)
+		}
+	}
+	if len(rules) < 2 {
+		return false
+	}
+	for _, l := range lines[rules[len(rules)-2]+1 : rules[len(rules)-1]] {
+		if strings.TrimFunc(l, func(r rune) bool { return unicode.IsSpace(r) || r == '❯' }) == "" && strings.Contains(l, "❯") {
+			return true
+		}
+	}
+	return false
 }
 
 var (
