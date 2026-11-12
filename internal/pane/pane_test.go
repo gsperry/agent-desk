@@ -284,3 +284,20 @@ func TestSingleQuestionHasNoSteps(t *testing.T) {
 		t.Fatalf("review steps: %+v", d)
 	}
 }
+
+// Claude Code draws the session's title into a rule, and on the review step
+// such a rule can close the screen below the options.
+func TestReviewWithTitledRule(t *testing.T) {
+	rule := strings.Repeat("─", 80) + " Docs Release ─"
+	screen := strings.TrimRight(read(t, "askq-review.txt"), "\n") + "\n" + rule + "\n"
+	d := Parse(screen)
+	if d == nil || len(d.Options) != 2 || d.Options[0].Label != "Submit answers" || d.Question != "Ready to submit your answers?" {
+		t.Fatalf("review: %+v", d)
+	}
+	if len(d.Steps) != 3 {
+		t.Fatalf("steps: %+v", d.Steps)
+	}
+	if !isRule(rule) || isRule("──── just a short line of text that is not a rule") {
+		t.Fatal("titled rule detection")
+	}
+}
