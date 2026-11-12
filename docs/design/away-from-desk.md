@@ -1,6 +1,6 @@
 # Away from the desk
 
-Status: R0 (groundwork) and R1 (Tailscale) built. Decided: three remote permission levels, changeable only locally; phone push deferred; reach in order Tailscale, then Cloudflare Tunnel and Access, then a hosted relay as its own decision.
+Status: R0 (groundwork), R1 (Tailscale) and R2 (Cloudflare Tunnel and Access) built. Decided: three remote permission levels, changeable only locally; phone push deferred; reach in order Tailscale, then Cloudflare Tunnel and Access, then a hosted relay as its own decision.
 
 ## Goal
 
@@ -41,9 +41,14 @@ A setting with three levels, cumulative:
 
 ## Phone push notifications (deferred)
 
-Not built for now: they need an outside service (APNs, ntfy or similar), which breaks "no network calls beyond localhost". The roadmap keeps a row to revisit, likely as a separate opt-in.
+Not built for now: they need an outside service (APNs, ntfy or similar), which the hard rules do not allow (the only network call is fetching Cloudflare Access signing keys). The roadmap keeps a row to revisit, likely as a separate opt-in.
+
+## R2 as built
+
+- One proxy at a time (`via`: tailscale or cloudflare); the other's identity counts for nothing, since Cloudflare does not strip Tailscale headers and Tailscale does not strip Cloudflare's.
+- `cloudflared` points at the same owner-only socket, with `originRequest.access.required` as a second check. Agent Desk does not rely on it: it verifies the Access token itself (decided 2026-11-11, amending the no-network rule for this one call) and ignores the plain email header.
+- Login methods are whatever the Access application allows (one-time email code needs no setup); Agent Desk only sees the verified email.
 
 ## Decisions needed
 
-1. Which reach option to build first (A, B or both).
-2. For B: which login methods Access should allow.
+1. Whether to build C, the hosted relay, as its own project.

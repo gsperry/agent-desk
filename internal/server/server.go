@@ -92,6 +92,9 @@ type Config struct {
 	Summaries SummarySource
 	// Remote holds the remote access settings. Nil turns remote access off.
 	Remote RemoteControl
+	// Access verifies Cloudflare Access tokens when remote access comes
+	// through a Cloudflare Tunnel.
+	Access remote.Verifier
 	// Commands lists the slash commands a session accepts, for autocomplete.
 	Commands CommandSource
 	// RemoteHTTPOrigin also accepts an http:// origin for the remote host.

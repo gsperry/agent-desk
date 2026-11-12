@@ -1,7 +1,8 @@
 // Package remote decides what a client away from the desk may do.
 //
 // Remote clients reach Agent Desk through a second listener, still on
-// 127.0.0.1, behind a proxy that proves who they are (Tailscale first).
+// 127.0.0.1, behind a proxy that proves who they are: Tailscale, or a
+// Cloudflare Tunnel behind Cloudflare Access.
 // They never use the local token. Every route declares the level it needs;
 // some routes are local only at any level. The settings are changed only
 // from a local client.
@@ -70,21 +71,38 @@ type Settings struct {
 	Host string `json:"host"`
 	// Port is the 127.0.0.1 port the proxy forwards to.
 	Port int `json:"port"`
+	// Via is the proxy remote clients come through: ViaTailscale or
+	// ViaCloudflare. Only that proxy's identity is accepted.
+	Via string `json:"via"`
 	// TailscaleLogins are the Tailscale logins allowed in.
 	TailscaleLogins []string `json:"tailscaleLogins"`
+	// CloudflareTeam is the Zero Trust team name (<team>.cloudflareaccess.com).
+	CloudflareTeam string `json:"cloudflareTeam"`
+	// CloudflareAUD is the Access application's audience tag.
+	CloudflareAUD string `json:"cloudflareAud"`
+	// CloudflareEmails are the Access emails allowed in.
+	CloudflareEmails []string `json:"cloudflareEmails"`
 }
+
+// The proxies remote clients can come through.
+const (
+	ViaTailscale  = "tailscale"
+	ViaCloudflare = "cloudflare"
+)
 
 // DefaultPort is where the remote listener waits unless set.
 const DefaultPort = 7327
 
 // Defaults are remote access off, at the lowest level.
 func Defaults() Settings {
-	return Settings{Level: LevelAnswer, Port: DefaultPort, TailscaleLogins: []string{}}
+	return Settings{Level: LevelAnswer, Port: DefaultPort, Via: ViaTailscale, TailscaleLogins: []string{}, CloudflareEmails: []string{}}
 }
 
 var (
 	hostName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*(:[0-9]{1,5})?$`)
 	login    = regexp.MustCompile(`^[^\s,]{1,200}$`)
+	teamName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	audTag   = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
 )
 
 // Validate checks and tidies settings before they are saved.
@@ -102,29 +120,88 @@ func (s Settings) Validate() (Settings, error) {
 	if s.Port < 1024 || s.Port > 65535 {
 		return s, errors.New("port must be 1024 to 65535")
 	}
-	logins := []string{}
-	for _, l := range s.TailscaleLogins {
+	if s.Via == "" {
+		s.Via = ViaTailscale
+	}
+	if s.Via != ViaTailscale && s.Via != ViaCloudflare {
+		return s, errors.New("via must be tailscale or cloudflare")
+	}
+	var err error
+	if s.TailscaleLogins, err = tidyLogins(s.TailscaleLogins, "a Tailscale login"); err != nil {
+		return s, err
+	}
+	if s.CloudflareEmails, err = tidyLogins(s.CloudflareEmails, "an email"); err != nil {
+		return s, err
+	}
+	team := strings.ToLower(strings.TrimSpace(s.CloudflareTeam))
+	team = strings.TrimSuffix(strings.TrimPrefix(team, "https://"), "/")
+	s.CloudflareTeam = strings.TrimSuffix(team, ".cloudflareaccess.com")
+	s.CloudflareAUD = strings.TrimSpace(s.CloudflareAUD)
+	if s.CloudflareTeam != "" && !teamName.MatchString(s.CloudflareTeam) {
+		return s, fmt.Errorf("%q is not a Cloudflare team name", s.CloudflareTeam)
+	}
+	if s.CloudflareAUD != "" && !audTag.MatchString(s.CloudflareAUD) {
+		return s, errors.New("the Access audience tag is letters and digits, from the application's overview")
+	}
+	if !s.Enabled {
+		return s, nil
+	}
+	if !hostName.MatchString(s.Host) {
+		return s, errors.New("set the host name remote clients use, such as desk.tail1234.ts.net")
+	}
+	switch s.Via {
+	case ViaTailscale:
+		if len(s.TailscaleLogins) == 0 {
+			return s, errors.New("allow at least one Tailscale login")
+		}
+	case ViaCloudflare:
+		if s.CloudflareTeam == "" || s.CloudflareAUD == "" {
+			return s, errors.New("set the Cloudflare team name and the Access audience tag")
+		}
+		if len(s.CloudflareEmails) == 0 {
+			return s, errors.New("allow at least one email")
+		}
+	}
+	return s, nil
+}
+
+// tidyLogins lowercases, trims and dedupes logins, and rejects malformed
+// ones.
+func tidyLogins(in []string, what string) ([]string, error) {
+	out := []string{}
+	for _, l := range in {
 		l = strings.ToLower(strings.TrimSpace(l))
 		if l == "" {
 			continue
 		}
 		if !login.MatchString(l) {
-			return s, fmt.Errorf("%q is not a Tailscale login", l)
+			return nil, fmt.Errorf("%q is not %s", l, what)
 		}
-		if !slices.Contains(logins, l) {
-			logins = append(logins, l)
-		}
-	}
-	s.TailscaleLogins = logins
-	if s.Enabled {
-		if !hostName.MatchString(s.Host) {
-			return s, errors.New("set the host name remote clients use, such as desk.tail1234.ts.net")
-		}
-		if len(s.TailscaleLogins) == 0 {
-			return s, errors.New("allow at least one Tailscale login")
+		if !slices.Contains(out, l) {
+			out = append(out, l)
 		}
 	}
-	return s, nil
+	return out, nil
+}
+
+// Proxy is the configured proxy; settings saved before Cloudflare support
+// have none, which means Tailscale.
+func (s Settings) Proxy() string {
+	if s.Via == "" {
+		return ViaTailscale
+	}
+	return s.Via
+}
+
+// Allowed reports whether user may come in through the configured proxy.
+func (s Settings) Allowed(user string) bool {
+	switch s.Proxy() {
+	case ViaTailscale:
+		return slices.Contains(s.TailscaleLogins, user)
+	case ViaCloudflare:
+		return slices.Contains(s.CloudflareEmails, user)
+	}
+	return false
 }
 
 // Store keeps settings in a file only the user can read.
@@ -196,6 +273,7 @@ func (st *Store) Set(s Settings) (Settings, error) {
 
 func clone(s Settings) Settings {
 	s.TailscaleLogins = append([]string{}, s.TailscaleLogins...)
+	s.CloudflareEmails = append([]string{}, s.CloudflareEmails...)
 	return s
 }
 
@@ -209,17 +287,46 @@ type Identity struct {
 // tailnet users. Requests from tagged devices carry none.
 const TailscaleHeader = "Tailscale-User-Login"
 
-// Identify returns the identity of a remote request, or false. Tailscale
-// sets the login header on every request it proxies; only logins the user
-// allowed are let in.
-func Identify(r *http.Request, s Settings) (Identity, bool) {
-	values := r.Header.Values(TailscaleHeader)
-	if len(values) != 1 {
+// cloudflareHeaders are set by Cloudflare's edge on every request it
+// forwards.
+var cloudflareHeaders = []string{"Cf-Ray", "Cf-Connecting-Ip", AccessHeader}
+
+// Identify returns the identity of a remote request, or false. Only the
+// configured proxy's identity counts. Tailscale sets the login header on
+// every request it proxies. Cloudflare Access signs a token for every
+// request it lets through, which v verifies. Either way only the logins the
+// user allowed are let in.
+func Identify(r *http.Request, s Settings, v Verifier) (Identity, bool) {
+	var user string
+	switch s.Proxy() {
+	case ViaTailscale:
+		// Requests that came through Cloudflare's edge never count as
+		// Tailscale, even if a tunnel left running forwards a login header.
+		for _, h := range cloudflareHeaders {
+			if r.Header.Get(h) != "" {
+				return Identity{}, false
+			}
+		}
+		values := r.Header.Values(TailscaleHeader)
+		if len(values) != 1 {
+			return Identity{}, false
+		}
+		user = strings.ToLower(strings.TrimSpace(values[0]))
+	case ViaCloudflare:
+		values := r.Header.Values(AccessHeader)
+		if len(values) != 1 || v == nil {
+			return Identity{}, false
+		}
+		email, err := v.Verify(values[0], s.CloudflareTeam, s.CloudflareAUD)
+		if err != nil {
+			return Identity{}, false
+		}
+		user = email
+	default:
 		return Identity{}, false
 	}
-	user := strings.ToLower(strings.TrimSpace(values[0]))
-	if user == "" || !slices.Contains(s.TailscaleLogins, user) {
+	if user == "" || !s.Allowed(user) {
 		return Identity{}, false
 	}
-	return Identity{User: user, Via: "tailscale"}, true
+	return Identity{User: user, Via: s.Proxy()}, true
 }
