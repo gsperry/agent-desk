@@ -5,6 +5,7 @@ import { bashFiles } from '../model/diff'
 import { groupSteps, groupSummary } from '../model/groups'
 import { toolCategory } from '../model/viewprefs'
 import { formatDuration, type Block, type Step } from '../model/transcript'
+import { useAgentLinks } from '../agents-context'
 import { usePins } from '../pins-context'
 import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
@@ -22,6 +23,7 @@ export const BlockView = memo(function BlockView({ block, live }: { block: Block
     case 'user':
       return <UserPrompt item={block.item} />
     case 'peer':
+      if (block.item.label === 'handback') return <SubagentReport item={block.item} />
       return (
         <section className="card peer">
           <header className="card-head">Message from another agent</header>
@@ -130,6 +132,41 @@ function Notice({ item }: { item: Item }) {
     )
   }
   return <Expandable className="notice" label={label} summary={summarize(text)} body={<pre className="notice-body">{text}</pre>} />
+}
+
+// SubagentReport is a background subagent's final report, folded to one
+// line like a finished task, with a link to the subagent's transcript.
+function SubagentReport({ item }: { item: Item }) {
+  const links = useAgentLinks()
+  const agent = typeof item.meta?.agent === 'string' ? item.meta.agent : 'subagent'
+  const taskId = typeof item.meta?.taskId === 'string' ? item.meta.taskId : undefined
+  const text = item.text ?? ''
+  const first = text.split('\n').map((l) => l.replace(/^[#>*\-\s]+|[*`_]/g, '').trim()).find(Boolean) ?? ''
+  return (
+    <div className="subagent-report">
+      <Expandable
+        className="notice"
+        label={`Report from ${agent}`}
+        summary={first.length > 140 ? first.slice(0, 140) + '…' : first}
+        body={
+          <div className="subagent-report-body">
+            <Markdown text={text} />
+          </div>
+        }
+      />
+      {taskId && links?.has(taskId) && (
+        <button
+          type="button"
+          className="link-button subagent-report-link"
+          onClick={() => {
+            links.open(taskId)
+          }}
+        >
+          View transcript
+        </button>
+      )}
+    </div>
+  )
 }
 
 // summarize pulls a readable line out of tagged notification text.

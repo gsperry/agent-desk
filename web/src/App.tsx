@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { takeToken } from './auth'
 import { SessionView } from './components/SessionView'
 import { Sidebar, type ViewOptions } from './components/Sidebar'
@@ -92,6 +92,9 @@ function Desk({ token }: { token: string }) {
   const [switcher, setSwitcher] = useState(false)
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
   const [viewPrefs, setViewPrefs] = useState<ViewPrefs>(() => loadViewPrefs(localStorage))
+  // The prefs as loaded are not saved back, so defaults keep reaching
+  // fields the reader never changed.
+  const loadedPrefs = useRef(viewPrefs)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [snippets, setSnippets] = useState<Snippet[]>(() => loadSnippets(localStorage))
   useEffect(() => {
@@ -142,7 +145,7 @@ function Desk({ token }: { token: string }) {
   }, [searchText])
 
   useEffect(() => {
-    saveViewPrefs(localStorage, viewPrefs)
+    if (viewPrefs !== loadedPrefs.current) saveViewPrefs(localStorage, viewPrefs)
     const root = document.documentElement
     if (viewPrefs.theme === 'system') delete root.dataset.theme
     else root.dataset.theme = viewPrefs.theme

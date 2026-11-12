@@ -63,3 +63,17 @@ test('new activity shows a dot and a divider', async ({ page }) => {
   await expect(page.getByRole('separator').filter({ hasText: 'New since you last looked' })).toBeVisible()
   await expect(row.locator('.unread')).toHaveCount(0)
 })
+
+test('a subagent report folds to one line, opens on click, and links to its transcript', async ({ page }) => {
+  await page.goto(`${base}/s/a0000010#t=${token}`)
+  const main = page.getByRole('main')
+  const report = main.locator('.subagent-report')
+  await expect(report).toContainText('Report from agent-orchestra:executor')
+  await expect(report).toContainText('Row 1 done: the tests pass and three files changed.')
+  await expect(main.getByText('Message from another agent')).toHaveCount(0)
+  await expect(report.getByText('Details are in the pull request.')).toHaveCount(0)
+  await report.getByRole('button', { name: /Report from/ }).click()
+  await expect(report.getByText('Details are in the pull request.')).toBeVisible()
+  await report.getByRole('button', { name: 'View transcript' }).click()
+  await expect(page.getByRole('complementary', { name: 'Subagents' })).toBeVisible()
+})

@@ -602,6 +602,45 @@ pre {
   font-style: italic;
 }
 
+.subagent-report {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.6rem;
+}
+
+.subagent-report > .notice {
+  flex: 1;
+  min-width: 0;
+}
+
+.subagent-report-body {
+  margin: 0.3rem 0 0.4rem 1.1rem;
+  padding-left: 0.8rem;
+  border-left: 3px solid var(--border);
+  color: var(--text);
+}
+
+.subagent-report-link {
+  font-size: 0.8rem;
+}
+
+.subagent-report .expand-row {
+  min-width: 0;
+}
+
+.subagent-report .notice-label {
+  flex: none;
+  white-space: nowrap;
+}
+
+.subagent-report .expand-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notice {
   margin: 0;
   font-size: 0.85rem;
@@ -1270,10 +1309,12 @@ pre.code-body,
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  box-sizing: border-box;
   width: 100%;
-  max-width: var(--reading-width);
+  /* Lines up with the composer below: its padding plus the reading width. */
+  max-width: calc(var(--reading-width) + 3rem);
   margin: 0 auto;
-  padding: 0.45rem 0.2rem;
+  padding: 0.45rem 1.5rem;
   font-size: 0.85rem;
 }
 

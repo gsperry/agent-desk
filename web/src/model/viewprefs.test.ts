@@ -8,7 +8,7 @@ describe('sanitize', () => {
   })
 
   it('keeps valid fields and clamps the font size', () => {
-    const p = sanitize({ theme: 'dark', fontSize: 99, width: 'wide', collapse: { bash: 'open', edits: 'bogus' } })
+    const p = sanitize({ v: 2, theme: 'dark', fontSize: 99, width: 'wide', collapse: { bash: 'open', edits: 'bogus' } })
     expect(p.theme).toBe('dark')
     expect(p.fontSize).toBe(20)
     expect(p.width).toBe('wide')
@@ -16,6 +16,13 @@ describe('sanitize', () => {
     expect(p.collapse.edits).toBe('auto')
     expect(sanitize({ fontSize: 3 }).fontSize).toBe(12)
     expect(sanitize({ fontSize: Number.NaN }).fontSize).toBe(15)
+  })
+
+  it('drops a width saved before widths were saved only on change', () => {
+    const old = sanitize({ theme: 'dark', width: 'medium' })
+    expect(old.width).toBe(defaultViewPrefs.width)
+    expect(old.theme).toBe('dark')
+    expect(sanitize({ v: 2, width: 'medium' }).width).toBe('medium')
   })
 })
 

@@ -79,6 +79,27 @@ func TestLine(t *testing.T) {
 			kinds: []Kind{KindPeer},
 		},
 		{
+			name:  "subagent report delivered as a peer message",
+			line:  `{"type":"user","uuid":"u7b","origin":{"kind":"peer","from":"a1","senderTaskId":"a1","name":"code-reviewer","handback":true,"handbackReportText":"  Found two issues.\n","body":"[Subagent hand-back] preamble"},"message":{"content":"Another Claude session sent a message:\n<agent-message from=\"a1\">\n[Subagent hand-back] preamble\n  Found two issues.\n</agent-message>"}}`,
+			kinds: []Kind{KindPeer},
+			check: func(t *testing.T, items []Item) {
+				it := items[0]
+				if it.Label != "handback" || it.Text != "Found two issues." || it.Meta["agent"] != "code-reviewer" || it.Meta["taskId"] != "a1" {
+					t.Fatalf("handback item = %+v", it)
+				}
+			},
+		},
+		{
+			name:  "peer message keeps its body without the wrapper",
+			line:  `{"type":"user","uuid":"u7c","origin":{"kind":"peer","from":"s2","body":"Build is green."},"message":{"content":"Another Claude session sent a message:\n<agent-message from=\"s2\">\nBuild is green.\n</agent-message>"}}`,
+			kinds: []Kind{KindPeer},
+			check: func(t *testing.T, items []Item) {
+				if items[0].Label != "" || items[0].Text != "Build is green." {
+					t.Fatalf("peer item = %+v", items[0])
+				}
+			},
+		},
+		{
 			name:  "system reminder",
 			line:  `{"type":"user","uuid":"u8","isMeta":true,"message":{"content":"<system-reminder>be brief</system-reminder>"}}`,
 			kinds: []Kind{KindNotice},
@@ -429,6 +450,15 @@ func TestSamples(t *testing.T) {
 				}
 				if n := len(detail.BashEditDiff.Files); n != 3 || len(detail.BashEditDiff.Files[0].Hunks) == 0 {
 					t.Fatalf("bashEditDiff files = %d, want 3 with hunks", n)
+				}
+				return
+			}
+			if filepath.Base(path) == "peer-handback.jsonl" {
+				// A subagent's report: the clean report text, its agent
+				// and task id, not the delivery wrapper.
+				it := items[0]
+				if it.Kind != KindPeer || it.Label != "handback" || it.Meta["agent"] == nil || it.Meta["taskId"] == nil || strings.Contains(it.Text, "<agent-message") || strings.HasPrefix(it.Text, "[") {
+					t.Fatalf("handback = %s %q %v %.80q", it.Kind, it.Label, it.Meta, it.Text)
 				}
 				return
 			}
