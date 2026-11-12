@@ -93,6 +93,8 @@ func TestRemoteAdmission(t *testing.T) {
 		{"answer at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/answer", `{"action":"key","key":"Escape"}`, remoteHost, origin, "dev@example.com"}, 200},
 		{"reply refused at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/send", `{"text":"hi"}`, remoteHost, origin, "dev@example.com"}, 403},
 		{"reply at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions/a1/send", `{"text":"hi"}`, remoteHost, origin, "dev@example.com"}, 200},
+		{"interrupt refused at answer", remoteOn(remote.LevelAnswer), remoteReq{"POST", "/api/sessions/a1/interrupt", "", remoteHost, origin, "dev@example.com"}, 403},
+		{"interrupt at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions/a1/interrupt", "", remoteHost, origin, "dev@example.com"}, 200},
 		{"spawn refused at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "dev@example.com"}, 403},
 		{"spawn at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "dev@example.com"}, 200},
 		{"action at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/action", `{"action":"kill"}`, remoteHost, origin, "dev@example.com"}, 200},

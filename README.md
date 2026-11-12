@@ -98,7 +98,7 @@ When a session waits on a permission prompt or a question, a Terminal panel open
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 
-Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape. Before choosing an option it reads the screen again and refuses if the choice changed.
+Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape, and only while a question is on screen. Before choosing an option it reads the screen again and refuses if the choice changed.
 
 ## Search, files and settings
 
@@ -114,7 +114,7 @@ Off by default. Settings → Remote access lets your phone or another computer r
 tailscale serve --bg --https=443 "unix:$HOME/Library/Application Support/agent-desk/remote.sock"
 ```
 
-Open `https://<your-mac>.<tailnet>.ts.net/` on a device signed in to your tailnet. Remote devices never use the local link; Tailscale vouches for who they are. Choose what they may do: **Read and answer** (read everything, answer waiting prompts, including typed answers to questions), **Reply** (also send replies) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
+Open `https://<your-mac>.<tailnet>.ts.net/` on a device signed in to your tailnet. Remote devices never use the local link; Tailscale vouches for who they are. Choose what they may do: **Read and answer** (read everything, answer waiting prompts, including typed answers to questions), **Reply** (also send replies and interrupt a working agent) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
 
 ## Catch-up summaries
 
