@@ -118,8 +118,10 @@ export function SessionView(props: Props) {
   }, [readAgents, sessionId, isClaude])
   const agentLinks = useMemo(() => {
     const byToolUse = new Map(agents.map((a) => [a.toolUseId, a.id]))
+    const ids = new Set(agents.map((a) => a.id))
     return {
       agentFor: (toolUseId: string) => byToolUse.get(toolUseId),
+      has: (id: string) => ids.has(id),
       open: (id: string) => {
         setOpenAgent(id)
         setAgentsOpen(true)

@@ -22,7 +22,7 @@ export interface ViewPrefs {
 export const defaultViewPrefs: ViewPrefs = {
   theme: 'system',
   fontSize: 15,
-  width: 'wide',
+  width: 'full',
   collapse: { edits: 'auto', bash: 'closed', read: 'closed', agents: 'closed', other: 'closed', thinking: 'closed' },
 }
 
@@ -43,6 +43,11 @@ function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T)
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback
 }
 
+// savedVersion marks prefs saved because the reader changed one. Earlier
+// versions saved the whole set on every load, so a stored width without
+// it was the default of its day, not a choice, and is not kept.
+const savedVersion = 2
+
 // sanitize accepts stored prefs from any earlier version, keeping valid
 // fields and defaulting the rest.
 export function sanitize(raw: unknown): ViewPrefs {
@@ -54,7 +59,7 @@ export function sanitize(raw: unknown): ViewPrefs {
   return {
     theme: oneOf(r.theme, ['system', 'light', 'dark'] as const, d.theme),
     fontSize: Math.min(fontSizes.max, Math.max(fontSizes.min, size)),
-    width: oneOf(r.width, ['narrow', 'medium', 'wide', 'full'] as const, d.width),
+    width: r.v === savedVersion ? oneOf(r.width, ['narrow', 'medium', 'wide', 'full'] as const, d.width) : d.width,
     collapse: {
       edits: oneOf(c.edits, ['open', 'closed', 'auto'] as const, d.collapse.edits),
       bash: oneOf(c.bash, open, d.collapse.bash),
@@ -75,8 +80,10 @@ export function loadViewPrefs(store: KV): ViewPrefs {
   }
 }
 
+// saveViewPrefs stores prefs the reader changed, so later defaults still
+// reach fields they never touched.
 export function saveViewPrefs(store: KV, prefs: ViewPrefs): void {
-  store.setItem(key, JSON.stringify(prefs))
+  store.setItem(key, JSON.stringify({ ...prefs, v: savedVersion }))
 }
 
 export function toolCategory(name: string): ToolCategory {

@@ -289,6 +289,43 @@ func (p *Parser) userText(base Item, r record, text string) []Item {
 	return append([]Item{it}, items...)
 }
 
+// peerItem reads a message Claude Code delivered from another session. A
+// background subagent's report arrives this way (origin.handback), with
+// the report alone in handbackReportText and the subagent's type in name;
+// it becomes a peer item labelled "handback". Other peer messages keep
+// their body without the delivery wrapper.
+func peerItem(it Item, raw json.RawMessage, text string) Item {
+	var o struct {
+		Name     string `json:"name"`
+		From     string `json:"from"`
+		TaskID   string `json:"senderTaskId"`
+		Body     string `json:"body"`
+		Handback bool   `json:"handback"`
+		Report   string `json:"handbackReportText"`
+	}
+	_ = json.Unmarshal(raw, &o)
+	it.Kind, it.Text = KindPeer, text
+	meta := map[string]any{}
+	if o.Name != "" {
+		meta["agent"] = o.Name
+	}
+	if o.TaskID != "" {
+		meta["taskId"] = o.TaskID
+	} else if o.From != "" {
+		meta["taskId"] = o.From
+	}
+	switch {
+	case o.Handback && strings.TrimSpace(o.Report) != "":
+		it.Label, it.Text = "handback", strings.TrimSpace(o.Report)
+	case strings.TrimSpace(o.Body) != "":
+		it.Text = strings.TrimSpace(o.Body)
+	}
+	if len(meta) > 0 {
+		it.Meta = meta
+	}
+	return it
+}
+
 func originKind(raw json.RawMessage) string {
 	var o struct {
 		Kind string `json:"kind"`
@@ -314,8 +351,7 @@ func (p *Parser) classifyUserText(base Item, r record, text string) Item {
 	case origin == labelTaskNotification || strings.HasPrefix(trimmed, "<task-notification>"):
 		return notice(labelTaskNotification, trimmed)
 	case origin == "peer":
-		it.Kind, it.Text = KindPeer, text
-		return it
+		return peerItem(it, r.Origin, text)
 	case strings.HasPrefix(trimmed, "<command-name>") || strings.HasPrefix(trimmed, "<command-message>"):
 		cmd := ""
 		if m := commandName.FindStringSubmatch(trimmed); m != nil {

@@ -4,6 +4,8 @@ import { createContext, useContext } from 'react'
 // transcript: agentFor maps a tool call id to a subagent id.
 export interface AgentLinks {
   agentFor: (toolUseId: string) => string | undefined
+  // has reports whether a subagent with this id is known.
+  has: (agentId: string) => boolean
   open: (agentId: string) => void
 }
 
