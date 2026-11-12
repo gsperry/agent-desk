@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
+use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
@@ -179,6 +180,20 @@ fn server_log() -> std::io::Result<std::fs::File> {
         .open(path)
 }
 
+/// open_in_browser hands an http or https link to the default browser
+/// with macOS `open`, as an argument, never through a shell. Other schemes
+/// are dropped.
+fn open_in_browser(url: &tauri::Url) {
+    if matches!(url.scheme(), "http" | "https") {
+        let _ = Command::new("/usr/bin/open")
+            .arg(url.as_str())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+    }
+}
+
 fn tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "show", "Show Agent Desk", true, Some("Ctrl+Alt+A"))?;
     let quit = MenuItem::with_id(app, "quit", "Quit Agent Desk", true, None::<&str>)?;
@@ -225,7 +240,22 @@ fn main() {
             if url.host_str() != Some("127.0.0.1") {
                 return Err("the server printed an unexpected address".into());
             }
+            let origin = url.origin();
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+                // Links to the web (PR links and the like) open in the
+                // default browser: the web view would drop a new window, and
+                // must not leave Agent Desk's own address.
+                .on_new_window(|target, _| {
+                    open_in_browser(&target);
+                    NewWindowResponse::Deny
+                })
+                .on_navigation(move |target| {
+                    if target.origin() == origin {
+                        return true;
+                    }
+                    open_in_browser(target);
+                    false
+                })
                 .title("Agent Desk")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(420.0, 500.0)
