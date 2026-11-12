@@ -82,6 +82,8 @@ Type `/` to autocomplete: Claude Code's built-in commands, your and the project'
 
 A reply is refused, with the reason, when it would land somewhere other than the agent's prompt: the session is waiting on a question or permission prompt, a dialog is on screen, or text is already typed into the agent's own prompt in the terminal. Prompts and dialogs open the Terminal panel described below. A reply sent while the agent works is queued by Claude Code and shows as queued.
 
+While an agent works, a row above the composer shows how long the turn has run, the tokens it has written and its current step. **Interrupt** stops the turn, as Esc does in the terminal.
+
 ## Managing sessions
 
 - **New session:** ＋ in the sidebar header, or the ＋ on a project or group heading to prefill its directory and group. Pick the directory, name (or let the agent name itself), CLI, group, worktree, first prompt, and optionally model and effort.

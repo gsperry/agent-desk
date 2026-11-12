@@ -21,6 +21,7 @@ import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
 import { can, useRemote } from '../remote-context'
 import { ContextMeter } from './ContextMeter'
+import { LiveActivity } from './LiveActivity'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
 import { SessionActions } from './SessionActions'
@@ -42,6 +43,7 @@ interface Props {
   readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
   readStyled: (id: string) => Promise<{ screen?: string; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
+  interrupt: (id: string) => Promise<string | null>
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
   act: (id: string, a: SessionAction) => Promise<string | null>
@@ -372,6 +374,16 @@ export function SessionView(props: Props) {
                 </button>
               </div>
             </div>
+          )}
+          {session.running && session.status === 'working' && (
+            <LiveActivity
+              items={d.items}
+              onInterrupt={
+                mayReply
+                  ? () => props.interrupt(sessionId)
+                  : undefined
+              }
+            />
           )}
           {mayReply ? (
             <Composer

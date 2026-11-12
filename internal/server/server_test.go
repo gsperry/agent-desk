@@ -111,6 +111,8 @@ type fakePanes struct {
 	screen pane.Screen
 	err    error
 	answer pane.Answer
+	// interrupted is set when Interrupt is called.
+	interrupted bool
 }
 
 func (f *fakePanes) Screen(context.Context, string) (pane.Screen, error) { return f.screen, f.err }
@@ -119,6 +121,11 @@ func (f *fakePanes) Styled(context.Context, string) (string, error) {
 }
 func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
 	f.answer = a
+	return f.err
+}
+
+func (f *fakePanes) Interrupt(context.Context, string) error {
+	f.interrupted = true
 	return f.err
 }
 
@@ -476,6 +483,9 @@ func TestPaneRoutes(t *testing.T) {
 		{"answer refused", "POST", "/api/sessions/a1/answer", `{"action":"key","key":"x"}`, &fakePanes{err: &send.Refused{Reason: "bad_key"}}, "http://127.0.0.1:7317", 409, "bad_key"},
 		{"answer bad body", "POST", "/api/sessions/a1/answer", `[`, &fakePanes{}, "http://127.0.0.1:7317", 400, "JSON"},
 		{"answer without origin", "POST", "/api/sessions/a1/answer", `{"action":"key","key":"Enter"}`, &fakePanes{}, "", 403, "forbidden"},
+		{"interrupt", "POST", "/api/sessions/a1/interrupt", ``, &fakePanes{}, "http://127.0.0.1:7317", 200, "ok"},
+		{"interrupt refused", "POST", "/api/sessions/a1/interrupt", ``, &fakePanes{err: &send.Refused{Reason: "not_working"}}, "http://127.0.0.1:7317", 409, "not_working"},
+		{"interrupt without origin", "POST", "/api/sessions/a1/interrupt", ``, &fakePanes{}, "", 403, "forbidden"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

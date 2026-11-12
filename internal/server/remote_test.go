@@ -280,6 +280,7 @@ func TestRouteNeeds(t *testing.T) {
 		"GET /api/sessions/{id}/pane":                      remote.NeedRead,
 		"GET /api/sessions/{id}/terminal":                  remote.NeedRead,
 		"POST /api/sessions/{id}/answer":                   remote.NeedAnswer,
+		"POST /api/sessions/{id}/interrupt":                remote.NeedReply,
 		"GET /api/sessions/{id}/agents":                    remote.NeedRead,
 		"GET /api/sessions/{id}/agents/{agent}/transcript": remote.NeedRead,
 		"GET /api/sessions/{id}/changes":                   remote.NeedRead,

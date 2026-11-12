@@ -249,6 +249,7 @@ function Desk({ token }: { token: string }) {
   const readScreen = useCallback((id: string) => store.screen(id), [store])
   const readStyled = useCallback((id: string) => store.styledScreen(id), [store])
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
+  const interrupt = useCallback((id: string) => store.interrupt(id), [store])
   const loadOptions = useCallback(() => store.spawnOptions(), [store])
   const readAgents = useCallback((id: string) => store.agents(id), [store])
   const loadOverview = useCallback(() => store.overview(), [store])
@@ -446,6 +447,7 @@ function Desk({ token }: { token: string }) {
                   readScreen={readScreen}
                   readStyled={readStyled}
                   answer={answer}
+                  interrupt={interrupt}
                   openPath={openPath}
                   groups={amGroups}
                   act={act}

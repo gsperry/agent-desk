@@ -1179,6 +1179,62 @@ pre.code-body,
   font-size: 0.85rem;
 }
 
+.live-activity {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: var(--reading-width);
+  margin: 0 auto;
+  padding: 0.45rem 0.2rem;
+  font-size: 0.85rem;
+}
+
+.live-activity-spinner {
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid var(--working);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: live-spin 0.9s linear infinite;
+}
+
+@keyframes live-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-activity-spinner {
+    animation: none;
+  }
+}
+
+.live-activity-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.live-activity-head {
+  color: var(--working);
+  font-weight: 600;
+}
+
+.live-activity-step {
+  overflow: hidden;
+  color: var(--dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-interrupt {
+  flex: none;
+}
+
 .live-multi-hint {
   margin: 0 0 0.4rem;
   font-size: 0.85rem;

@@ -174,6 +174,8 @@ type Panes interface {
 	Screen(ctx context.Context, sessionID string) (pane.Screen, error)
 	Styled(ctx context.Context, sessionID string) (string, error)
 	Answer(ctx context.Context, sessionID string, a pane.Answer) error
+	// Interrupt stops a working session's turn, as Esc does.
+	Interrupt(ctx context.Context, sessionID string) error
 }
 
 type TranscriptSource interface {
@@ -254,6 +256,7 @@ func (s *Server) routes() {
 	s.route("GET /api/sessions/{id}/pane", remote.NeedRead, s.screen)
 	s.route("GET /api/sessions/{id}/terminal", remote.NeedRead, s.terminal)
 	s.route("POST /api/sessions/{id}/answer", remote.NeedAnswer, s.answer)
+	s.route("POST /api/sessions/{id}/interrupt", remote.NeedReply, s.interrupt)
 	s.route("GET /api/sessions/{id}/agents", remote.NeedRead, s.listAgents)
 	s.route("GET /api/sessions/{id}/agents/{agent}/transcript", remote.NeedRead, s.agentTranscript)
 	s.route("GET /api/sessions/{id}/changes", remote.NeedRead, s.changes)
@@ -424,6 +427,19 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	err := s.cfg.Panes.Answer(ctx, r.PathValue("id"), a)
 	logOutcome("answer", r.PathValue("id"), fmt.Sprintf("action=%s index=%d key=%s", a.Action, a.Index, a.Key), "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// interrupt stops a working session's current turn. It needs the reply
+// level remotely: it steers the agent, like a reply does.
+func (s *Server) interrupt(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	err := s.cfg.Panes.Interrupt(ctx, r.PathValue("id"))
+	logOutcome("interrupt", r.PathValue("id"), "", "ok", err)
 	if writeRefusal(w, err) {
 		return
 	}

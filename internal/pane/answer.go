@@ -109,6 +109,8 @@ const (
 	reasonFree     send.Reason = "free_option"
 	reasonBadKey   send.Reason = "bad_key"
 	reasonBadText  send.Reason = "bad_text"
+	reasonNotBusy  send.Reason = "not_working"
+	reasonAsking   send.Reason = "asking"
 )
 
 type Answerer struct {
@@ -151,6 +153,15 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 	case "key":
 		if !AllowedKeys[ans.Key] {
 			return &send.Refused{Reason: reasonBadKey, Message: fmt.Sprintf("Key %q is not one Agent Desk sends.", ans.Key)}
+		}
+		// A key answers a question on screen; with none, Escape would
+		// interrupt the agent, which is Interrupt's job and level.
+		text, err := a.Reader.Read(ctx, id)
+		if err != nil {
+			return fmt.Errorf("could not read the session's screen, so nothing was pressed: %w", err)
+		}
+		if Parse(text) == nil {
+			return &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a question."}
 		}
 		keys = []string{ans.Key}
 	case "choose":
@@ -234,6 +245,31 @@ func (a *Answerer) dialog(ctx context.Context, id string) (*Dialog, error) {
 		return nil, &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a choice."}
 	}
 	return d, nil
+}
+
+// Interrupt presses Escape in a working session, as Esc does in Claude
+// Code: the agent stops its current turn and waits for a prompt. It is
+// refused unless the session is working, and while a question is on
+// screen, which Escape would cancel instead.
+func (a *Answerer) Interrupt(ctx context.Context, id string) error {
+	if refused := a.check(id); refused != nil {
+		return refused
+	}
+	for _, s := range a.Sessions.State().Sessions {
+		if s.ID == id && s.Status != "working" {
+			return &send.Refused{Reason: reasonNotBusy, Message: "The session is not working, so there is nothing to interrupt."}
+		}
+	}
+	text, err := a.Reader.Read(ctx, id)
+	if err != nil {
+		return fmt.Errorf("could not read the session's screen, so nothing was pressed: %w", err)
+	}
+	if Parse(text) != nil {
+		return &send.Refused{Reason: reasonAsking, Message: "The session is asking a question. Answer or cancel it instead."}
+	}
+	err = a.Keys.Send(ctx, id, "Escape")
+	a.Sessions.Trigger()
+	return err
 }
 
 func (a *Answerer) check(id string) *send.Refused {

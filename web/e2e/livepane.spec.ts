@@ -205,3 +205,23 @@ test('a prompt with several questions shows its steps', async ({ page }) => {
     writeFileSync(panePath, original)
   }
 })
+
+test('a working session shows its live activity, and Interrupt presses Escape', async ({ page }) => {
+  await open(page, 'a0000001')
+  const activity = page.getByRole('status', { name: 'Agent activity' })
+  await expect(activity).toContainText('Working')
+  await activity.getByRole('button', { name: 'Interrupt' }).click()
+  await expect.poll(keys).toBe('a0000001 Escape\n')
+  // An idle session has no activity row.
+  await open(page, 'a0000004')
+  await expect(page.getByRole('status', { name: 'Agent activity' })).toHaveCount(0)
+})
+
+test('Cancel is refused when no question is on screen', async ({ page }) => {
+  const res = await page.request.post(`${base}/api/sessions/a0000004/answer`, {
+    headers: { Authorization: `Bearer ${token}`, Origin: base, 'Content-Type': 'application/json' },
+    data: { action: 'key', key: 'Escape' },
+  })
+  expect(res.status()).toBe(409)
+  expect(keys()).toBe('')
+})

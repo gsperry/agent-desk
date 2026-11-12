@@ -55,6 +55,7 @@ func TestAnswer(t *testing.T) {
 		{"literal text as key", perm, true, Answer{Action: "key", Key: "rm -rf /"}, nil, reasonBadKey},
 		{"unknown action", perm, true, Answer{Action: "type"}, nil, reasonBadKey},
 		{"not running", perm, false, Answer{Action: "key", Key: "Enter"}, nil, send.ReasonNotRunning},
+		{"escape with no question", idle, true, Answer{Action: "key", Key: "Escape"}, nil, reasonNoDialog},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -77,6 +78,44 @@ func TestAnswer(t *testing.T) {
 			}
 			if err != nil || !reflect.DeepEqual(keys.got, tt.wantKeys) {
 				t.Fatalf("keys = %v, err = %v; want %v", keys.got, err, tt.wantKeys)
+			}
+		})
+	}
+}
+
+func TestInterrupt(t *testing.T) {
+	idle := read(t, "idle.txt")
+	perm := read(t, "permission.txt")
+	tests := []struct {
+		name    string
+		status  string
+		running bool
+		screen  string
+		reason  send.Reason
+	}{
+		{"working", "working", true, idle, ""},
+		{"idle", "idle", true, idle, reasonNotBusy},
+		{"question on screen", "working", true, perm, reasonAsking},
+		{"not running", "working", false, idle, send.ReasonNotRunning},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keys := &recordKeys{}
+			a := &Answerer{
+				Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: tt.running, Status: tt.status}}}},
+				Reader:   fakeReader{screen: tt.screen},
+				Keys:     keys,
+			}
+			err := a.Interrupt(context.Background(), "s1")
+			if tt.reason != "" {
+				var refused *send.Refused
+				if !errors.As(err, &refused) || refused.Reason != tt.reason || len(keys.got) != 0 {
+					t.Fatalf("err = %v keys = %v, want %s", err, keys.got, tt.reason)
+				}
+				return
+			}
+			if err != nil || !reflect.DeepEqual(keys.got, []string{"Escape"}) {
+				t.Fatalf("keys = %v, err = %v", keys.got, err)
 			}
 		})
 	}
