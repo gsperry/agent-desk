@@ -35,7 +35,7 @@ To update, pull and repeat the last two commands.
 
 ### Desktop app (macOS)
 
-`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Builds are unsigned, for the machine that made them. Quitting the app leaves every agent running.
+`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Builds are unsigned, for the machine that made them. Quitting the app leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`.
 
 ## Run
 
@@ -76,27 +76,29 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 
 ## Replying
 
-Each session has a composer under its transcript. Enter adds a line; Cmd+Enter (or Ctrl+Enter) sends through `agent-manager type`. Drafts are kept per session.
+Each session has a composer under its transcript. Enter sends through `agent-manager type`, as in Claude Code; Cmd+Enter, Ctrl+Enter or Shift+Enter adds a line. On a phone, Return adds a line and the Send button sends. Drafts are kept per session.
 
 Type `/` to autocomplete: Claude Code's built-in commands, your and the project's custom commands and skills, enabled plugins' commands and skills, and your snippets. Arrow keys move, Tab or Enter picks, Esc closes. A slash command is sent as typed and runs as it would in the terminal.
 
 A reply is refused, with the reason, when it would land somewhere other than the agent's prompt: the session is waiting on a question or permission prompt, a dialog is on screen, or text is already typed into the agent's own prompt in the terminal. Prompts and dialogs open the Terminal panel described below. A reply sent while the agent works is queued by Claude Code and shows as queued.
 
+While an agent works, a row above the composer shows how long the turn has run, the tokens it has written and its current step. **Interrupt** stops the turn, as Esc does in the terminal.
+
 ## Managing sessions
 
 - **New session:** ＋ in the sidebar header, or the ＋ on a project or group heading to prefill its directory and group. Pick the directory, name (or let the agent name itself), CLI, group, worktree, first prompt, and optionally model and effort.
-- **Stop, revive, archive, restore, move:** buttons in the session header. Stop asks first, since it interrupts the agent; the session stays listed and Revive resumes the same conversation.
+- **Stop, archive, restore, move, export:** the ⋯ menu in the session header; Revive is a button on a stopped session. Stop asks first, since it ends the agent's process; the session stays listed and Revive resumes the same conversation. To stop only the current turn, use Interrupt while it works.
 - **Groups:** "New group" in the sidebar footer; × on a group heading deletes it, moving its sessions to the root.
 
 Rename, delete, restart with a fresh context, and fork have no agent-manager command yet, so they stay in agent-manager's TUI (`r`, `d`, `R`, `f`). See [docs/upstream/session-commands.md](docs/upstream/session-commands.md).
 
 ## Answering prompts
 
-When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step.
+When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered.
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 
-Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape. Before choosing an option it reads the screen again and refuses if the choice changed.
+Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape, and only while a question is on screen. Before choosing an option it reads the screen again and refuses if the choice changed.
 
 ## Search, files and settings
 
@@ -116,7 +118,7 @@ Open `https://<your-mac>.<tailnet>.ts.net/` on a device signed in to your tailne
 
 Or reach it from any browser through a **Cloudflare Tunnel** on a domain you have in Cloudflare. In Cloudflare Zero Trust, add a self-hosted Access application for a name such as `desk.example.com` with a policy for your email. In Settings → Remote access choose Cloudflare Tunnel, enter the team name, the application's audience tag, your email and the host name, and save. Settings then shows the ingress to give a `cloudflared` tunnel, pointing at the same socket and requiring Access. Agent Desk verifies Access's signed token on every request, fetching your team's public signing keys from Cloudflare to do so. Cloudflare can read the traffic; Tailscale cannot. Run `cloudflared` as your own account, since the socket is yours only. Use one proxy at a time: when switching, stop the other one.
 
-Whichever proxy you use, choose what remote devices may do: **Read and answer** (read everything, answer waiting prompts, including typed answers to questions), **Reply** (also send replies) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
+Whichever proxy you use, choose what remote devices may do: **Read and answer** (read everything, answer waiting prompts, including typed answers to questions), **Reply** (also send replies and interrupt a working agent) or **Start and stop** (also manage sessions). Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level, and the level can only be changed on the desk.
 
 ## Catch-up summaries
 

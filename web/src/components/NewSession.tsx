@@ -3,6 +3,7 @@ import { formProblem } from '../model/spawn'
 import { applyTemplate, templateFrom, type Template } from '../model/templates'
 import type { SessionView, SpawnOptions, SpawnRequest } from '../types'
 import { Dialog } from './Dialog'
+import { enterAction, insertNewline, isTouch, nativeNewline } from '../model/compose'
 
 interface Props {
   initial: SpawnRequest
@@ -235,6 +236,17 @@ export function NewSession({ initial, directories, loadOptions, spawn, onStarted
             placeholder={resuming ? 'Optional. Sent once the conversation reopens.' : 'Optional. The agent starts on it right away.'}
             onChange={(e) => {
               set({ prompt: e.target.value })
+            }}
+            onKeyDown={(e) => {
+              const touch = isTouch()
+              const enter = enterAction(e.nativeEvent, touch)
+              if (enter === 'send') {
+                e.preventDefault()
+                submit()
+              } else if (enter === 'newline' && !nativeNewline(e.nativeEvent, touch)) {
+                e.preventDefault()
+                insertNewline(e.currentTarget)
+              }
             }}
           />
         </label>

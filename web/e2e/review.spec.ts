@@ -10,8 +10,9 @@ test('changes show the diff, and line comments go out as one review', async ({ p
   await expect(panel.locator('.changed-file')).toContainText('notes.md')
   await expect(panel.locator('.changed-file')).toContainText('+2')
   await panel.locator('tr.diff-add').filter({ hasText: 'TWO' }).click()
+  // Enter adds the comment, as Enter sends a reply.
   await panel.getByRole('textbox', { name: 'Review comment' }).fill('Keep this lowercase.')
-  await panel.getByRole('button', { name: 'Add comment' }).click()
+  await panel.getByRole('textbox', { name: 'Review comment' }).press('Enter')
   await expect(panel.locator('.review-comment')).toContainText('Keep this lowercase.')
   await panel.getByRole('button', { name: 'Send review' }).click()
   await expect(panel).toBeHidden()

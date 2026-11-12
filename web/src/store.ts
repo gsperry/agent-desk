@@ -297,6 +297,13 @@ export class Store {
     return body.message ?? body.error ?? `HTTP ${String(res.status)}`
   }
 
+  async interrupt(sessionId: string): Promise<string | null> {
+    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/interrupt`, { method: 'POST' })
+    if (res.ok) return null
+    const body = (await res.json().catch(() => ({}))) as SendRefusal
+    return body.message ?? body.error ?? `HTTP ${String(res.status)}`
+  }
+
   private async post(path: string, body: unknown): Promise<{ data?: unknown; error?: string }> {
     try {
       const res = await apiFetch(this.token, path, {

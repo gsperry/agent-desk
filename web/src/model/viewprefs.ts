@@ -22,7 +22,7 @@ export interface ViewPrefs {
 export const defaultViewPrefs: ViewPrefs = {
   theme: 'system',
   fontSize: 15,
-  width: 'medium',
+  width: 'wide',
   collapse: { edits: 'auto', bash: 'closed', read: 'closed', agents: 'closed', other: 'closed', thinking: 'closed' },
 }
 

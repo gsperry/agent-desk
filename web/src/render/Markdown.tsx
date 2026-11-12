@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { remarkBreaks } from './breaks'
 import { parsePathRef } from '../model/paths'
 import { useOpenPath } from '../session-context'
 import { CodeBlock } from './CodeBlock'
@@ -64,7 +65,7 @@ function InlineCode({ children }: { children?: ReactNode }) {
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {text}
       </ReactMarkdown>
     </div>

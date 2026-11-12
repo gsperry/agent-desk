@@ -1,0 +1,24 @@
+❯ Ask me which checks to run before the release.
+
+  Ran 2 shell commands
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Checks  ☐ Timing  ✔ Submit  →
+
+│ Release window for the docs site: which checks do you want before it ships? Everything runs again
+│ after the deploy.
+
+❯ 1. [ ] Link check
+       Follow every link in the built site and report the broken ones.
+  2. [ ] Spelling
+       Run the spell checker over changed pages.
+  3. [ ] Screenshots
+       Capture the home page and the search page for review.
+  4. [ ] Load test
+       Send a short burst of traffic to the preview deployment.
+  5. [ ] Type something
+     Next
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel

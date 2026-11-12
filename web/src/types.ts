@@ -91,13 +91,25 @@ export interface DialogOption {
   index: number
   label: string
   selected: boolean
+  /** The number on screen; Next has none. */
+  number?: number
   free?: boolean
+  /** Set on checkbox options; true when ticked. */
+  checked?: boolean
+  /** Moves a several-answer question on. */
+  next?: boolean
+  /** The dimmer text under the label. */
+  description?: string
 }
 
 export interface Dialog {
   question?: string
   options: DialogOption[]
   footer: string
+  /** Several answers: Enter ticks a checkbox and Next moves on. */
+  multi?: boolean
+  /** The tabs of a prompt with several questions. */
+  steps?: { label: string; done?: boolean; submit?: boolean }[]
 }
 
 export interface Screen {

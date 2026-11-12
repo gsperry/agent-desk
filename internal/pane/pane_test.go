@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -42,7 +43,7 @@ func TestParse(t *testing.T) {
 			file:     "trust-dialog.txt",
 			labels:   []string{"No, exit", "Yes, I trust this folder"},
 			selected: 0,
-			question: "Security guide",
+			question: "Accessing workspace:\n/private/tmp/probe\nQuick safety check: Is this a project you created or one you trust?\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide",
 		},
 		{
 			file:     "ask-question.txt",
@@ -81,7 +82,7 @@ func TestParse(t *testing.T) {
 			file:     "auto-mode-dialog.txt",
 			labels:   []string{"Yes", "Not now", "Don't show again"},
 			selected: 0,
-			question: "Auto mode works better when it knows your environment. Takes about a minute.",
+			question: "Teach auto mode about your environment?\nAuto mode works better when it knows your environment. Takes about a minute.",
 		},
 	}
 	for _, tt := range tests {
@@ -145,5 +146,141 @@ func TestParseIgnoresEarlierNumberedLists(t *testing.T) {
 	d := Parse(screen)
 	if d == nil || !reflect.DeepEqual(labels(d), []string{"Yes", "No"}) || d.Question != "Do it?" {
 		t.Fatalf("%+v", d)
+	}
+}
+
+// A question longer than the terminal is wrapped over several lines; the
+// whole of it is the question, joined back into one paragraph, and blank
+// lines between paragraphs are kept. Constructed in the layout of
+// ask-question.txt, 60 columns wide.
+func TestLongQuestion(t *testing.T) {
+	sep := strings.Repeat("─", 60)
+	screen := strings.Join([]string{
+		"❯ Ask me which deployment target to use.",
+		sep,
+		" ☐ Target",
+		"Which environment should the release go to first? Staging",
+		"runs the full suite, production skips it.",
+		"",
+		"Pick one.",
+		"❯ 1. Staging",
+		"     Safer",
+		"  2. Production",
+		"     Faster",
+		"  3. Type something.",
+		sep,
+		"  4. Chat about this",
+		"Enter to select · ↑/↓ to navigate · Esc to cancel",
+	}, "\n")
+	d := Parse(screen)
+	if d == nil {
+		t.Fatal("no dialog")
+	}
+	want := "Which environment should the release go to first? Staging runs the full suite, production skips it.\n\nPick one."
+	if d.Question != want {
+		t.Fatalf("question = %q\nwant      %q", d.Question, want)
+	}
+}
+
+// A several-answer question: checkbox options, an unnumbered Next between
+// the last option and "Chat about this", and a question behind a bar that
+// wraps. Constructed in the layout of a Claude Code 2.1.322 screen, with
+// neutral text.
+func TestMultiSelect(t *testing.T) {
+	d := Parse(read(t, "askq-multi.txt"))
+	if d == nil || !d.Multi {
+		t.Fatalf("not a several-answer dialog: %+v", d)
+	}
+	wantQ := "Release window for the docs site: which checks do you want before it ships? Everything runs again after the deploy."
+	if d.Question != wantQ {
+		t.Fatalf("question = %q", d.Question)
+	}
+	type row struct {
+		label      string
+		number     int
+		free, next bool
+		checkbox   bool
+	}
+	want := []row{
+		{"Link check", 1, false, false, true},
+		{"Spelling", 2, false, false, true},
+		{"Screenshots", 3, false, false, true},
+		{"Load test", 4, false, false, true},
+		{"Type something", 5, true, false, true},
+		{"Next", 0, false, true, false},
+		{"Chat about this", 6, false, false, false},
+	}
+	if len(d.Options) != len(want) {
+		t.Fatalf("options = %+v", d.Options)
+	}
+	for i, w := range want {
+		o := d.Options[i]
+		if o.Index != i || o.Label != w.label || o.Number != w.number || o.Free != w.free || o.Next != w.next || (o.Checked != nil) != w.checkbox {
+			t.Errorf("option %d = %+v, want %+v", i, o, w)
+		}
+		if o.Checked != nil && *o.Checked {
+			t.Errorf("option %d ticked", i)
+		}
+	}
+	if d.Options[0].Description != "Follow every link in the built site and report the broken ones." || d.Options[4].Description != "" || d.Options[6].Description != "" {
+		t.Fatalf("descriptions: %q / %q / %q", d.Options[0].Description, d.Options[4].Description, d.Options[6].Description)
+	}
+	// "Chat about this" is past Next: six presses down, not five.
+	if got := strings.Join(d.Moves(6), " "); got != "Down Down Down Down Down Down Enter" {
+		t.Fatalf("moves to Chat about this = %s", got)
+	}
+	if got := strings.Join(d.Moves(5), " "); got != "Down Down Down Down Down Enter" {
+		t.Fatalf("moves to Next = %s", got)
+	}
+}
+
+// Screens from a probe session on Claude Code 2.1.322: Enter ticks a box
+// ([✔]) and leaves the cursor; the cursor on Next is drawn at the margin;
+// answered questions are ☒ in the tab bar.
+func TestMultiSelectProbe(t *testing.T) {
+	initial := Parse(read(t, "askq-multi-initial.txt"))
+	if initial == nil || !initial.Multi || len(initial.Options) != 6 || !initial.Options[4].Next || initial.Options[5].Label != "Chat about this" {
+		t.Fatalf("initial: %+v", initial)
+	}
+	if initial.Question != "Which checks should run before the docs release? Pick every one that applies." {
+		t.Fatalf("question = %q", initial.Question)
+	}
+	wantSteps := []Step{{Label: "Checks"}, {Label: "Timing"}, {Label: "Submit", Submit: true}}
+	if !reflect.DeepEqual(initial.Steps, wantSteps) {
+		t.Fatalf("steps = %+v", initial.Steps)
+	}
+
+	ticked := Parse(read(t, "askq-multi-ticked.txt"))
+	if ticked == nil || ticked.Options[0].Checked == nil || !*ticked.Options[0].Checked || *ticked.Options[1].Checked || !ticked.Options[0].Selected {
+		t.Fatalf("ticked: %+v", ticked)
+	}
+	// Ticking a box marks the question answered while it is still shown.
+	if !ticked.Steps[0].Done || ticked.Steps[1].Done {
+		t.Fatalf("ticked steps = %+v", ticked.Steps)
+	}
+
+	onNext := Parse(read(t, "askq-multi-on-next.txt"))
+	if onNext == nil || !onNext.Options[4].Next || !onNext.Options[4].Selected {
+		t.Fatalf("on next: %+v", onNext)
+	}
+	if got := strings.Join(onNext.Moves(0), " "); got != "Up Up Up Up Enter" {
+		t.Fatalf("moves back to the first option = %s", got)
+	}
+	if got := strings.Join(onNext.Moves(5), " "); got != "Down Enter" {
+		t.Fatalf("moves to Chat about this = %s", got)
+	}
+
+	step2 := Parse(read(t, "askq-multi-step2.txt"))
+	if step2 == nil || step2.Multi || step2.Question != "When should they run?" || !step2.Steps[0].Done {
+		t.Fatalf("step 2: %+v", step2)
+	}
+}
+
+func TestSingleQuestionHasNoSteps(t *testing.T) {
+	if d := Parse(read(t, "ask-question.txt")); d == nil || d.Steps != nil {
+		t.Fatalf("steps on a single question: %+v", d)
+	}
+	if d := Parse(read(t, "askq-review.txt")); d == nil || len(d.Steps) != 3 || !d.Steps[2].Submit {
+		t.Fatalf("review steps: %+v", d)
 	}
 }

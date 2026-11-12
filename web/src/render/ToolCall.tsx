@@ -5,7 +5,7 @@ import { toolPathRef } from '../model/paths'
 import { toolLabel } from '../model/transcript'
 import { initiallyOpen } from '../model/viewprefs'
 import { useAgentLinks } from '../agents-context'
-import { useOpenPath } from '../session-context'
+import { useOpenPath, useSessionDir } from '../session-context'
 import { useViewPrefs } from '../viewprefs-context'
 import type { Item } from '../types'
 import { CodeBlock } from './CodeBlock'
@@ -53,7 +53,7 @@ interface Props {
 
 export function ToolCall({ use, result, live }: Props) {
   const name = use.tool?.name ?? ''
-  const label = toolLabel(use)
+  const label = toolLabel(use, useSessionDir())
   const isEdit = editTools.has(name)
   const rows = isEdit ? editRows(use, result) : []
   const shell = name === 'Bash' ? bashFiles(result?.result?.detail) : { files: [], more: 0 }

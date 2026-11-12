@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent } from 'react'
-import { blockedReason, isSendKey } from '../model/compose'
+import { blockedReason, enterAction, insertNewline, isTouch, nativeNewline } from '../model/compose'
 import { loadDraft, saveDraft } from '../model/drafts'
 import { completion, slashQuery, suggest, type Suggestion } from '../model/autocomplete'
 import { expandSnippet, slashSnippet, type Snippet } from '../model/snippets'
@@ -7,6 +7,8 @@ import { useSnippets } from '../snippets-context'
 import type { SessionView, SlashCommand } from '../types'
 
 const mac = /Mac|iPhone|iPad/.test(navigator.userAgent)
+// touch is fixed per page load: on a phone Enter adds a line and Send sends.
+const touch = isTouch()
 
 interface Props {
   session: SessionView
@@ -163,7 +165,7 @@ export function Composer({ session, connected, insideSession, onSend, pasteImage
           ref={area}
           value={text}
           rows={1}
-          placeholder={`Reply to ${session.name}`}
+          placeholder={session.status === 'waiting' ? 'Answer the question above first' : `Reply to ${session.name}`}
           aria-label={`Reply to ${session.name}`}
           aria-controls={suggestions.length > 0 ? 'slash-menu' : undefined}
           aria-autocomplete="list"
@@ -178,14 +180,15 @@ export function Composer({ session, connected, insideSession, onSend, pasteImage
           onPaste={onPaste}
           onKeyDown={(e) => {
             const pick = suggestions[highlighted]
-            if (pick && !isSendKey(e.nativeEvent)) {
+            const enter = enterAction(e.nativeEvent, touch)
+            if (pick && enter !== 'newline') {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault()
                 const n = suggestions.length
                 setActive((highlighted + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
                 return
               }
-              if ((e.key === 'Tab' && !e.shiftKey) || (e.key === 'Enter' && !e.shiftKey)) {
+              if ((e.key === 'Tab' && !e.shiftKey) || enter === 'send') {
                 e.preventDefault()
                 choose(pick)
                 return
@@ -200,9 +203,12 @@ export function Composer({ session, connected, insideSession, onSend, pasteImage
             if (slash) {
               e.preventDefault()
               insert(slash)
-            } else if (isSendKey(e.nativeEvent)) {
+            } else if (enter === 'send') {
               e.preventDefault()
               send()
+            } else if (enter === 'newline' && !nativeNewline(e.nativeEvent, touch)) {
+              e.preventDefault()
+              insertNewline(e.currentTarget)
             } else if (e.key === 'Escape') {
               // Leaving the composer hands j/k back to session navigation.
               e.currentTarget.blur()
@@ -246,9 +252,11 @@ export function Composer({ session, connected, insideSession, onSend, pasteImage
           Send
         </button>
       </div>
-      <p className="composer-hint">
-        Enter for a new line · {mac ? '⌘' : 'Ctrl'}+Enter to send
-      </p>
+      {!touch && (
+        <p className="composer-hint">
+          Enter to send · {mac ? '⌘' : 'Ctrl'}+Enter or Shift+Enter for a new line
+        </p>
+      )}
     </div>
   )
 }

@@ -11,15 +11,17 @@ function composer(page: Page) {
   return page.getByRole('textbox', { name: /Reply to/ })
 }
 
-test('Enter adds a line and the send key sends, then the transcript confirms it', async ({ page }) => {
+test('Enter sends, modifier+Enter adds a line, then the transcript confirms it', async ({ page }) => {
   await open(page, 'a0000003')
   const box = composer(page)
   await box.click()
   await box.pressSequentially('Hello from the smoke test')
-  await box.press('Enter')
+  await box.press('Shift+Enter')
   await box.pressSequentially('second line')
-  await expect(box).toHaveValue('Hello from the smoke test\nsecond line')
   await box.press('ControlOrMeta+Enter')
+  await box.pressSequentially('third')
+  await expect(box).toHaveValue('Hello from the smoke test\nsecond line\nthird')
+  await box.press('Enter')
   await expect(box).toHaveValue('')
   const main = page.getByRole('main')
   await expect(main.locator('.card.user').filter({ hasText: 'second line' })).toBeVisible()
@@ -41,7 +43,7 @@ test('drafts are kept per session', async ({ page }) => {
 
 test('a waiting session explains why it cannot take a reply', async ({ page }) => {
   await open(page, 'a0000002')
-  await expect(page.getByText('waiting on a question or permission prompt')).toBeVisible()
+  await expect(page.getByText('The agent is waiting on a question. Choose an answer above.')).toBeVisible()
   await composer(page).fill('anything')
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
 })

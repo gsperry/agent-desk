@@ -1,5 +1,9 @@
 import { memo, useState, type ReactNode } from 'react'
 import { pinKey } from '../model/pins'
+import { riskyCommand } from '../model/filter'
+import { bashFiles } from '../model/diff'
+import { groupSteps, groupSummary } from '../model/groups'
+import { toolCategory } from '../model/viewprefs'
 import { formatDuration, type Block, type Step } from '../model/transcript'
 import { usePins } from '../pins-context'
 import { useViewPrefs } from '../viewprefs-context'
@@ -197,13 +201,73 @@ function Expandable({ className, label, summary, body, defaultOpen = false }: Ex
 }
 
 function Turn({ steps, durationMs, live }: { steps: Step[]; durationMs?: number; live: boolean }) {
+  const prefs = useViewPrefs()
+  const keepAlone = (s: Extract<Step, { kind: 'tool' }>) => {
+    const name = s.use.tool?.name ?? ''
+    if (s.result?.result?.isError) return true
+    if (name === 'Bash' && bashFiles(s.result?.result?.detail).files.length > 0) return true
+    const cat = toolCategory(name)
+    return cat !== 'edits' && prefs.collapse[cat] === 'open'
+  }
   return (
     <section className="turn">
-      {steps.map((s, i) => (
-        <StepView key={stepKey(s, i)} step={s} live={live} />
-      ))}
+      {groupSteps(steps, keepAlone).map((s, i) =>
+        s.kind === 'group' ? (
+          <ToolGroup key={stepKey(s.steps[0] as Step, i)} steps={s.steps} live={live} />
+        ) : (
+          <StepView key={stepKey(s, i)} step={s} live={live} />
+        ),
+      )}
       {durationMs !== undefined && <p className="turn-foot">Worked for {formatDuration(durationMs)}</p>}
     </section>
+  )
+}
+
+// ToolGroup is a run of exploring steps folded into one line, with any
+// risky command, failure or running step shown on the line.
+function ToolGroup({ steps, live }: { steps: Step[]; live: boolean }) {
+  const [open, setOpen] = useState(false)
+  let risky: string | null = null
+  let failed = 0
+  let running = false
+  for (const s of steps) {
+    if (s.kind !== 'tool') continue
+    if (s.result?.result?.isError) failed++
+    if (!s.result && live) running = true
+    const input = s.use.tool?.input
+    if (!risky && s.use.tool?.name === 'Bash' && typeof input === 'object' && input !== null) {
+      const cmd = (input as Record<string, unknown>).command
+      risky = typeof cmd === 'string' ? riskyCommand(cmd) : null
+    }
+  }
+  return (
+    <div className={`tool-group${risky ? ' tool-risky' : ''}`}>
+      <button
+        type="button"
+        className="tool-group-row"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(!open)
+        }}
+      >
+        <span className="chevron">{open ? '▾' : '▸'}</span>
+        <span className="tool-group-summary">{groupSummary(steps)}</span>
+        {risky && (
+          <span className="risk-badge" title={`Risky: ${risky}`}>
+            ⚠ {risky}
+          </span>
+        )}
+        {failed > 0 && <span className="tool-group-failed">{failed} failed</span>}
+        {running && <span className="tool-state">…</span>}
+      </button>
+      {open && (
+        <div className="tool-group-steps">
+          {steps.map((s, i) => (
+            <StepView key={stepKey(s, i)} step={s} live={live} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -225,7 +289,7 @@ function StepView({ step, live }: { step: Step; live: boolean }) {
       const ms = step.item.meta?.durationMs
       // An empty thought under a second has nothing to tell the reader.
       if (!step.item.text && (typeof ms !== 'number' || ms < 1000)) return null
-      const label = typeof ms === 'number' ? `Thought for ${formatDuration(ms)}` : 'Thought'
+      const label = typeof ms === 'number' && ms >= 1000 ? `Thought for ${formatDuration(ms)}` : 'Thought'
       if (!step.item.text) return <p className="thinking">{label}</p>
       return (
         <Expandable

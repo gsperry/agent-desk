@@ -56,19 +56,39 @@ fn show(app: &AppHandle) {
 
 /// start runs the bundled server through the user's login shell, so it sees
 /// the same PATH (agent-manager, tmux, code) as in a terminal; an app opened
-/// from Finder otherwise gets a minimal PATH. It returns the server and the
-/// address with its token.
+/// from Finder otherwise gets a minimal PATH. The shell starts from a clean
+/// environment, as a new terminal does, so nothing from whatever launched
+/// the app (a tmux session, an agent's variables) reaches the server. The
+/// server's log goes to ~/Library/Logs/Agent Desk/server.log. It returns
+/// the server and the address with its token, which only stdout carries.
+/// The port is fixed (7318, next to the terminal default 7317) because the
+/// page's storage (drafts, reading positions, pins, settings) belongs to its
+/// origin, port included; a busy port still falls back to a free one.
 fn start() -> Result<(Child, String), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let server = exe.parent().ok_or("no app directory")?.join("agent-desk");
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let mut child = Command::new(shell)
+    let mut cmd = Command::new(&shell);
+    cmd.env_clear()
+        .env("SHELL", &shell)
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+    for key in [
+        "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
+    ] {
+        if let Some(v) = std::env::var_os(key) {
+            cmd.env(key, v);
+        }
+    }
+    let log = server_log()
+        .map(Stdio::from)
+        .unwrap_or_else(|_| Stdio::null());
+    let mut child = cmd
         .arg("-lc")
-        .arg(r#"exec "$0" --no-open --port 0"#)
+        .arg(r#"exec "$0" --no-open --port 7318"#)
         .arg(&server)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(log)
         .spawn()
         .map_err(|e| format!("could not start {}: {e}", server.display()))?;
     let stdout = child.stdout.take().ok_or("no server output")?;
@@ -87,6 +107,27 @@ fn start() -> Result<(Child, String), String> {
             Err("the Agent Desk server did not start within 30 seconds".into())
         }
     }
+}
+
+/// server_log opens the server's log, owner-only, starting it afresh past
+/// 1 MB so it cannot grow without bound.
+fn server_log() -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+    let home = std::env::var_os("HOME").ok_or(std::io::ErrorKind::NotFound)?;
+    let dir = std::path::Path::new(&home).join("Library/Logs/Agent Desk");
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&dir)?;
+    let path = dir.join("server.log");
+    let fresh = std::fs::metadata(&path).is_ok_and(|m| m.len() > 1 << 20);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(!fresh)
+        .write(true)
+        .truncate(fresh)
+        .mode(0o600)
+        .open(path)
 }
 
 fn tray(app: &AppHandle) -> tauri::Result<()> {

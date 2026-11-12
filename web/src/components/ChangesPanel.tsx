@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { patchRows, type DiffRow } from '../model/diff'
 import { composeReview, loadComments, saveComments, type ReviewComment } from '../model/review'
 import type { ChangedFile, Changes } from '../types'
+import { enterAction, insertNewline, isTouch, nativeNewline } from '../model/compose'
 
 interface Props {
   sessionId: string
@@ -235,7 +236,15 @@ function FileDiff({ file, comments, draft, onPick, onDraft, onAdd, onCancel, onR
                           onDraft(e.target.value)
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onAdd()
+                          const touch = isTouch()
+                          const enter = enterAction(e.nativeEvent, touch)
+                          if (enter === 'send') {
+                            e.preventDefault()
+                            onAdd()
+                          } else if (enter === 'newline' && !nativeNewline(e.nativeEvent, touch)) {
+                            e.preventDefault()
+                            insertNewline(e.currentTarget)
+                          }
                           if (e.key === 'Escape') onCancel()
                         }}
                       />

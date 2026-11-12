@@ -74,7 +74,8 @@ test('a conversation exports to Markdown', async ({ page }) => {
 test('a session exports its conversation', async ({ page }) => {
   await page.goto(`${base}/s/a0000011#t=${token}`)
   const download = page.waitForEvent('download')
-  await page.getByRole('main').getByRole('button', { name: 'Export' }).click()
+  await page.getByRole('main').getByRole('button', { name: 'Session actions' }).click()
+  await page.getByRole('main').getByRole('menuitem', { name: 'Export' }).click()
   expect((await download).suggestedFilename()).toMatch(/\.md$/)
 })
 

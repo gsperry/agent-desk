@@ -4,7 +4,7 @@ import type { Pending } from '../model/pending'
 import { buildHeader } from '../model/transcript'
 import type { SessionView as Session } from '../types'
 import type { PathRef } from '../model/paths'
-import { OpenPathContext } from '../session-context'
+import { OpenPathContext, SessionDirContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
@@ -21,6 +21,7 @@ import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
 import { can, useRemote } from '../remote-context'
 import { ContextMeter } from './ContextMeter'
+import { LiveActivity } from './LiveActivity'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
 import { SessionActions } from './SessionActions'
@@ -42,6 +43,8 @@ interface Props {
   readScreen: (id: string) => Promise<{ screen?: Screen; message?: string }>
   readStyled: (id: string) => Promise<{ screen?: string; message?: string }>
   answer: (id: string, a: Answer) => Promise<string | null>
+  interrupt: (id: string) => Promise<string | null>
+  loadOverview: () => Promise<Record<string, { promptAt?: string }> | null>
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
   act: (id: string, a: SessionAction) => Promise<string | null>
@@ -74,6 +77,8 @@ export function SessionView(props: Props) {
     },
     [openPath, sessionId],
   )
+  const { loadOverview } = props
+  const promptAt = useCallback(() => loadOverview().then((o) => o?.[sessionId]?.promptAt), [loadOverview, sessionId])
   const [sends, setSends] = useState(0)
   const [showPane, setShowPane] = useState(false)
   // Captured once, so the divider stays put while the session is marked
@@ -141,6 +146,7 @@ export function SessionView(props: Props) {
 
   return (
     <OpenPathContext.Provider value={can(remoteInfo, 'local') ? openHere : null}>
+    <SessionDirContext.Provider value={session.directory}>
     <AgentLinksContext.Provider value={agentLinks}>
     <PinsContext.Provider value={session.agentSessionId ? pins : null}>
         <main className="main">
@@ -150,14 +156,20 @@ export function SessionView(props: Props) {
                 {glyph(session.status)}
               </span>
               <h1>{session.name}</h1>
-              <span className={`chip status-chip status-${session.status}`}>{session.status}</span>
-              {header.permissionMode && <span className="chip">{header.permissionMode}</span>}
-            <ContextMeter items={d.items} />
+              <span className={`chip status-chip status-${session.status}`}>
+                {session.status}
+                {counts.running > 0 && session.status !== 'working' ? ` · ${String(counts.running)} agent${counts.running === 1 ? '' : 's'} running` : ''}
+              </span>
+              <span className="session-info">
+                {header.permissionMode && <span>{header.permissionMode}</span>}
+                <ContextMeter items={d.items} />
+              </span>
             {props.conflicts.length > 0 && (
             <span className="chip conflict-chip" title={conflictTitle(props.conflicts, props.sessions)}>
               ⚠ {props.conflicts.length} shared file{props.conflicts.length === 1 ? '' : 's'}
             </span>
           )}
+          <div className="session-views" role="group" aria-label="Views">
           <button
             type="button"
             className="chip chip-button changes-toggle"
@@ -233,6 +245,20 @@ export function SessionView(props: Props) {
                   Terminal
                 </button>
               )}
+              </div>
+              <SessionActions
+                session={session}
+                groups={props.groups}
+                act={props.act}
+                manage={can(remoteInfo, 'manage')}
+                onExport={
+                  isClaude && session.agentSessionId && d.items.length > 0
+                    ? () => {
+                        if (session.agentSessionId) props.exportConversation(session.agentSessionId)
+                      }
+                    : undefined
+                }
+              />
             </div>
             <div className="session-sub">
               {header.title && <span>{header.title}</span>}
@@ -240,20 +266,8 @@ export function SessionView(props: Props) {
                 {session.project.name}
                 {session.branch ? ` · ${session.branch}` : ''}
               </span>
-              {can(remoteInfo, 'manage') && <SessionActions session={session} groups={props.groups} act={props.act} />}
-              {isClaude && session.agentSessionId && d.items.length > 0 && (
-                <button
-                  type="button"
-                  className="chip chip-button export-button"
-                  onClick={() => {
-                    if (session.agentSessionId) props.exportConversation(session.agentSessionId)
-                  }}
-                >
-                  Export
-                </button>
-              )}
             {header.prLinks.map((pr) => (
-                <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="chip">
+                <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer noopener" className="pr-link">
                   PR {pr.number !== undefined ? `#${String(pr.number)}` : ''}
                 </a>
               ))}
@@ -373,6 +387,18 @@ export function SessionView(props: Props) {
               </div>
             </div>
           )}
+          {session.running && session.status === 'working' && (
+            <LiveActivity
+              items={d.items}
+              dir={session.directory}
+              promptAt={promptAt}
+              onInterrupt={
+                mayReply
+                  ? () => props.interrupt(sessionId)
+                  : undefined
+              }
+            />
+          )}
           {mayReply ? (
             <Composer
               key={sessionId}
@@ -430,6 +456,7 @@ export function SessionView(props: Props) {
         </main>
     </PinsContext.Provider>
     </AgentLinksContext.Provider>
+    </SessionDirContext.Provider>
     </OpenPathContext.Provider>
   )
 }

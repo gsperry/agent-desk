@@ -11,14 +11,21 @@ interface Props {
 }
 
 const colorKey = 'agent-desk:terminal-color'
+// screenKey remembers whether a pane that opened by itself, because the
+// session waits, shows the screen or only the question and its answers.
+// Off unless chosen: the question is read off the screen and shown above
+// its answers, so the raw screen would repeat it.
+const screenKey = 'agent-desk:terminal-screen'
 
 // The live pane refreshes this often while open.
 const refreshMs = 1000
 
 // LivePane shows the agent's terminal screen and answers dialogs on it. It
-// is the one place Agent Desk shows terminal text.
+// is the one place Agent Desk shows terminal text. Without onClose it was
+// opened by a waiting session, and the screen itself can be hidden.
 export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props) {
   const [color, setColor] = useState(() => localStorage.getItem(colorKey) === 'on')
+  const [screenOn, setScreenOn] = useState(() => localStorage.getItem(screenKey) === 'on')
   const [screen, setScreen] = useState<Screen | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -26,6 +33,7 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
   const [typing, setTyping] = useState<{ index: number; label: string; text: string } | null>(null)
   const [tick, setTick] = useState(0)
   const pre = useRef<HTMLPreElement>(null)
+  const answerBox = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     let live = true
@@ -47,6 +55,15 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
     if (pre.current) pre.current.scrollTop = pre.current.scrollHeight
   }, [screen?.text])
 
+  // The answer box grows with its text.
+  const answerText = typing?.text
+  useLayoutEffect(() => {
+    const box = answerBox.current
+    if (!box) return
+    box.style.height = 'auto'
+    box.style.height = `${String(box.scrollHeight)}px`
+  }, [answerText])
+
   const send = (a: Answer) => {
     setBusy(true)
     void answer(sessionId, a).then((err) => {
@@ -58,52 +75,98 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
   }
 
   const dialog = screen?.dialog
+  const asking = dialog !== undefined && dialog.options.length > 0
+  // A screen whose question could not be read is always shown.
+  const showScreen = onClose !== undefined || screenOn || (screen !== null && !asking)
   return (
     <section className="live-pane" aria-label="Terminal">
       <header className="live-head">
-        <span>Terminal</span>
-        <button
-          type="button"
-          className="link-button color-toggle"
-          aria-pressed={color}
-          title="Show the screen in color, read-only"
-          onClick={() => {
-            localStorage.setItem(colorKey, color ? 'off' : 'on')
-            setColor(!color)
-          }}
-        >
-          {color ? 'Plain text' : 'Color'}
-        </button>
+        <span>{asking && onClose === undefined ? 'Question' : 'Terminal'}</span>
+        {showScreen && (
+          <button
+            type="button"
+            className="link-button color-toggle"
+            aria-pressed={color}
+            title="Show the screen in color, read-only"
+            onClick={() => {
+              localStorage.setItem(colorKey, color ? 'off' : 'on')
+              setColor(!color)
+            }}
+          >
+            {color ? 'Plain text' : 'Color'}
+          </button>
+        )}
+        {!onClose && asking && (
+          <button
+            type="button"
+            className="link-button"
+            aria-pressed={!screenOn}
+            title="Applies whenever a waiting session opens the terminal"
+            onClick={() => {
+              localStorage.setItem(screenKey, screenOn ? 'off' : 'on')
+              setScreenOn(!screenOn)
+            }}
+          >
+            {screenOn ? 'Hide screen' : 'Show screen'}
+          </button>
+        )}
         {onClose && (
           <button type="button" className="link-button" onClick={onClose}>
             Hide
           </button>
         )}
       </header>
-      {color ? (
-        <StyledTerminal sessionId={sessionId} read={readStyled} />
-      ) : (
-        <pre ref={pre} className="live-screen">
-          {screen?.text ?? 'Reading the screen…'}
-        </pre>
-      )}
+      {showScreen &&
+        (color ? (
+          <StyledTerminal sessionId={sessionId} read={readStyled} />
+        ) : (
+          <pre ref={pre} className="live-screen">
+            {screen?.text ?? 'Reading the screen…'}
+          </pre>
+        ))}
+
       {dialog && dialog.options.length > 0 && (
         <div className="live-dialog">
+          {dialog.steps && dialog.steps.length > 1 && (
+            <ol className="live-steps" aria-label="Questions">
+              {dialog.steps.map((s) => (
+                <li key={s.label} className={s.done ? 'done' : undefined}>
+                  {s.done ? '✓ ' : ''}
+                  {s.label}
+                </li>
+              ))}
+            </ol>
+          )}
           {dialog.question && <p className="live-question">{dialog.question}</p>}
+          {dialog.multi && <p className="muted live-multi-hint">Tick each answer that applies, then Next.</p>}
           <div className="live-options">
             {dialog.options.map((o) => (
               <button
                 key={o.index}
                 type="button"
-                className={o.selected ? 'live-option selected' : 'live-option'}
+                className={['live-option', o.selected && 'selected', o.next && 'live-next', o.checked && 'checked'].filter(Boolean).join(' ')}
                 disabled={busy}
+                aria-pressed={o.checked}
                 title={o.free ? 'Answer in your own words' : undefined}
                 onClick={() => {
                   if (o.free) setTyping({ index: o.index, label: o.label, text: typing?.index === o.index ? typing.text : '' })
                   else send({ action: 'choose', index: o.index, label: o.label })
                 }}
               >
-                <span className="live-option-index">{o.index + 1}</span> {o.label}
+                {o.next ? (
+                  <span className="live-option-index">→</span>
+                ) : (
+                  <span className="live-option-index">{o.number ?? o.index + 1}</span>
+                )}
+                {o.checked !== undefined && (
+                  <span className="live-check" aria-hidden="true">
+                    {o.checked ? '☑' : '☐'}
+                  </span>
+                )}{' '}
+                <span className="live-option-text">
+                  {o.label}
+                  {o.description && <span className="live-option-desc">{o.description}</span>}
+                </span>
               </button>
             ))}
           </div>
@@ -115,9 +178,13 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
                 if (typing.text.trim()) send({ action: 'text', index: typing.index, label: typing.label, text: typing.text })
               }}
             >
-              <input
+              {/* A textarea so long answers wrap and the box grows; the
+                  answer is still one line, since Enter submits it. */}
+              <textarea
+                ref={answerBox}
+                rows={1}
                 aria-label="Your answer"
-                placeholder="Your answer, one line"
+                placeholder="Your answer, sent as one line"
                 autoFocus
                 maxLength={2000}
                 value={typing.text}
@@ -128,6 +195,9 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose }: Props
                   if (e.key === 'Escape') {
                     e.stopPropagation()
                     setTyping(null)
+                  } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault()
+                    e.currentTarget.form?.requestSubmit()
                   }
                 }}
               />
