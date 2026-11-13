@@ -1,0 +1,99 @@
+name: Release
+
+# A tag such as v1.2.3 builds the command for macOS and Linux and the
+# universal macOS app, and creates a draft release with them and their
+# checksums; publish it after checking it. Run by hand, it builds the same
+# files as workflow artifacts and makes no release.
+#
+# The app is signed and notarized when these repository secrets exist:
+#   APPLE_CERTIFICATE           Developer ID Application certificate, .p12, base64
+#   APPLE_CERTIFICATE_PASSWORD  its password
+#   APPLE_SIGNING_IDENTITY      "Developer ID Application: Name (TEAMID)"
+#   APPLE_API_ISSUER            App Store Connect API issuer id
+#   APPLE_API_KEY               App Store Connect API key id
+#   APPLE_API_KEY_P8            the key's .p8 file, as text
+# Without them the app is built unsigned.
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # The version comes from git describe, which needs the tags.
+          fetch-depth: 0
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Rust targets and Tauri CLI
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo install tauri-cli --version "^2" --locked
+      - name: Test
+        run: make test
+      - name: Command for macOS and Linux
+        run: make release-cli
+      - name: Notarization key
+        if: env.APPLE_API_KEY_P8 != ''
+        run: |
+          key="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_P8" > "$key"
+          chmod 600 "$key"
+          echo "APPLE_API_KEY_PATH=$key" >> "$GITHUB_ENV"
+      - name: Universal macOS app
+        run: |
+          # A missing secret arrives as an empty value, which the Tauri CLI
+          # would take as a request to sign; unset those.
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH; do
+            [ -n "${!v:-}" ] || unset "$v"
+          done
+          make desktop-universal
+      - name: Check the signature
+        if: env.APPLE_SIGNING_IDENTITY != ''
+        run: |
+          app="desktop/target/universal-apple-darwin/release/bundle/macos/Agent Desk.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+      - name: Note an unsigned build
+        if: env.APPLE_SIGNING_IDENTITY == ''
+        run: echo "The macOS app is unsigned; the Apple signing secrets are not set." >> "$GITHUB_STEP_SUMMARY"
+      - name: Checksums
+        run: make checksums
+      - name: Keep the files
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: agent-desk-${{ github.ref_name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
+      - name: Draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes \
+            --title "Agent Desk ${GITHUB_REF_NAME#v}" \
+            dist/*.tar.gz dist/*.zip dist/SHA256SUMS

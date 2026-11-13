@@ -10,3 +10,5 @@ web/playwright-report/
 .playwright-mcp/
 web/.e2e-fixtures/
 /agent-desk
+/dist/
+/packaging/homebrew/out/
