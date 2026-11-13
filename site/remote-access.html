@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Remote access to Claude Code agents with Agent Desk: Tailscale or Cloudflare</title>
+  <meta name="description" content="Check on your Claude Code agents and answer their questions from your phone: set up Agent Desk's remote access through Tailscale or a Cloudflare Tunnel with Access, and choose what remote devices may do.">
+  <meta property="og:title" content="Agent Desk remote access: answer your agents from your phone">
+  <meta property="og:description" content="Set up Agent Desk's remote access through Tailscale or Cloudflare Access, with three permission levels changed only at the desk.">
+  <meta property="og:image" content="https://agent-desk.app/img/og.png">
+  <meta property="og:url" content="https://agent-desk.app/remote-access">
+  <meta property="og:type" content="article">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://agent-desk.app/img/og.png">
+  <link rel="canonical" href="https://agent-desk.app/remote-access">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="wordmark" href="/">Agent&nbsp;Desk<span class="mark" aria-hidden="true"></span></a>
+    <nav aria-label="Site">
+      <a href="/#features">Features</a>
+      <a href="/#how">How it works</a>
+      <a href="/#local">Local and safe</a>
+      <a href="/remote-access">Remote access</a>
+      <a href="/#faq">FAQ</a>
+      <a href="/#install">Install</a>
+      <a class="gh" href="https://github.com/gsperry/agent-desk" aria-label="Agent Desk on GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </nav>
+  </header>
+
+  <main class="doc">
+    <p class="eyebrow">Guide</p>
+    <h1>Remote access</h1>
+    <p class="lede">Check on your agents and answer a waiting one from your phone or another computer. Remote access is off until you turn it on at the desk, and only the people you list get in.</p>
+
+    <figure class="shot phone">
+      <figcaption>Answering from a phone</figcaption>
+      <img src="/img/phone.png" width="390" height="818" loading="lazy" alt="Agent Desk on a phone: a session waiting on a permission prompt, with the question and a button for each answer">
+    </figure>
+
+    <h2>How it works</h2>
+    <p>Agent Desk keeps listening on 127.0.0.1 with its own token. Remote devices come in another way: a proxy you choose forwards them to an owner-only socket on your Mac, <code>~/Library/Application Support/agent-desk/remote.sock</code>, which no other account on the machine can open. The proxy proves who each person is, and Agent Desk checks that identity on every request. Remote devices never see your local link.</p>
+
+    <h2>Choose what remote devices may do</h2>
+    <table>
+      <thead><tr><th>Level</th><th>A remote device can</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Read and answer</strong></td><td>Read sessions, transcripts, changes, history and usage; answer a waiting question or permission prompt, including typed answers</td></tr>
+        <tr><td><strong>Reply</strong></td><td>All of that, and send replies and interrupt a working agent</td></tr>
+        <tr><td><strong>Start and stop</strong></td><td>All of that, and start, stop, revive, archive and move sessions</td></tr>
+      </tbody>
+    </table>
+    <p>Settings, rules, catch-up summaries, opening files in your editor and pasting images stay on the desk at every level. The level itself can only be changed on the desk.</p>
+
+    <h2>Option 1: Tailscale</h2>
+    <p>Private to your tailnet: traffic goes straight between your devices, encrypted end to end. Each device needs <a href="https://tailscale.com">Tailscale</a>.</p>
+    <ol>
+      <li>In Agent Desk, open Settings → Remote access, turn it on, choose <strong>Tailscale</strong>, and list the Tailscale logins allowed in.</li>
+      <li>Enter the host name devices use: your Mac's tailnet name, such as <code>your-mac.tail1234.ts.net</code>. Save.</li>
+      <li>Once, on the Mac, point Tailscale at the socket (Settings shows the exact command):
+        <pre class="terminal"><code><span class="prompt">$</span> tailscale serve --bg --https=443 "unix:$HOME/Library/Application Support/agent-desk/remote.sock"</code></pre>
+      </li>
+      <li>On your phone, signed in to the same tailnet, open <code>https://your-mac.tail1234.ts.net/</code>.</li>
+    </ol>
+    <p class="small">Tailscale publishes your Mac's tailnet name in public certificate logs. If the machine's name is one you would rather not publish, give it another name in Tailscale first (<code>tailscale set --hostname</code>).</p>
+
+    <h2>Option 2: Cloudflare Tunnel and Access</h2>
+    <p>Any browser, no app on the phone, on a domain you have in Cloudflare. Cloudflare Access puts a login in front of it, such as a one-time code by email. Cloudflare ends the encryption at its edge, so it can read the traffic.</p>
+    <ol>
+      <li>In Cloudflare Zero Trust, add a self-hosted Access application for a name such as <code>desk.example.com</code>, with a policy that allows your email. Copy its <strong>audience (AUD) tag</strong>.</li>
+      <li>In Agent Desk, open Settings → Remote access, turn it on, choose <strong>Cloudflare Tunnel</strong>, and enter your Zero Trust team name, the audience tag, the emails allowed in and the host name. Save.</li>
+      <li>Create a tunnel with <code>cloudflared</code>, running as your own account, and give it the ingress Settings shows. It points the host name at the socket and requires Access.</li>
+      <li>Open <code>https://desk.example.com/</code> anywhere and sign in through Access.</li>
+    </ol>
+    <p>Agent Desk does not trust Cloudflare's email header. It verifies the token Access signs for every request (its signature, team, audience and expiry), using your team's public signing keys, which it fetches from Cloudflare. That is the only network call Agent Desk makes.</p>
+
+    <h2>Good to know</h2>
+    <ul>
+      <li>Use one proxy at a time; when you switch, stop the other one.</li>
+      <li>Turning remote access off, removing a person or changing the proxy closes their open connections at once.</li>
+      <li>In the desktop app, Settings → Desktop app → "Start at login, in the background" keeps remote access running after a restart.</li>
+      <li>The full security model is in <a href="https://github.com/gsperry/agent-desk/blob/main/SECURITY.md">SECURITY.md</a>.</li>
+    </ul>
+
+    <p><a class="button primary" href="/#install">Install Agent Desk</a></p>
+  </main>
+
+  <footer class="foot">
+    <p>Agent Desk is an independent project, not affiliated with or endorsed by the agent-manager authors or Anthropic.</p>
+    <p><a href="https://github.com/gsperry/agent-desk">GitHub</a> · <a href="https://github.com/gsperry/agent-desk/releases">Releases</a> · <a href="https://github.com/gsperry/agent-desk/blob/main/LICENSE">Apache 2.0</a> · <a href="https://github.com/gsperry/agent-desk/blob/main/SECURITY.md">Security</a> · Screenshots show made-up demo sessions.</p>
+  </footer>
+
+  <script src="/copy.js" defer></script>
+</body>
+</html>

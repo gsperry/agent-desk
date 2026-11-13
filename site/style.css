@@ -415,6 +415,115 @@ h3 {
   font-size: 0.93rem;
 }
 
+/* Guide pages */
+
+.doc {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 5rem;
+}
+
+.doc h1 {
+  margin: 0.3rem 0 1rem;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  letter-spacing: -0.02em;
+}
+
+.doc h2 {
+  margin: 2.6rem 0 0.8rem;
+  font-size: 1.35rem;
+}
+
+.doc p,
+.doc li {
+  color: var(--dim);
+}
+
+.doc li {
+  margin: 0.45rem 0;
+}
+
+.doc .lede {
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.doc table {
+  width: 100%;
+  margin: 0.5rem 0 1rem;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+.doc th,
+.doc td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc td {
+  color: var(--dim);
+}
+
+.doc .terminal {
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.doc .shot.phone {
+  width: 15rem;
+  margin: 2rem auto;
+}
+
+/* FAQ */
+
+.faq {
+  max-width: 52rem;
+  margin-bottom: 4rem;
+}
+
+.faq details {
+  border-bottom: 1px solid var(--border);
+}
+
+.faq summary {
+  padding: 1rem 0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq summary::before {
+  display: inline-block;
+  width: 1.2rem;
+  color: var(--accent);
+  content: '+';
+}
+
+.faq details[open] summary::before {
+  content: '\2212';
+}
+
+.faq details p {
+  margin: 0 0 1.1rem 1.2rem;
+  color: var(--dim);
+}
+
+/* Video in a figure */
+
+.shot video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* Install */
 
 .install {
