@@ -145,6 +145,7 @@ func TestAtPrompt(t *testing.T) {
 		{"draft in the prompt", rule + "\n❯ hello\n" + rule + "\n", false},
 		{"a dialog option", rule + "\n❯ 1. Yes\n  2. No\n" + rule + "\n", false},
 		{"no rules", "❯ \n", false},
+		{"titled top rule", strings.Repeat("─", 40) + " s3 Fidelity\n❯ \n" + rule + "\n", true},
 	}
 	for _, tt := range tests {
 		if got := AtPrompt(tt.screen); got != tt.want {
@@ -174,5 +175,14 @@ func TestAtPromptRealScreen(t *testing.T) {
 	}
 	if AtPrompt(string(perm)) {
 		t.Fatal("permission dialog seen as at the prompt")
+	}
+}
+
+// The prompt box's top rule can carry the session's title; a draft in the
+// box is still found.
+func TestDraftUnderTitledRule(t *testing.T) {
+	screen := strings.Repeat("─", 40) + " s3 Fidelity\n❯ half-typed\n" + strings.Repeat("─", 40) + "\n"
+	if r := CheckPane(screen); r == nil || r.Reason != ReasonDraft {
+		t.Fatalf("draft not found: %v", r)
 	}
 }

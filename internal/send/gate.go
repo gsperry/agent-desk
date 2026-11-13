@@ -105,7 +105,7 @@ func AtPrompt(screen string) bool {
 	}
 	var rules []int
 	for i, l := range lines {
-		if ruleLine.MatchString(l) {
+		if isRule(l) {
 			rules = append(rules, i)
 		}
 	}
@@ -147,7 +147,7 @@ func CheckPane(screen string) *Refused {
 	// The composer sits between the last two horizontal rules.
 	var rules []int
 	for i, l := range lines {
-		if ruleLine.MatchString(l) {
+		if isRule(l) {
 			rules = append(rules, i)
 		}
 	}
@@ -159,6 +159,17 @@ func CheckPane(screen string) *Refused {
 		}
 	}
 	return nil
+}
+
+// isRule reports a horizontal rule: dashes alone, or Claude Code's rule
+// with the session's title drawn into it ("──── s3 Fidelity ─"), which
+// can be the top of the prompt box.
+func isRule(l string) bool {
+	if ruleLine.MatchString(l) {
+		return true
+	}
+	t := strings.TrimSpace(l)
+	return strings.HasPrefix(t, "──") && strings.Count(t, "─") >= 20 && len([]rune(t))-strings.Count(t, "─") <= 80
 }
 
 // isDraft reports a composer line holding text. Claude pads the prompt

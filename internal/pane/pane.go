@@ -117,6 +117,10 @@ func reviewScreen(lines []string) bool {
 		if reviewPrompt.MatchString(l) {
 			return true
 		}
+		// A rule can close the screen below the options.
+		if isRule(lines[i]) {
+			continue
+		}
 		if !numbered.MatchString(lines[i]) {
 			return false
 		}
@@ -200,7 +204,7 @@ func description(lines []string, at, end int) string {
 	var parts []string
 	for i := at + 1; i < end; i++ {
 		l := lines[i]
-		if separator.MatchString(l) || indentOf(l) <= indent+2 {
+		if isRule(l) || indentOf(l) <= indent+2 {
 			break
 		}
 		parts = append(parts, strings.TrimSpace(l))
@@ -264,7 +268,7 @@ func textColumn(line string) int {
 
 func isSibling(line string, col int) bool {
 	r := []rune(line)
-	if len(r) <= col || separator.MatchString(line) {
+	if len(r) <= col || isRule(line) {
 		return false
 	}
 	for _, c := range r[:col] {
@@ -288,7 +292,7 @@ const maxQuestionLines = 12
 func question(lines []string, gaps []bool, top, first, width int) string {
 	last := -1
 	for i := first - 1; i >= top && i >= first-4; i-- {
-		if !separator.MatchString(lines[i]) {
+		if !isRule(lines[i]) {
 			last = i
 			break
 		}
@@ -329,7 +333,7 @@ func question(lines []string, gaps []bool, top, first, width int) string {
 // "←  ☒ Checks  ☐ Timing  ✔ Submit  →". A bar with one tab is a single
 // question and gives no steps.
 func steps(lines []string, top, first int) []Step {
-	for i := first - 1; i >= top && i >= first-12; i-- {
+	for i := first - 1; i >= top; i-- {
 		t := strings.TrimSpace(lines[i])
 		t = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(t, "←"), "→"))
 		var out []Step
@@ -352,6 +356,24 @@ func steps(lines []string, top, first int) []Step {
 	return nil
 }
 
+// isRule reports a horizontal rule: dashes alone, or Claude Code's rule
+// with the session's title drawn into it ("──── s3 Fidelity ─").
+func isRule(l string) bool {
+	return separator.MatchString(l) || titledRule(l)
+}
+
+// titledRule reports a line of at least 20 box-drawing dashes that starts
+// with them and carries a short title.
+func titledRule(l string) bool {
+	t := strings.TrimSpace(l)
+	if !strings.HasPrefix(t, "──") {
+		return false
+	}
+	dashes := strings.Count(t, "─")
+	rest := len([]rune(t)) - dashes
+	return dashes >= 20 && rest <= 80
+}
+
 // unbar replaces the bar Claude Code draws down the left of a question
 // (│ or ▎) with a space, keeping the text where it was.
 func unbar(l string) string {
@@ -368,7 +390,7 @@ func unbar(l string) string {
 // separator, tab bar, box edge or the input prompt.
 func questionLine(l string) bool {
 	t := strings.TrimSpace(l)
-	if separator.MatchString(l) || strings.HasPrefix(t, "❯") || strings.HasPrefix(t, "←") {
+	if isRule(l) || strings.HasPrefix(t, "❯") || strings.HasPrefix(t, "←") {
 		return false
 	}
 	return !strings.ContainsAny(t, "☐☒✔│╭╰┃")
