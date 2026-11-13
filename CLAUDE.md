@@ -25,6 +25,8 @@ make test    # go test -race ./... and vitest
 make lint    # gofmt, go vet, staticcheck, eslint, tsc
 make e2e     # Playwright smoke test on testdata/fixtures/desk
 make desktop # desktop/target/release/bundle/macos/Agent Desk.app (Rust, Tauri CLI)
+make release-cli desktop-universal checksums VERSION=v0.1.0   # release files in dist/ (docs/releasing.md)
+scripts/homebrew.sh 0.1.0   # render the Homebrew formula and cask from a release's SHA256SUMS
 go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl   # raw-item report on real data
 go run ./tools/panecheck   # live screens Agent Desk cannot read as a question or prompt (read-only; -save DIR keeps flagged screens)
 go run ./tools/anonymize in.jsonl > testdata/transcripts/x.jsonl   # new sample
