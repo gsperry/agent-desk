@@ -4,10 +4,12 @@
 //
 // Closing the window hides it, so notifications and the counts keep
 // working; the dock icon, the menu-bar item and Control-Option-A bring it
-// back. The page may call two commands, granted in capabilities/page.json:
-// notify (a native notification, which the web view cannot show) and
-// set_badge (the dock badge and the menu-bar count).
+// back. The page may call the commands granted in capabilities/page.json:
+// notify (a native notification, which the web view cannot show; clicking
+// it opens the session it is about), set_badge (the dock badge and the
+// menu-bar count) and autostart_get/autostart_set (start at login).
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -23,18 +25,60 @@ use tauri_plugin_notification::NotificationExt;
 
 struct Server(Mutex<Option<Child>>);
 
+/// Notified remembers which session each recent notification is about, so a
+/// click on it can open that session.
+#[derive(Default)]
+struct Notified(Mutex<(i32, HashMap<i32, String>)>);
+
+/// How many notifications are remembered for a click.
+const NOTIFIED_KEPT: usize = 100;
+
+/// valid_session accepts the ids agent-manager gives sessions, so one can
+/// go into the navigation script as is.
+fn valid_session(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 const TRAY: &str = "main";
 
 #[tauri::command]
-fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
+fn notify(
+    app: AppHandle,
+    title: String,
+    body: String,
+    session: Option<String>,
+) -> Result<(), String> {
     let title: String = title.chars().take(200).collect();
     let body: String = body.chars().take(500).collect();
-    app.notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show()
-        .map_err(|e| e.to_string())
+    let mut builder = app.notification().builder().title(title).body(body);
+    if let Some(session) = session.filter(|s| valid_session(s)) {
+        let state = app.state::<Notified>();
+        let mut guard = state.0.lock().unwrap();
+        let (next, sessions) = &mut *guard;
+        *next = next.wrapping_add(1).max(1);
+        if sessions.len() >= NOTIFIED_KEPT {
+            let oldest = *sessions.keys().min().unwrap_or(next);
+            sessions.remove(&oldest);
+        }
+        sessions.insert(*next, session);
+        builder = builder.id(*next);
+    }
+    builder.show().map_err(|e| e.to_string())
+}
+
+/// open_session brings the window forward on a session, through the page's
+/// own router.
+fn open_session(app: &AppHandle, session: &str) {
+    show(app);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.eval(format!(
+            "history.pushState(null, '', '/s/{session}'); dispatchEvent(new PopStateEvent('popstate'))"
+        ));
+    }
 }
 
 #[tauri::command]
@@ -250,6 +294,7 @@ fn main() {
                 .build(),
         )
         .manage(Server(Mutex::new(None)))
+        .manage(Notified::default())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .macos_launcher(MacosLauncher::LaunchAgent)
@@ -297,6 +342,25 @@ fn main() {
                 .visible(!std::env::args().any(|a| a == HIDDEN))
                 .build()?;
             tray(app.handle())?;
+            // A click on a notification opens the session it is about.
+            let handle = app.handle().clone();
+            let _ = app.notification().on_action(move |action| {
+                let id = action.notification().map(|n| n.id());
+                let session = id.and_then(|id| {
+                    handle
+                        .state::<Notified>()
+                        .0
+                        .lock()
+                        .unwrap()
+                        .1
+                        .get(&id)
+                        .cloned()
+                });
+                match session {
+                    Some(s) => open_session(&handle, &s),
+                    None => show(&handle),
+                }
+            });
             // Another app may own the shortcut; the menu-bar item still works.
             if let Err(e) = app.global_shortcut().register(shortcut) {
                 eprintln!("agent-desk: Control-Option-A is taken: {e}");
