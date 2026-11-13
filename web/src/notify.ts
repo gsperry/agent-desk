@@ -44,15 +44,16 @@ export function desktopInvoke(w: unknown = globalThis): Invoke | undefined {
 /**
  * desktopNotifier shows native notifications through the app. macOS asks
  * for permission on the first one, so the page treats them as granted; the
- * user still turns them on in the sidebar. Clicking one brings the app
- * forward but does not open the session.
+ * user still turns them on in the sidebar. The tag names the session (a
+ * rule's is "rule-<id>"); the app opens that session when the
+ * notification is clicked.
  */
 export function desktopNotifier(invoke: Invoke): Notifier {
   return {
     permission: () => 'granted',
     request: () => Promise.resolve('granted'),
-    show(title, body) {
-      invoke('notify', { title, body }).catch(() => undefined)
+    show(title, body, tag) {
+      invoke('notify', { title, body, session: tag.replace(/^rule-/, '') }).catch(() => undefined)
     },
   }
 }
