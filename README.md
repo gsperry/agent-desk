@@ -43,7 +43,17 @@ To update a source build, pull and repeat the last two commands.
 
 ### Desktop app (macOS)
 
-`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Releases also carry the app (`Agent-Desk_<version>_macos.zip`); until a release is signed, right-click it and choose Open the first time. Quitting the app leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`. Settings → Desktop app → "Start at login, in the background" keeps remote access and notifications running after a restart. Run either the app or `agent-desk` from a terminal; if both run, remote access moves to whichever is left when the other stops.
+The app is signed and notarized, for Apple silicon and Intel, macOS 13 or later. Homebrew asks you to trust casks from third-party taps once:
+
+```sh
+brew tap gsperry/tap
+brew trust --cask gsperry/tap/agent-desk-app
+brew install --cask gsperry/tap/agent-desk-app
+```
+
+Or download `Agent-Desk_<version>_macos.zip` from the [releases](https://github.com/gsperry/agent-desk/releases). It is Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q, which leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`. Settings → Desktop app → "Start at login, in the background" keeps remote access and notifications running after a restart. Run either the app or `agent-desk` from a terminal; if both run, remote access moves to whichever is left when the other stops.
+
+To build it yourself, `make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app` (it needs Rust and the Tauri CLI: `cargo install tauri-cli --version "^2"`).
 
 ## Run
 
