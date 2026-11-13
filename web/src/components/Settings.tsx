@@ -6,6 +6,8 @@ import { useRemote } from '../remote-context'
 import { RemoteAccess, type RemoteSettings, type RemoteStatus } from './RemoteAccess'
 import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
+import { desktopInvoke } from '../notify'
+import { StartAtLogin } from './StartAtLogin'
 
 interface Props {
   prefs: ViewPrefs
@@ -54,6 +56,8 @@ const openClosed: [Open, string][] = [
 
 export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onClose }: Props) {
   const onDesk = !useRemote().remote
+  // The desktop app's own settings, present only inside it.
+  const desktop = onDesk ? desktopInvoke() : undefined
   const setRule = (id: string, p: Partial<Rule>) => {
     onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
   }
@@ -135,6 +139,11 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             }}
           />
         </Section>
+        {desktop && (
+          <Section title="Desktop app">
+            <StartAtLogin invoke={desktop} />
+          </Section>
+        )}
         <Section title="Start collapsed or expanded">
           <Segmented<EditsOpen>
             label="Edits and writes"

@@ -88,3 +88,36 @@ test('Escape clears the search', async ({ page }) => {
   await box.press('Escape')
   await expect(page.getByRole('main', { name: 'Search results' })).toBeHidden()
 })
+
+test('the desktop app adds a Start at login setting; a browser does not', async ({ page }) => {
+  await open(page, 'a0000001')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByRole('dialog', { name: 'Settings' }).getByRole('heading', { name: 'Desktop app' })).toHaveCount(0)
+
+  // A stand-in for the app's command bridge records what the page asks.
+  await page.addInitScript(() => {
+    const calls: unknown[] = []
+    let on = false
+    Object.assign(window, {
+      __calls: calls,
+      __TAURI__: {
+        core: {
+          invoke: (cmd: string, args: { enabled?: boolean }) => {
+            calls.push([cmd, args])
+            if (cmd === 'autostart_set') on = args.enabled === true
+            return Promise.resolve(cmd.startsWith('autostart') ? on : undefined)
+          },
+        },
+      },
+    })
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  const box = dialog.getByRole('checkbox', { name: 'Start at login, in the background' })
+  await expect(box).not.toBeChecked()
+  await box.check()
+  await expect(box).toBeChecked()
+  const calls = await page.evaluate(() => (window as unknown as { __calls: unknown[] }).__calls)
+  expect(calls).toContainEqual(['autostart_set', { enabled: true }])
+})

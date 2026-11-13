@@ -35,7 +35,7 @@ To update, pull and repeat the last two commands.
 
 ### Desktop app (macOS)
 
-`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Builds are unsigned, for the machine that made them. Quitting the app leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`.
+`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Builds are unsigned, for the machine that made them. Quitting the app leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`. Settings → Desktop app → "Start at login, in the background" keeps remote access and notifications running after a restart. Run either the app or `agent-desk` from a terminal; if both run, remote access moves to whichever is left when the other stops.
 
 ## Run
 

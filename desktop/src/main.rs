@@ -17,6 +17,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
@@ -44,6 +45,27 @@ fn set_badge(app: AppHandle, window: tauri::WebviewWindow, count: i64) -> Result
         let _ = tray.set_title(badge.map(|n| n.to_string()));
     }
     window.set_badge_count(badge).map_err(|e| e.to_string())
+}
+
+/// HIDDEN is the argument the login item passes, so the app starts in the
+/// background: remote access and notifications run, the window stays shut.
+const HIDDEN: &str = "--hidden";
+
+#[tauri::command]
+fn autostart_get(app: AppHandle) -> Result<bool, String> {
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn autostart_set(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    let launch = app.autolaunch();
+    if enabled {
+        launch.enable()
+    } else {
+        launch.disable()
+    }
+    .map_err(|e| e.to_string())?;
+    launch.is_enabled().map_err(|e| e.to_string())
 }
 
 /// show brings the window forward, unhiding it if it was closed.
@@ -134,9 +156,11 @@ fn start() -> Result<(Child, String), String> {
         .unwrap_or_else(|_| Stdio::null());
     let mut child = cmd
         .arg("-lc")
-        .arg(r#"[ -n "$AGENT_DESK_PATH" ] && PATH="$AGENT_DESK_PATH" && unset AGENT_DESK_PATH; exec "$0" --no-open --port 7318"#)
+        .arg(r#"[ -n "$AGENT_DESK_PATH" ] && PATH="$AGENT_DESK_PATH" && unset AGENT_DESK_PATH; exec "$0" --no-open --port 7318 --exit-with-stdin"#)
         .arg(&server)
-        .stdin(Stdio::null())
+        // The server keeps reading this pipe and stops when it closes, which
+        // happens however the app exits, killed included.
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(log)
         .spawn()
@@ -226,7 +250,18 @@ fn main() {
                 .build(),
         )
         .manage(Server(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![notify, set_badge])
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .macos_launcher(MacosLauncher::LaunchAgent)
+                .arg(HIDDEN)
+                .build(),
+        )
+        .invoke_handler(tauri::generate_handler![
+            notify,
+            set_badge,
+            autostart_get,
+            autostart_set
+        ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -259,6 +294,7 @@ fn main() {
                 .title("Agent Desk")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(420.0, 500.0)
+                .visible(!std::env::args().any(|a| a == HIDDEN))
                 .build()?;
             tray(app.handle())?;
             // Another app may own the shortcut; the menu-bar item still works.

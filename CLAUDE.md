@@ -63,7 +63,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `web/src/model`: pure view-model logic, covered by Vitest
 - `web/src/render`, `web/src/components`: React views
 - `web/embed.go` embeds `web/dist`.
-- `desktop`: Tauri 2 macOS shell. Runs the bundled server through the login shell, opens its 127.0.0.1 address, grants the page only `notify` and `set_badge` (dock and menu-bar count).
+- `desktop`: Tauri 2 macOS shell. Runs the bundled server through the login shell, opens its 127.0.0.1 address, grants the page only `notify`, `set_badge` (dock and menu-bar count) and `autostart_get`/`autostart_set` (start at login).
 
 ## Conventions
 
