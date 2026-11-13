@@ -222,11 +222,16 @@
             <li><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a></li>
           </ul>
         </div>
-        <pre class="terminal"><code><span class="prompt">$</span> brew install gsperry/tap/agent-desk
+        <pre class="terminal"><code><span class="out"># the command, which opens in your browser</span>
+<span class="prompt">$</span> brew install gsperry/tap/agent-desk
 <span class="prompt">$</span> agent-desk
-<span class="out">Agent Desk listening on http://127.0.0.1:7317</span></code></pre>
+
+<span class="out"># or the macOS app (trust the tap's cask once)</span>
+<span class="prompt">$</span> brew tap gsperry/tap
+<span class="prompt">$</span> brew trust --cask gsperry/tap/agent-desk-app
+<span class="prompt">$</span> brew install --cask gsperry/tap/agent-desk-app</code></pre>
       </div>
-      <p class="small">It opens in your browser. <a href="https://github.com/gsperry/agent-desk/releases">Releases</a> have the command for each platform and the macOS desktop app, which is unsigned until the next release. To build from source (Go 1.27 and Node 24), see the <a href="https://github.com/gsperry/agent-desk#install">README</a>. Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
+      <p class="small">The command opens Agent Desk in your browser; the app runs it in its own window. <a href="https://github.com/gsperry/agent-desk/releases">Releases</a> have the command for each platform and the macOS app, signed and notarized, for Apple silicon and Intel. To build from source (Go 1.27 and Node 24), see the <a href="https://github.com/gsperry/agent-desk#install">README</a>. Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
     </section>
   </main>
 
