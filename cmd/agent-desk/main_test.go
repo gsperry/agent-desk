@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWriteLauncher(t *testing.T) {
@@ -45,5 +48,22 @@ func TestSessionTokenIsNotInherited(t *testing.T) {
 	}
 	if _, set := os.LookupEnv("AGENT_DESK_TOKEN"); set {
 		t.Fatal("AGENT_DESK_TOKEN still set for child processes")
+	}
+}
+
+func TestUntilClosed(t *testing.T) {
+	r, w := io.Pipe()
+	ctx := untilClosed(context.Background(), r)
+	_, _ = w.Write([]byte("still here"))
+	select {
+	case <-ctx.Done():
+		t.Fatal("ended while the pipe was open")
+	case <-time.After(50 * time.Millisecond):
+	}
+	_ = w.Close()
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not end when the pipe closed")
 	}
 }

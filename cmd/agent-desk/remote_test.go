@@ -132,3 +132,41 @@ func TestRemoteListenerLeavesALiveSocket(t *testing.T) {
 		_ = c.Close()
 	}
 }
+
+// When the Agent Desk holding the socket stops, the other one takes over
+// remote access on its own.
+func TestRemoteListenerTakesOverWhenTheOtherStops(t *testing.T) {
+	old := remoteRetry
+	remoteRetry = 50 * time.Millisecond
+	defer func() { remoteRetry = old }()
+	dir, err := os.MkdirTemp("/tmp", "ad-remote-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	store := &remote.Store{Path: filepath.Join(dir, "remote.json")}
+	on := remote.Settings{Enabled: true, Host: "desk.ts.net", TailscaleLogins: []string{"a@b.c"}}
+	first := newRemoteListener(store, "")
+	first.handler = http.NotFoundHandler()
+	if _, err := first.Set(on); err != nil || !first.Status().Listening {
+		t.Fatalf("first: %v %+v", err, first.Status())
+	}
+	second := newRemoteListener(&remote.Store{Path: store.Path}, "")
+	second.handler = http.NotFoundHandler()
+	defer second.stop()
+	if err := second.apply(on); err == nil {
+		t.Fatal("second took the socket while the first held it")
+	}
+	first.stop()
+	deadline := time.Now().Add(3 * time.Second)
+	for !second.Status().Listening {
+		if time.Now().After(deadline) {
+			t.Fatalf("second never took over: %+v", second.Status())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// Turned off, it stops trying.
+	if _, err := second.Set(remote.Settings{}); err != nil || second.Status().Listening {
+		t.Fatalf("off: %v %+v", err, second.Status())
+	}
+}

@@ -29,7 +29,7 @@ export const browserNotifier: Notifier = {
   },
 }
 
-type Invoke = (cmd: string, args: Record<string, unknown>) => Promise<unknown>
+export type Invoke = (cmd: string, args: Record<string, unknown>) => Promise<unknown>
 
 interface DesktopWindow {
   __TAURI__?: { core?: { invoke?: Invoke } }

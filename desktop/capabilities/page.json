@@ -1,10 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "agent-desk-page",
-  "description": "The Agent Desk page, served by the bundled server on 127.0.0.1, may send notifications and set the dock badge, nothing else.",
+  "description": "The Agent Desk page, served by the bundled server on 127.0.0.1, may send notifications, set the dock badge, and read or change whether the app starts at login, nothing else.",
   "windows": ["main"],
   "remote": {
     "urls": ["http://127.0.0.1:*"]
   },
-  "permissions": ["allow-notify", "allow-set-badge"]
+  "permissions": ["allow-notify", "allow-set-badge", "allow-autostart-get", "allow-autostart-set"]
 }

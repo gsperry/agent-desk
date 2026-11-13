@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -55,17 +56,19 @@ func main() {
 	openBase := flag.String("open-base", "", "base URL to open instead of the server's own (development only)")
 	fixtures := flag.String("fixtures", "", "serve sessions from a fixture directory instead of agent-manager (testing only)")
 	showVersion := flag.Bool("version", false, "print the version")
+	exitWithStdin := flag.Bool("exit-with-stdin", false, "stop when standard input closes (the desktop app holds it open, so the server ends with the app even if the app is killed)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
 		return
 	}
 	err := run(options{
-		port:       *port,
-		open:       !*noOpen,
-		devOrigins: splitList(*devOrigins),
-		openBase:   *openBase,
-		fixtures:   *fixtures,
+		port:          *port,
+		open:          !*noOpen,
+		devOrigins:    splitList(*devOrigins),
+		openBase:      *openBase,
+		fixtures:      *fixtures,
+		exitWithStdin: *exitWithStdin,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -78,6 +81,8 @@ type options struct {
 	devOrigins []string
 	openBase   string
 	fixtures   string
+	// exitWithStdin stops the server when standard input closes.
+	exitWithStdin bool
 }
 
 func run(o options) error {
@@ -162,6 +167,9 @@ func run(o options) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if o.exitWithStdin {
+		ctx = untilClosed(ctx, os.Stdin)
+	}
 	go poller.Run(ctx)
 	go transcripts.Run(ctx)
 	go cleanPastes(ctx, pastes)
@@ -175,6 +183,19 @@ func run(o options) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+// untilClosed returns a context that ends when r reaches its end. The
+// desktop app keeps the server's stdin open; when the app exits, for any
+// reason, the pipe closes and the server stops with it.
+func untilClosed(parent context.Context, r io.Reader) context.Context {
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		_, _ = io.Copy(io.Discard, r)
+		log.Printf("standard input closed; stopping")
+		cancel()
+	}()
+	return ctx
 }
 
 // backend is everything Agent Desk asks agent-manager to do, from the CLI or
@@ -273,7 +294,17 @@ type remoteListener struct {
 	srv    *http.Server
 	addr   string
 	status server.RemoteStatus
+	// retry tries the socket again while another Agent Desk holds it, so
+	// remote access moves here when that one stops.
+	retry   *time.Timer
+	stopped bool
 }
+
+// errSocketBusy is another Agent Desk serving remote access already.
+var errSocketBusy = errors.New("another Agent Desk is already serving remote access")
+
+// remoteRetry is how often a busy remote socket is tried again.
+var remoteRetry = 15 * time.Second
 
 func (r *remoteListener) Get() remote.Settings { return r.store.Get() }
 
@@ -315,6 +346,10 @@ func (r *remoteListener) address(s remote.Settings) string {
 func (r *remoteListener) apply(s remote.Settings) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.retry != nil {
+		r.retry.Stop()
+		r.retry = nil
+	}
 	want := r.address(s)
 	if r.srv != nil && (!s.Enabled || want != r.addr) {
 		_ = r.srv.Close()
@@ -331,6 +366,16 @@ func (r *remoteListener) apply(s remote.Settings) error {
 	l, err := r.listen(s)
 	if err != nil {
 		r.status = server.RemoteStatus{Address: want, Error: err.Error()}
+		if errors.Is(err, errSocketBusy) && !r.stopped {
+			if r.retry != nil {
+				r.retry.Stop()
+			}
+			r.retry = time.AfterFunc(remoteRetry, func() {
+				if err := r.apply(r.store.Get()); err == nil {
+					log.Printf("remote access moved here")
+				}
+			})
+		}
 		return err
 	}
 	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second}
@@ -366,7 +411,7 @@ func (r *remoteListener) listen(s remote.Settings) (net.Listener, error) {
 		}
 		if c, err := net.DialTimeout("unix", r.socket, time.Second); err == nil {
 			_ = c.Close()
-			return nil, fmt.Errorf("another Agent Desk is already serving remote access at %s", r.socket)
+			return nil, fmt.Errorf("%w at %s", errSocketBusy, r.socket)
 		}
 		if err := os.Remove(r.socket); err != nil {
 			return nil, err
@@ -386,6 +431,10 @@ func (r *remoteListener) listen(s remote.Settings) (net.Listener, error) {
 func (r *remoteListener) stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.stopped = true
+	if r.retry != nil {
+		r.retry.Stop()
+	}
 	if r.srv != nil {
 		_ = r.srv.Close()
 	}
