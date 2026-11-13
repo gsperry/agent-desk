@@ -22,7 +22,15 @@ Status: early. Built and used on macOS (Apple Silicon); CI also builds and tests
 
 ## Install
 
-There are no prebuilt binaries yet. Build from source:
+With Homebrew, on macOS or Linux:
+
+```sh
+brew install gsperry/tap/agent-desk
+```
+
+It installs agent-manager and tmux with it; `brew upgrade` updates it. The [releases](https://github.com/gsperry/agent-desk/releases) also have the command for each platform as a tarball, with checksums.
+
+Or build from source:
 
 ```sh
 git clone https://github.com/gsperry/agent-desk
@@ -31,11 +39,11 @@ make build
 install -m 0755 bin/agent-desk ~/.local/bin/agent-desk   # or any directory on your PATH
 ```
 
-To update, pull and repeat the last two commands.
+To update a source build, pull and repeat the last two commands.
 
 ### Desktop app (macOS)
 
-`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Builds are unsigned, for the machine that made them. Quitting the app leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`. Settings → Desktop app → "Start at login, in the background" keeps remote access and notifications running after a restart. Run either the app or `agent-desk` from a terminal; if both run, remote access moves to whichever is left when the other stops.
+`make desktop` builds `desktop/target/release/bundle/macos/Agent Desk.app`: Agent Desk in its own window, with native notifications, a count of sessions that need you on the dock icon and in the menu bar, and Control-Option-A to bring it forward. Closing the window hides it; quit from the menu bar or with ⌘Q. It needs Rust and the Tauri CLI (`cargo install tauri-cli --version "^2"`). Copy the app to `/Applications`. Releases also carry the app (`Agent-Desk_<version>_macos.zip`); until a release is signed, right-click it and choose Open the first time. Quitting the app leaves every agent running. Its server logs to `~/Library/Logs/Agent Desk/server.log`. Settings → Desktop app → "Start at login, in the background" keeps remote access and notifications running after a restart. Run either the app or `agent-desk` from a terminal; if both run, remote access moves to whichever is left when the other stops.
 
 ## Run
 

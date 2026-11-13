@@ -45,8 +45,8 @@
           <a class="button" href="https://github.com/gsperry/agent-desk">View on GitHub</a>
         </div>
         <div class="command" role="group" aria-label="Install command">
-          <code><span class="prompt">$</span> git clone https://github.com/gsperry/agent-desk</code>
-          <button type="button" class="copy" data-copy="git clone https://github.com/gsperry/agent-desk">Copy</button>
+          <code><span class="prompt">$</span> brew install gsperry/tap/agent-desk</code>
+          <button type="button" class="copy" data-copy="brew install gsperry/tap/agent-desk">Copy</button>
         </div>
       </div>
       <figure class="shot hero-shot">
@@ -158,24 +158,20 @@
 
     <section id="install" class="section">
       <p class="eyebrow">Install</p>
-      <h2>Build it from source.</h2>
+      <h2>One command with Homebrew.</h2>
       <div class="install">
         <div>
           <h3>You need</h3>
           <ul>
-            <li><a href="https://agent-manager.dev">agent-manager</a> 0.48 or later, with tmux</li>
+            <li><a href="https://brew.sh">Homebrew</a>, on macOS or Linux; it installs <a href="https://agent-manager.dev">agent-manager</a> and tmux with Agent Desk</li>
             <li><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a></li>
-            <li>Go 1.27 and Node 24 or later, to build</li>
           </ul>
         </div>
-        <pre class="terminal"><code><span class="prompt">$</span> git clone https://github.com/gsperry/agent-desk
-<span class="prompt">$</span> cd agent-desk
-<span class="prompt">$</span> make build
-<span class="prompt">$</span> install -m 0755 bin/agent-desk ~/.local/bin/agent-desk
+        <pre class="terminal"><code><span class="prompt">$</span> brew install gsperry/tap/agent-desk
 <span class="prompt">$</span> agent-desk
 <span class="out">Agent Desk listening on http://127.0.0.1:7317</span></code></pre>
       </div>
-      <p class="small">It opens in your browser. On macOS, <code>make desktop</code> builds the desktop app instead (it needs Rust and the Tauri CLI). Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
+      <p class="small">It opens in your browser. <a href="https://github.com/gsperry/agent-desk/releases">Releases</a> have the command for each platform and the macOS desktop app, which is unsigned until the next release. To build from source (Go 1.27 and Node 24), see the <a href="https://github.com/gsperry/agent-desk#install">README</a>. Status: early, built and used on macOS; CI also builds and tests on Linux.</p>
     </section>
   </main>
 
