@@ -125,14 +125,44 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
       {dialog && dialog.options.length > 0 && (
         <div className="live-dialog">
           {dialog.steps && dialog.steps.length > 1 && (
-            <ol className="live-steps" aria-label="Questions">
-              {dialog.steps.map((s) => (
-                <li key={s.label} className={s.done ? 'done' : undefined}>
-                  {s.done ? '✓ ' : ''}
-                  {s.label}
-                </li>
-              ))}
-            </ol>
+            <div className="live-steps-row">
+              <ol className="live-steps" aria-label="Questions">
+                {dialog.steps.map((s) => (
+                  <li key={s.label} className={s.done ? 'done' : undefined}>
+                    {s.done ? '✓ ' : ''}
+                    {s.label}
+                  </li>
+                ))}
+              </ol>
+              {/* Answers are kept until Submit, so an earlier question can
+                  be answered again. */}
+              <span className="live-step-nav">
+                <button
+                  type="button"
+                  className="link-button"
+                  disabled={busy}
+                  title="Go back to the previous question; its answer is kept until you change it"
+                  onClick={() => {
+                    setTyping(null)
+                    send({ action: 'step', key: 'Left' })
+                  }}
+                >
+                  ‹ Previous question
+                </button>
+                <button
+                  type="button"
+                  className="link-button"
+                  disabled={busy}
+                  title="Go to the next question without answering this one"
+                  onClick={() => {
+                    setTyping(null)
+                    send({ action: 'step', key: 'Right' })
+                  }}
+                >
+                  Next question ›
+                </button>
+              </span>
+            </div>
           )}
           {dialog.question && <p className="live-question">{dialog.question}</p>}
           {dialog.multi && <p className="muted live-multi-hint">Tick each answer that applies, then Next.</p>}

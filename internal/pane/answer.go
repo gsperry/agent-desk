@@ -13,8 +13,16 @@ import (
 	"github.com/gsperry/agent-desk/internal/send"
 )
 
-// AllowedKeys are the only keys Agent Desk sends to an agent's pane.
-var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true}
+// AllowedKeys are the only keys Agent Desk sends to an agent's pane. Left
+// and Right move between the questions of a multi-question prompt, and are
+// sent only by a step answer.
+var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true}
+
+// pressKeys are the keys a key answer may press.
+var pressKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true}
+
+// stepKeys move to the previous or next question.
+var stepKeys = map[string]bool{"Left": true, "Right": true}
 
 var validID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
@@ -85,8 +93,8 @@ type Screen struct {
 }
 
 // Answer is a reply to a dialog: choose an option by index, confirming its
-// label still matches; answer a text option with text; or press one
-// allowed key.
+// label still matches; answer a text option with text; press one allowed
+// key; or step to the previous or next question (Key Left or Right).
 type Answer struct {
 	Action string `json:"action"`
 	Index  int    `json:"index"`
@@ -151,7 +159,7 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 	var keys []string
 	switch ans.Action {
 	case "key":
-		if !AllowedKeys[ans.Key] {
+		if !pressKeys[ans.Key] {
 			return &send.Refused{Reason: reasonBadKey, Message: fmt.Sprintf("Key %q is not one Agent Desk sends.", ans.Key)}
 		}
 		// A key answers a question on screen; with none, Escape would
@@ -182,6 +190,19 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 			return &send.Refused{Reason: reasonFree, Message: "That option takes text. Type your answer and send it."}
 		}
 		keys = d.Moves(ans.Index)
+	case "step":
+		if !stepKeys[ans.Key] {
+			return &send.Refused{Reason: reasonBadKey, Message: fmt.Sprintf("Key %q does not move between questions.", ans.Key)}
+		}
+		text, err := a.Reader.Read(ctx, id)
+		if err != nil {
+			return fmt.Errorf("could not read the session's screen, so nothing was pressed: %w", err)
+		}
+		d := Parse(text)
+		if d == nil || len(d.Steps) < 2 {
+			return &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a prompt with several questions."}
+		}
+		keys = d.stepKeys(ans.Key)
 	case "text":
 		err := a.answerText(ctx, id, ans)
 		a.Sessions.Trigger()

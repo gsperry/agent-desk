@@ -1401,6 +1401,25 @@ pre.code-body,
   color: var(--finished);
 }
 
+.live-steps-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.3rem 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.live-steps-row .live-steps {
+  margin: 0;
+}
+
+.live-step-nav {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+}
+
 
 .live-check {
   color: var(--dim);

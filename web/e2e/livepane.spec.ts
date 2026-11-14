@@ -192,7 +192,7 @@ test('a several-answer question shows checkboxes and Next, and keys land on the 
   }
 })
 
-test('a prompt with several questions shows its steps', async ({ page }) => {
+test('a prompt with several questions shows its steps and moves between them', async ({ page }) => {
   const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
   const original = readFileSync(panePath, 'utf8')
   writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-multi-ticked.txt'), 'utf8'))
@@ -201,6 +201,12 @@ test('a prompt with several questions shows its steps', async ({ page }) => {
     const steps = page.getByRole('region', { name: 'Terminal' }).getByRole('list', { name: 'Questions' })
     await expect(steps.getByRole('listitem')).toHaveText(['✓ Checks', 'Timing', 'Submit'])
     await expect(page.getByRole('region', { name: 'Terminal' }).getByRole('button', { name: /Link check/ })).toHaveAttribute('aria-pressed', 'true')
+    // An earlier question can be answered again before Submit.
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await pane.getByRole('button', { name: '‹ Previous question' }).click()
+    await expect.poll(keys).toBe('a0000002 Left\n')
+    await pane.getByRole('button', { name: 'Next question ›' }).click()
+    await expect.poll(keys).toBe('a0000002 Left\na0000002 Right\n')
   } finally {
     writeFileSync(panePath, original)
   }
