@@ -31,6 +31,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
+	"github.com/gsperry/agent-desk/internal/sysstat"
 	"github.com/gsperry/agent-desk/internal/transcript"
 	"github.com/gsperry/agent-desk/internal/usage"
 )
@@ -682,6 +683,32 @@ func TestSetupRoutes(t *testing.T) {
 			}
 			if tt.name == "apply" && (f.choice.DefaultTool != "claude" || len(f.choice.Shown) != 1) {
 				t.Fatalf("choice %+v", f.choice)
+			}
+		})
+	}
+}
+
+type fakeStats struct{}
+
+func (fakeStats) Latest() sysstat.Stats {
+	return sysstat.Stats{Supported: true, CPU: sysstat.CPU{Cores: 8}, Disks: []sysstat.Disk{}}
+}
+
+func TestStatsRoute(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		src  StatsSource
+		want int
+	}{{"served", fakeStats{}, 200}, {"absent", nil, 404}} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Stats: tt.src})
+			req := httptest.NewRequest("GET", "/api/stats", nil)
+			req.Host = "127.0.0.1:7317"
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want || (tt.want == 200 && !strings.Contains(rec.Body.String(), `"cores":8`)) {
+				t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
 			}
 		})
 	}

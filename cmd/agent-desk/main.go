@@ -44,6 +44,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/server"
 	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
+	"github.com/gsperry/agent-desk/internal/sysstat"
 	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
 )
@@ -110,6 +111,7 @@ func run(o options) error {
 		return err
 	}
 	remoteAccess := newRemoteListener(remoteStore, o.fixtures)
+	sampler := &sysstat.Sampler{Paths: statPaths(poller)}
 	l, err := listen(o.port)
 	if err != nil {
 		return err
@@ -139,6 +141,7 @@ func run(o options) error {
 		Access:      &remote.AccessKeys{},
 		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
 		Setup:       &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
+		Stats:       statsSource(o.fixtures, sampler),
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
@@ -175,6 +178,7 @@ func run(o options) error {
 	go poller.Run(ctx)
 	go transcripts.Run(ctx)
 	go cleanPastes(ctx, pastes)
+	go sampler.Run(ctx)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	select {
@@ -206,6 +210,48 @@ type backend interface {
 	am.Client
 	manage.Backend
 	setup.Backend
+}
+
+// statPaths is the directories whose filesystems the stats report: the
+// home directory, then every live session's directory.
+func statPaths(sessions *hub.Poller) func() []string {
+	return func() []string {
+		home, _ := os.UserHomeDir()
+		paths := []string{home}
+		for _, s := range sessions.State().Sessions {
+			if !s.Archived {
+				paths = append(paths, s.Directory)
+			}
+		}
+		return paths
+	}
+}
+
+// fixtureStats serves <fixtures>/stats.json when a test has written one,
+// else this machine's stats.
+type fixtureStats struct {
+	path string
+	live server.StatsSource
+}
+
+func (f fixtureStats) Latest() sysstat.Stats {
+	data, err := os.ReadFile(f.path)
+	if err != nil {
+		return f.live.Latest()
+	}
+	var st sysstat.Stats
+	if err := json.Unmarshal(data, &st); err != nil {
+		log.Printf("fixture stats: %v", err)
+		return f.live.Latest()
+	}
+	return st
+}
+
+func statsSource(fixtures string, live *sysstat.Sampler) server.StatsSource {
+	if fixtures != "" {
+		return fixtureStats{path: filepath.Join(fixtures, "stats.json"), live: live}
+	}
+	return live
 }
 
 // lookPath finds a program on PATH; in fixture mode every program is found.

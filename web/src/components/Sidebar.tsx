@@ -9,6 +9,8 @@ import type { Permission } from '../notify'
 import type { Prefs } from '../store'
 import type { Project, State } from '../types'
 import { glyph } from './status'
+import { SystemStats } from './SystemStats'
+import type { SystemStats as Stats } from '../types'
 
 export interface ViewOptions {
   showArchived: boolean
@@ -29,6 +31,8 @@ interface Props {
   onSelect: (id: string) => void
   onStartManager: () => Promise<string | null>
   onSetup: () => void
+  // stats is the system stats feed; null hides the block.
+  stats: { subscribe: (l: () => void) => () => void; get: () => Stats | null } | null
   prefs: Prefs
   permission: Permission
   onPrefs: (p: Partial<Prefs>) => void
@@ -181,6 +185,7 @@ export function Sidebar(props: Props) {
           </section>
         ))}
       </div>
+      {props.stats && <SystemStats subscribe={props.stats.subscribe} get={props.stats.get} />}
       <footer className="sidebar-foot">
         {archived > 0 && (
           <label>

@@ -9,6 +9,8 @@ export interface ViewPrefs {
   theme: Theme
   fontSize: number
   width: Width
+  // stats shows the computer's load, memory, swap and disk in the sidebar.
+  stats: boolean
   collapse: {
     edits: EditsOpen
     bash: Open
@@ -23,6 +25,7 @@ export const defaultViewPrefs: ViewPrefs = {
   theme: 'system',
   fontSize: 15,
   width: 'full',
+  stats: true,
   collapse: { edits: 'auto', bash: 'closed', read: 'closed', agents: 'closed', other: 'closed', thinking: 'closed' },
 }
 
@@ -60,6 +63,7 @@ export function sanitize(raw: unknown): ViewPrefs {
     theme: oneOf(r.theme, ['system', 'light', 'dark'] as const, d.theme),
     fontSize: Math.min(fontSizes.max, Math.max(fontSizes.min, size)),
     width: r.v === savedVersion ? oneOf(r.width, ['narrow', 'medium', 'wide', 'full'] as const, d.width) : d.width,
+    stats: typeof r.stats === 'boolean' ? r.stats : d.stats,
     collapse: {
       edits: oneOf(c.edits, ['open', 'closed', 'auto'] as const, d.collapse.edits),
       bash: oneOf(c.bash, open, d.collapse.bash),

@@ -3495,3 +3495,64 @@ mark {
   gap: 1rem;
   padding-top: 1.25rem;
 }
+
+/* System stats, in the sidebar above its footer */
+.sys-stats {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 1fr auto;
+  gap: 0.2rem 0.5rem;
+  align-items: center;
+  padding: 0.55rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rows share the block's columns, so labels of any length line up. */
+.sys-row {
+  display: contents;
+}
+
+.sys-label {
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-bar {
+  height: 0.3rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.sys-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--idle);
+}
+
+.sys-value {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sys-warn .sys-value {
+  color: var(--warn);
+}
+
+.sys-warn .sys-bar > span {
+  background: var(--warn);
+}
+
+.sys-critical .sys-value {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.sys-critical .sys-bar > span {
+  background: var(--error);
+}

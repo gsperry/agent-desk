@@ -24,6 +24,8 @@ describe('desktopNotifier', () => {
     expect(invoke).toHaveBeenCalledWith('notify', { title: 'build waiting', body: 'Needs you', session: 'tag' })
     n.show('rule fired', 'Rule: done', 'rule-a1', () => undefined)
     expect(invoke).toHaveBeenLastCalledWith('notify', { title: 'rule fired', body: 'Rule: done', session: 'a1' })
+    n.show('Disk almost full', '3 GB free', 'system:disk:/', () => undefined)
+    expect(invoke).toHaveBeenLastCalledWith('notify', { title: 'Disk almost full', body: '3 GB free', session: undefined })
   })
 
   it('swallows a failed call', async () => {

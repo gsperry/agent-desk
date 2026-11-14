@@ -40,6 +40,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
+	"github.com/gsperry/agent-desk/internal/sysstat"
 	"github.com/gsperry/agent-desk/internal/transcript"
 	"github.com/gsperry/agent-desk/internal/usage"
 )
@@ -101,9 +102,16 @@ type Config struct {
 	// Setup checks the programs Agent Desk needs and changes the CLIs
 	// agent-manager offers, for the welcome screen. Nil leaves it out.
 	Setup SetupSource
+	// Stats is the computer's load, memory, swap and free disk space. Nil
+	// leaves it out.
+	Stats StatsSource
 	// RemoteHTTPOrigin also accepts an http:// origin for the remote host.
 	// Only fixture mode sets it, for browser tests without TLS.
 	RemoteHTTPOrigin bool
+}
+
+type StatsSource interface {
+	Latest() sysstat.Stats
 }
 
 type SetupSource interface {
@@ -289,6 +297,7 @@ func (s *Server) routes() {
 	s.route("GET /api/search", remote.NeedRead, s.search)
 	s.route("POST /api/open", remote.NeedLocal, s.open)
 	s.route("POST /api/manager/start", remote.NeedManage, s.startManager)
+	s.route("GET /api/stats", remote.NeedRead, s.stats)
 	s.route("GET /api/setup", remote.NeedLocal, s.setupReport)
 	s.route("POST /api/setup", remote.NeedLocal, s.applySetup)
 	s.route("GET /api/remote", remote.NeedRead, s.remoteSettings)
@@ -387,6 +396,14 @@ func (s *Server) startManager(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Sessions.Trigger()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) stats(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.Stats == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "system stats are not available"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.cfg.Stats.Latest())
 }
 
 func (s *Server) setupReport(w http.ResponseWriter, r *http.Request) {
