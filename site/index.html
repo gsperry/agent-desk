@@ -94,7 +94,7 @@
       <div class="feature flip">
         <div class="feature-text">
           <h3>Answer without attaching</h3>
-          <p>When an agent stops on a permission prompt or a question, Agent Desk shows the question under its transcript with a button for each answer: checkboxes when it takes several, a text box for your own words, and each step of a multi-part prompt. It reads the screen again before it presses a key, and refuses if the choice changed.</p>
+          <p>When an agent stops on a permission prompt or a question, Agent Desk shows the question under its transcript with a button for each answer: checkboxes when it takes several, a text box for your own words, and each step of a multi-part prompt, with a way back to change an earlier answer before you submit. It reads the screen again before it presses a key, and refuses if the choice changed.</p>
           <p class="small">Enter sends a reply, as in Claude Code, through <code>agent-manager type</code>; a reply is refused with a reason when it would land anywhere but the agent's prompt. While an agent works, a live row shows how long, the tokens written and the current step, with Interrupt to stop the turn.</p>
         </div>
         <figure class="shot">
@@ -140,6 +140,7 @@
       </div>
 
       <ul class="more">
+        <li><strong>System stats</strong> in the sidebar: CPU load, memory, swap and free disk, with a notification when a disk is nearly full or memory runs out, before parallel builds stall every agent.</li>
         <li><strong>Search</strong> every transcript: prompts, replies, thinking and tool output.</li>
         <li><strong>Desktop app</strong> for macOS: its own window, native notifications, the "needs you" count on the dock and in the menu bar, and Control-Option-A to bring it forward.</li>
         <li><strong>Notifications</strong> when a session waits, errors or finishes, and a "needs you" count in the tab.</li>
