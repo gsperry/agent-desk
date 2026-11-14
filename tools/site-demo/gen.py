@@ -225,6 +225,14 @@ json.dump({"version": 1, "manager_awake": True, "sessions": sessions, "terminals
            "groups": [{"path": "shopfront", "archived": False, "sessions": 3}, {"path": "platform", "archived": False, "sessions": 4}]},
           open(os.path.join(OUT, "snapshot.json"), "w"), indent=1)
 
+# Made-up system stats for the sidebar, so no real machine's numbers show.
+GB = 1024 ** 3
+json.dump({"supported": True, "at": ts(NOW), "cpu": {"load": [4.1, 3.6, 3.2], "cores": 10},
+           "memory": {"total": 32 * GB, "available": 10 * GB, "pressure": "normal"},
+           "swap": {"total": 2 * GB, "used": GB // 2},
+           "disks": [{"mount": "/", "total": 994 * GB, "free": 312 * GB}]},
+          open(os.path.join(OUT, "stats.json"), "w"), indent=1)
+
 # A repository with uncommitted work for the Changes view.
 repo = os.path.join(OUT, "repo")
 os.makedirs(os.path.join(repo, "src", "checkout"))

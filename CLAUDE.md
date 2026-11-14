@@ -28,6 +28,7 @@ make desktop # desktop/target/release/bundle/macos/Agent Desk.app (Rust, Tauri C
 make release-cli desktop-universal checksums VERSION=v0.1.0   # release files in dist/ (docs/releasing.md)
 scripts/homebrew.sh 0.1.0   # render the Homebrew formula and cask from a release's SHA256SUMS
 python3 tools/site-demo/gen.py /tmp/demo/desk && node tools/site-demo/record.mjs /tmp/demo/desk site/img/demo.webm   # site demo video from made-up sessions (DEMO_SHOTS=dir saves stills)
+node tools/site-demo/shots.mjs /tmp/demo/desk site/img   # site feature screenshots from the same made-up sessions
 node tools/site-demo/og.mjs   # site/img/og.png social preview
 go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl   # raw-item report on real data
 go run ./tools/panecheck   # live screens Agent Desk cannot read as a question or prompt (read-only; -save DIR keeps flagged screens)
