@@ -38,6 +38,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/remote"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
+	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/transcript"
 	"github.com/gsperry/agent-desk/internal/usage"
@@ -97,9 +98,17 @@ type Config struct {
 	Access remote.Verifier
 	// Commands lists the slash commands a session accepts, for autocomplete.
 	Commands CommandSource
+	// Setup checks the programs Agent Desk needs and changes the CLIs
+	// agent-manager offers, for the welcome screen. Nil leaves it out.
+	Setup SetupSource
 	// RemoteHTTPOrigin also accepts an http:// origin for the remote host.
 	// Only fixture mode sets it, for browser tests without TLS.
 	RemoteHTTPOrigin bool
+}
+
+type SetupSource interface {
+	Check(ctx context.Context) setup.Report
+	Apply(ctx context.Context, c setup.Choice) (setup.Report, error)
 }
 
 type CommandSource interface {
@@ -280,6 +289,8 @@ func (s *Server) routes() {
 	s.route("GET /api/search", remote.NeedRead, s.search)
 	s.route("POST /api/open", remote.NeedLocal, s.open)
 	s.route("POST /api/manager/start", remote.NeedManage, s.startManager)
+	s.route("GET /api/setup", remote.NeedLocal, s.setupReport)
+	s.route("POST /api/setup", remote.NeedLocal, s.applySetup)
 	s.route("GET /api/remote", remote.NeedRead, s.remoteSettings)
 	s.route("POST /api/remote", remote.NeedLocal, s.setRemoteSettings)
 	// The WebSocket only reads; it checks its own token locally.
@@ -376,6 +387,35 @@ func (s *Server) startManager(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Sessions.Trigger()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) setupReport(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Setup == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "setup is not available"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, s.cfg.Setup.Check(ctx))
+}
+
+func (s *Server) applySetup(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Setup == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "setup is not available"})
+		return
+	}
+	var c setup.Choice
+	if !decode(w, r, 4096, &c) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	rep, err := s.cfg.Setup.Apply(ctx, c)
+	logOutcome("setup", "", fmt.Sprintf("shown=%d default=%s", len(c.Shown), c.DefaultTool), "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 // maxSendBody bounds the request; the sender's own cap is lower.

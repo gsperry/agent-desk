@@ -533,9 +533,14 @@ h3 {
   align-items: start;
 }
 
-.install ul {
+.install ul,
+.install ol {
   padding-left: 1.1rem;
   color: var(--dim);
+}
+
+.install ol li + li {
+  margin-top: 0.5rem;
 }
 
 .terminal {

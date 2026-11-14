@@ -10,6 +10,10 @@ import { Overview } from './components/Overview'
 import { SearchView } from './components/SearchView'
 import { Settings } from './components/Settings'
 import { UsageView } from './components/UsageView'
+import { Welcome } from './components/Welcome'
+import { NotifyControls } from './components/Sidebar'
+import { StartAtLogin } from './components/StartAtLogin'
+import { markWelcomed, welcomed } from './model/welcome'
 import { Switcher } from './components/Switcher'
 import { attentionCount, nextAttention, ordered } from './model/attention'
 import { groupSessions } from './model/sidebar'
@@ -24,10 +28,10 @@ import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/vi
 import { Store, useStore } from './store'
 import type { Answer, Conversation, Project, SessionAction, SpawnRequest } from './types'
 import { SnippetsContext } from './snippets-context'
-import { RemoteContext, localInfo, type RemoteInfo, type RemoteLevel } from './remote-context'
+import { RemoteContext, localInfo, useRemote, type RemoteInfo, type RemoteLevel } from './remote-context'
 import type { RemoteSettings } from './components/RemoteAccess'
 import { ViewPrefsContext } from './viewprefs-context'
-import { setBadge } from './notify'
+import { desktopInvoke, setBadge } from './notify'
 
 const token = takeToken()
 
@@ -73,6 +77,19 @@ function usageFromPath(): boolean {
   return window.location.pathname === '/usage'
 }
 
+function welcomeFromPath(): boolean {
+  return window.location.pathname === '/welcome'
+}
+
+// firstRun opens the welcome screen on the desk once, the first time Agent
+// Desk opens on the overview. Settings opens it after that.
+function firstRun(remote: boolean): boolean {
+  if (remote || window.location.pathname !== '/' || welcomed(localStorage)) return false
+  markWelcomed(localStorage)
+  history.replaceState(null, '', '/welcome')
+  return true
+}
+
 const noPending: never[] = []
 
 function isTyping(target: EventTarget | null): boolean {
@@ -81,6 +98,7 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 function Desk({ token }: { token: string }) {
+  const remoteInfo = useRemote()
   const store = useMemo(() => new Store(token), [token])
   useEffect(() => store.start(), [store])
   const { conn, data, pending, acks, prefs, permission, toast, seen, rules, suggestions } = useStore(store)
@@ -88,6 +106,7 @@ function Desk({ token }: { token: string }) {
   const [historyRoute, setHistoryRoute] = useState<{ id: string | null } | null>(historyFromPath)
   const [conversations, setConversations] = useState<Conversation[] | null>(null)
   const [usageOpen, setUsageOpen] = useState(usageFromPath)
+  const [welcomeOpen, setWelcomeOpen] = useState(() => !remoteInfo.remote && (welcomeFromPath() || firstRun(remoteInfo.remote)))
   const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
   const [switcher, setSwitcher] = useState(false)
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
@@ -166,6 +185,7 @@ function Desk({ token }: { token: string }) {
     setSelected(id)
     setHistoryRoute(null)
     setUsageOpen(false)
+    setWelcomeOpen(false)
     setSearchText('')
     setSearchQuery(null)
   }, [])
@@ -175,6 +195,7 @@ function Desk({ token }: { token: string }) {
       setSelected(sessionFromPath())
       setHistoryRoute(historyFromPath())
       setUsageOpen(usageFromPath())
+      setWelcomeOpen(!remoteInfo.remote && welcomeFromPath())
     }
     const onVisibility = () => {
       setVisible(document.visibilityState === 'visible')
@@ -185,7 +206,7 @@ function Desk({ token }: { token: string }) {
       window.removeEventListener('popstate', onPop)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [])
+  }, [remoteInfo.remote])
 
   useEffect(() => {
     store.setOnOpen(select)
@@ -263,6 +284,7 @@ function Desk({ token }: { token: string }) {
     setSelected(null)
     setHistoryRoute(null)
     setUsageOpen(false)
+    setWelcomeOpen(false)
     setSearchText('')
     setSearchQuery(null)
   }, [])
@@ -271,6 +293,7 @@ function Desk({ token }: { token: string }) {
     setSelected(null)
     setHistoryRoute({ id })
     setUsageOpen(false)
+    setWelcomeOpen(false)
     setSearchText('')
     setSearchQuery(null)
   }, [])
@@ -294,9 +317,21 @@ function Desk({ token }: { token: string }) {
     setSelected(null)
     setHistoryRoute(null)
     setUsageOpen(true)
+    setWelcomeOpen(false)
     setSearchText('')
     setSearchQuery(null)
   }, [])
+  const openWelcome = useCallback(() => {
+    history.pushState(null, '', '/welcome')
+    setSelected(null)
+    setHistoryRoute(null)
+    setUsageOpen(false)
+    setWelcomeOpen(true)
+    setSearchText('')
+    setSearchQuery(null)
+  }, [])
+  const loadSetup = useCallback(() => store.setup(), [store])
+  const applySetup = useCallback((c: { shown: string[]; defaultTool: string }) => store.applySetup(c), [store])
   const readUsage = useCallback((days: number) => store.usage(days), [store])
   const readConversation = useCallback((id: string, before?: number) => store.conversationPage(id, before), [store])
   const owners = useMemo(() => sessionsByConversation(sessions), [sessions])
@@ -342,7 +377,8 @@ function Desk({ token }: { token: string }) {
   const session = sessions.find((s) => s.id === selected)
   // On a phone the list and a view take turns; a view is showing when a
   // session, search, history or usage is open.
-  const mainActive = searchQuery !== null || usageOpen || historyRoute !== null || selected !== null
+  const mainActive = searchQuery !== null || usageOpen || welcomeOpen || historyRoute !== null || selected !== null
+  const desktop = remoteInfo.remote ? undefined : desktopInvoke()
   return (
     <ViewPrefsContext.Provider value={viewPrefs}>
     <SnippetsContext.Provider value={snippets}>
@@ -360,6 +396,7 @@ function Desk({ token }: { token: string }) {
             selected={selected}
             onSelect={select}
             onStartManager={() => store.startManager()}
+            onSetup={openWelcome}
             prefs={prefs}
             permission={permission}
             onPrefs={(p) => {
@@ -409,6 +446,45 @@ function Desk({ token }: { token: string }) {
                   setSearchText('')
                   setSearchQuery(null)
                 }}
+              />
+            ) : welcomeOpen ? (
+              <Welcome
+                state={data.sessions}
+                load={loadSetup}
+                apply={applySetup}
+                onStartManager={() => store.startManager()}
+                loadConversations={loadConversations}
+                owners={owners}
+                onResume={(c) => {
+                  setModal({ kind: 'spawn', initial: resumeDefaults(c.id, c.directory ?? ''), resumeTitle: conversationTitle(c) })
+                }}
+                onAllConversations={() => {
+                  openHistory(null)
+                }}
+                onNewSession={() => {
+                  openSpawn(null)
+                }}
+                onOpenSettings={() => {
+                  setSettingsOpen(true)
+                }}
+                extras={
+                  <>
+                    <div className="welcome-extra">
+                      <NotifyControls
+                        prefs={prefs}
+                        permission={permission}
+                        onPrefs={(p) => {
+                          store.setPrefs(p)
+                        }}
+                        onRequestPermission={() => {
+                          void store.requestPermission()
+                        }}
+                      />
+                    </div>
+                    {desktop && <StartAtLogin invoke={desktop} />}
+                  </>
+                }
+                onDone={goHome}
               />
             ) : usageOpen ? (
               <UsageView load={readUsage} conversations={conversations} loadConversations={loadConversations} onOpenConversation={openHistory} />
@@ -545,6 +621,10 @@ function Desk({ token }: { token: string }) {
               rules={rules}
               onRules={(r) => {
                 store.setRules(r)
+              }}
+              onOpenWelcome={() => {
+                setSettingsOpen(false)
+                openWelcome()
               }}
               onClose={() => {
                 setSettingsOpen(false)

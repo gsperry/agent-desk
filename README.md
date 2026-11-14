@@ -68,6 +68,18 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 | `--port` | `7317` | Port on 127.0.0.1. A busy port falls back to a free one. |
 | `--no-open` | off | Print the URL without opening a browser. |
 
+### First run
+
+On first start, Agent Desk opens a setup checklist. Settings › Setup checklist opens it again later.
+
+1. **Programs:** checks that `agent-manager`, `tmux` and `claude` are on PATH and says how to install any that are missing.
+2. **Manager:** checks that agent-manager is running (its TUI or `agent-manager serve`), with a button to start it in the background. Statuses are frozen until it runs.
+3. **CLIs:** choose the CLIs new sessions offer and the default one. They are saved with `agent-manager settings set` (`hidden_tools` and `default_tool`), so agent-manager's own pickers offer the same.
+4. **Your sessions:** every session agent-manager knows appears on its own; there is nothing to import. Conversations started with a plain `claude` are listed under All conversations, and the checklist shows the newest with a Resume button that continues one as an agent-manager session in its directory. Quit the original `claude` first.
+5. **Optional:** notifications, Start at login in the desktop app, and a pointer to remote access.
+
+The checklist is not offered to remote devices.
+
 ## Oversight
 
 - **Overview:** the home screen (click "Agent Desk" in the sidebar) shows a card per session: what it is doing now, its last reply and your last prompt, context use, and when it last changed. Sessions that need you come first.

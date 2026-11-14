@@ -29,6 +29,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/pane"
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
+	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/transcript"
 	"github.com/gsperry/agent-desk/internal/usage"
@@ -626,6 +627,61 @@ func TestLifecycleRoutes(t *testing.T) {
 			}
 			if tt.check != nil {
 				tt.check(t, f)
+			}
+		})
+	}
+}
+
+type fakeSetup struct {
+	choice setup.Choice
+	err    error
+}
+
+func (f *fakeSetup) Check(context.Context) setup.Report {
+	return setup.Report{Programs: []setup.Program{{Name: "tmux", Found: true}}}
+}
+
+func (f *fakeSetup) Apply(_ context.Context, c setup.Choice) (setup.Report, error) {
+	f.choice = c
+	return f.Check(context.Background()), f.err
+}
+
+func TestSetupRoutes(t *testing.T) {
+	own := "http://127.0.0.1:7317"
+	tests := []struct {
+		name, method, body, origin string
+		err                        error
+		nilSetup                   bool
+		want                       int
+	}{
+		{"report", "GET", "", "", nil, false, 200},
+		{"apply", "POST", `{"shown":["claude"],"defaultTool":"claude"}`, own, nil, false, 200},
+		{"refused", "POST", `{"shown":[]}`, own, &send.Refused{Reason: "invalid"}, false, 409},
+		{"no origin", "POST", `{}`, "", nil, false, 403},
+		{"bad body", "POST", `{`, own, nil, false, 400},
+		{"absent", "GET", "", "", nil, true, 404},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeSetup{err: tt.err}
+			cfg := Config{Setup: f}
+			if tt.nilSetup {
+				cfg.Setup = nil
+			}
+			s := newTestServer(t, cfg)
+			req := httptest.NewRequest(tt.method, "/api/setup", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tt.want, rec.Body.String())
+			}
+			if tt.name == "apply" && (f.choice.DefaultTool != "claude" || len(f.choice.Shown) != 1) {
+				t.Fatalf("choice %+v", f.choice)
 			}
 		})
 	}

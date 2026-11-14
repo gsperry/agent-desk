@@ -111,6 +111,13 @@ func (c *CLI) Settings(ctx context.Context) ([]Setting, error) {
 	return s, nil
 }
 
+// SetSetting stores one agent-manager setting, which agent-manager checks
+// against the values its Settings row takes.
+func (c *CLI) SetSetting(ctx context.Context, key, value string) error {
+	_, err := c.run(ctx, "settings", "set", "--", key, value)
+	return err
+}
+
 // OfferedTools is the tools agent-manager's pickers offer: every tool
 // minus the hidden ones, in agent-manager's order.
 func OfferedTools(settings []Setting) (tools []string, defaultTool string, worktree bool) {

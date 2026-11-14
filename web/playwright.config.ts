@@ -11,7 +11,12 @@ export default defineConfig({
   timeout: 30_000,
   // Tests change the shared fixture copy, so they run one at a time.
   workers: 1,
-  use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+  use: {
+    ...devices['Desktop Chrome'],
+    viewport: { width: 1440, height: 900 },
+    // Tests start as a returning user; welcome.spec.ts starts fresh.
+    storageState: { cookies: [], origins: [{ origin: `http://127.0.0.1:${String(port)}`, localStorage: [{ name: 'agent-desk:welcomed', value: '1' }] }] },
+  },
   webServer: {
     command: `./e2e/prepare-fixtures.sh && ../bin/agent-desk --no-open --port ${String(port)} --fixtures .e2e-fixtures`,
     url: `http://127.0.0.1:${String(port)}/`,

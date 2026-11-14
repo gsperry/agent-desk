@@ -28,6 +28,7 @@ interface Props {
   selected: string | null
   onSelect: (id: string) => void
   onStartManager: () => Promise<string | null>
+  onSetup: () => void
   prefs: Prefs
   permission: Permission
   onPrefs: (p: Partial<Prefs>) => void
@@ -95,7 +96,7 @@ export function Sidebar(props: Props) {
           }}
         />
       </div>
-      <Banners state={state} conn={conn} onStartManager={onStartManager} />
+      <Banners state={state} conn={conn} onStartManager={onStartManager} onSetup={props.onSetup} />
       <div className="filters">
         <button
           type="button"
@@ -217,7 +218,7 @@ export function Sidebar(props: Props) {
   )
 }
 
-function NotifyControls({ prefs, permission, onPrefs, onRequestPermission }: Props) {
+export function NotifyControls({ prefs, permission, onPrefs, onRequestPermission }: Pick<Props, 'prefs' | 'permission' | 'onPrefs' | 'onRequestPermission'>) {
   switch (permission) {
     case 'unsupported':
       return null
@@ -272,9 +273,10 @@ function connTitle(c: ConnectionState): string {
   }
 }
 
-function Banners({ state, conn, onStartManager }: Pick<Props, 'state' | 'conn' | 'onStartManager'>) {
+function Banners({ state, conn, onStartManager, onSetup }: Pick<Props, 'state' | 'conn' | 'onStartManager' | 'onSetup'>) {
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
+  const { remote } = useRemote()
   const banners = []
   if (conn.kind === 'closed') {
     banners.push(
@@ -287,6 +289,11 @@ function Banners({ state, conn, onStartManager }: Pick<Props, 'state' | 'conn' |
     banners.push(
       <div key="am" className="banner error">
         agent-manager was not found on PATH. Install it, then this list fills in on its own.
+        {!remote && (
+          <button type="button" className="banner-button" onClick={onSetup}>
+            Setup checklist
+          </button>
+        )}
       </div>,
     )
   } else if (state?.error) {

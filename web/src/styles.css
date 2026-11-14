@@ -3319,3 +3319,160 @@ mark {
     display: none;
   }
 }
+
+/* Welcome: the setup checklist */
+.welcome {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 3rem;
+  line-height: 1.55;
+}
+
+.welcome-step {
+  padding: 1rem 0 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.welcome-step h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.welcome-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--dim);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.welcome-num.done {
+  background: var(--ok);
+  color: var(--bg);
+}
+
+.welcome-num.todo {
+  background: var(--warn);
+  color: var(--bg);
+}
+
+.welcome-body {
+  padding-left: 2.2rem;
+}
+
+.welcome-body > p {
+  margin: 0.4rem 0;
+}
+
+.welcome-programs,
+.welcome-conversations {
+  margin: 0.25rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-programs li {
+  padding: 0.25rem 0;
+}
+
+.welcome-ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.welcome-missing {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.welcome-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  margin: 0.2rem 0 0.2rem 1.2rem;
+  font-size: 0.88rem;
+}
+
+.welcome-command {
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.3rem;
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  user-select: all;
+}
+
+.welcome-clis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  margin: 0.5rem 0;
+}
+
+.welcome-default {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  max-width: 22rem;
+  margin: 0.6rem 0;
+}
+
+.welcome-saved {
+  margin: 0.4rem 0 0;
+  color: var(--ok);
+  font-size: 0.85rem;
+}
+
+.welcome-conversations li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.welcome-conv-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.welcome-conv-text strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-conv-text .muted {
+  font-size: 0.85rem;
+}
+
+.welcome-conversations .secondary {
+  flex: none;
+}
+
+.welcome-extra {
+  margin: 0.3rem 0 0.6rem;
+}
+
+.welcome-extra label {
+  display: block;
+}
+
+.welcome-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1.25rem;
+}

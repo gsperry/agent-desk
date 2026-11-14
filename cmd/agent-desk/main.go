@@ -42,6 +42,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/search"
 	"github.com/gsperry/agent-desk/internal/send"
 	"github.com/gsperry/agent-desk/internal/server"
+	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
@@ -137,6 +138,7 @@ func run(o options) error {
 		Remote:      remoteAccess,
 		Access:      &remote.AccessKeys{},
 		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
+		Setup:       &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
@@ -203,6 +205,15 @@ func untilClosed(parent context.Context, r io.Reader) context.Context {
 type backend interface {
 	am.Client
 	manage.Backend
+	setup.Backend
+}
+
+// lookPath finds a program on PATH; in fixture mode every program is found.
+func lookPath(fixtures string) func(string) (string, error) {
+	if fixtures != "" {
+		return func(name string) (string, error) { return name, nil }
+	}
+	return exec.LookPath
 }
 
 func newPoller(fixtures string) (*hub.Poller, backend, error) {

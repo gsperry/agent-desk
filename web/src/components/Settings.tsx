@@ -22,6 +22,7 @@ interface Props {
   onSummaries: (s: SummarySettings) => void
   loadRemote: () => Promise<{ data?: RemoteSettings; status?: RemoteStatus; available: boolean; error?: string }>
   saveRemote: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; status?: RemoteStatus; error?: string }>
+  onOpenWelcome: () => void
   onClose: () => void
 }
 
@@ -54,7 +55,7 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onOpenWelcome, onClose }: Props) {
   const onDesk = !useRemote().remote
   // The desktop app's own settings, present only inside it.
   const desktop = onDesk ? desktopInvoke() : undefined
@@ -139,6 +140,16 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             }}
           />
         </Section>
+        {onDesk && (
+          <Section title="Setup">
+            <div className="setting">
+              <span className="setting-label">Programs, manager, CLIs and importing conversations</span>
+              <button type="button" className="secondary" onClick={onOpenWelcome}>
+                Setup checklist
+              </button>
+            </div>
+          </Section>
+        )}
         {desktop && (
           <Section title="Desktop app">
             <StartAtLogin invoke={desktop} />

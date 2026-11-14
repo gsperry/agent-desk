@@ -113,6 +113,10 @@ async function main() {
   const browser = await chromium.launch()
   const context = await browser.newContext({ viewport: size, colorScheme: 'dark', recordVideo: { dir: join(fixtures, 'video'), size } })
   await context.addInitScript(pointer)
+  // A returning user: the overview, not the first-run setup checklist.
+  await context.addInitScript(() => {
+    localStorage.setItem('agent-desk:welcomed', '1')
+  })
   // A headless browser reports notifications as blocked; show the usual
   // "Turn on notifications" link instead of that warning.
   await context.addInitScript(() => {
