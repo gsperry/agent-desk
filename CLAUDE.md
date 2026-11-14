@@ -58,6 +58,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
 - `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
 - `internal/remote`: remote access levels, settings (owner-only file), the Tailscale identity check and Cloudflare Access token verification
+- `internal/sysstat`: CPU load, memory, swap and free disk from sysctl/statfs (macOS) or /proc (Linux), sampled every 5 s; runs no commands
 - `internal/setup`: the first-run checklist: programs on PATH, and the CLIs new sessions offer, saved through `agent-manager settings set`
 - `internal/commands`: slash commands for autocomplete: built-ins generated from the Claude Code binary, custom commands, skills and enabled plugins (read-only)
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)

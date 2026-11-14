@@ -85,6 +85,7 @@ The checklist is not offered to remote devices.
 - **Overview:** the home screen (click "Agent Desk" in the sidebar) shows a card per session: what it is doing now, its last reply and your last prompt, context use, and when it last changed. Sessions that need you come first.
 - **Subagents:** the Agents button in a session's header lists the subagents its conversation spawned, running first, with type, description and duration. Click one to read its transcript, live while it runs. Agent tool calls link to their subagent.
 - **Since you last looked:** sidebar rows with new activity get a dot, and opening the session shows a divider before what arrived since your last visit.
+- **System stats:** above the sidebar's footer, CPU load, memory, swap and free space on each disk holding your home or a session's directory, refreshed every 5 s. A row turns amber or red past its limit: load above the core count, macOS memory pressure (or little memory left on Linux), swap above a quarter of memory, a disk under 10% or 20 GB free, whichever is smaller (red under 5% or 5 GB). With notifications on, a nearly full disk or critical memory sends one notification until it recovers. Read from the kernel; no command runs. Settings turns the block off.
 - **Context meter:** the session header shows how much context the latest turn used and, once that model has auto-compacted in a transcript Agent Desk has read, how close it is to compacting again.
 
 ## Review and steer

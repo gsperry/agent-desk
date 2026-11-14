@@ -6,8 +6,9 @@ import { expire, reconcile, type Pending } from './model/pending'
 import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { defaultNotifier, type Notifier, type Permission } from './notify'
+import { statAlerts, type Level } from './model/stats'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
-import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SystemStats, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -34,6 +35,8 @@ export interface StoreState {
 
 const acksKey = 'agent-desk:acks'
 const prefsKey = 'agent-desk:prefs'
+// The server samples the system every 5 s.
+const statsEvery = 5000
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -67,6 +70,11 @@ export class Store {
   private connection: Connection | null = null
   private followed = new Set<string>()
   private readonly token: string
+  // System stats live apart from the rest of the state, so their refresh
+  // every few seconds re-renders only the sidebar block that shows them.
+  private stats: SystemStats | null = null
+  private statsListeners = new Set<Listener>()
+  private statLevels = new Map<string, Level>()
 
   constructor(token: string, notifier: Notifier = defaultNotifier()) {
     this.token = token
@@ -180,6 +188,10 @@ export class Store {
     const timer = setInterval(() => {
       this.expirePending()
     }, 5000)
+    void this.pollStats()
+    const statsTimer = setInterval(() => {
+      void this.pollStats()
+    }, statsEvery)
     this.connection = connect(
       this.token,
       (conn) => {
@@ -191,8 +203,35 @@ export class Store {
     )
     return () => {
       clearInterval(timer)
+      clearInterval(statsTimer)
       this.connection?.close()
     }
+  }
+
+  getStats = () => this.stats
+
+  subscribeStats = (l: Listener) => {
+    this.statsListeners.add(l)
+    return () => this.statsListeners.delete(l)
+  }
+
+  // pollStats reads the system stats and notifies when a disk or memory
+  // turns critical, under the same switch as session notifications.
+  async pollStats() {
+    let st: SystemStats
+    try {
+      const res = await apiFetch(this.token, '/api/stats')
+      if (!res.ok) return
+      st = (await res.json()) as SystemStats
+    } catch {
+      return
+    }
+    this.stats = st
+    for (const l of this.statsListeners) l()
+    if (!st.supported) return
+    const alerts = statAlerts(st, this.statLevels)
+    if (!this.state.prefs.notify || this.notifier.permission() !== 'granted') return
+    for (const a of alerts) this.notifier.show(a.title, a.body, a.tag, () => undefined)
   }
 
   private onMessage(msg: ServerMessage) {

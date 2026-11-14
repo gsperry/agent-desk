@@ -139,6 +139,19 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
               set({ width })
             }}
           />
+          <div className="setting">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={prefs.stats}
+                onChange={(e) => {
+                  set({ stats: e.target.checked })
+                }}
+              />{' '}
+              Show system stats in the sidebar
+            </label>
+            <p className="muted setting-note">CPU load, memory, swap and free disk space. Alerts for a nearly full disk or running out of memory follow the notification setting.</p>
+          </div>
         </Section>
         {onDesk && (
           <Section title="Setup">

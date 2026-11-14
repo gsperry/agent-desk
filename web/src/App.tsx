@@ -330,6 +330,7 @@ function Desk({ token }: { token: string }) {
     setSearchText('')
     setSearchQuery(null)
   }, [])
+  const statsFeed = useMemo(() => ({ subscribe: store.subscribeStats, get: store.getStats }), [store])
   const loadSetup = useCallback(() => store.setup(), [store])
   const applySetup = useCallback((c: { shown: string[]; defaultTool: string }) => store.applySetup(c), [store])
   const readUsage = useCallback((days: number) => store.usage(days), [store])
@@ -397,6 +398,7 @@ function Desk({ token }: { token: string }) {
             onSelect={select}
             onStartManager={() => store.startManager()}
             onSetup={openWelcome}
+            stats={viewPrefs.stats ? statsFeed : null}
             prefs={prefs}
             permission={permission}
             onPrefs={(p) => {

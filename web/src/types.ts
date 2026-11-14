@@ -277,3 +277,14 @@ export interface SetupReport {
   defaultTool: string
   settingsError?: string
 }
+
+// SystemStats is GET /api/stats: the computer's load, memory, swap and the
+// free space on the filesystems holding home and session directories.
+export interface SystemStats {
+  supported: boolean
+  at: string
+  cpu: { load: [number, number, number]; cores: number }
+  memory: { total: number; available: number; pressure?: 'normal' | 'warn' | 'critical' | '' }
+  swap: { total: number; used: number }
+  disks: { mount: string; total: number; free: number }[]
+}

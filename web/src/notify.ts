@@ -46,14 +46,16 @@ export function desktopInvoke(w: unknown = globalThis): Invoke | undefined {
  * for permission on the first one, so the page treats them as granted; the
  * user still turns them on in the sidebar. The tag names the session (a
  * rule's is "rule-<id>"); the app opens that session when the
- * notification is clicked.
+ * notification is clicked. A system alert's tag starts "system:".
  */
 export function desktopNotifier(invoke: Invoke): Notifier {
   return {
     permission: () => 'granted',
     request: () => Promise.resolve('granted'),
     show(title, body, tag) {
-      invoke('notify', { title, body, session: tag.replace(/^rule-/, '') }).catch(() => undefined)
+      // A system alert (tag "system:...") is about no session.
+      const session = tag.startsWith('system:') ? undefined : tag.replace(/^rule-/, '')
+      invoke('notify', { title, body, session }).catch(() => undefined)
     },
   }
 }
