@@ -124,11 +124,11 @@ Rename, delete, restart with a fresh context, and fork have no agent-manager com
 
 ## Answering prompts
 
-When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session; while a question is open it shows or hides the raw screen under it. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered.
+When a session waits on a permission prompt or a question, a Terminal panel opens under its transcript with the agent's screen and a button for each option, plus Cancel (Esc). The Terminal button in the session header opens the panel for any running session; while a question is open it shows or hides the raw screen under it. "Type something" opens a text box: Agent Desk moves the selection onto the option, reads the screen again to confirm the text field is active, then enters your answer through `agent-manager type`. Questions with several parts are answered one at a time, ending with their Submit step; Previous question and Next question move between them, so an earlier answer can be changed before Submit. "Hide screen" keeps only the question and its buttons whenever a waiting session opens the panel; the choice is remembered.
 
 "Color" in the panel shows the screen as the terminal draws it, colors included, through `agent-manager read --styled`. It is read-only: nothing typed there reaches the agent.
 
-Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape, and only while a question is on screen. Before choosing an option it reads the screen again and refuses if the choice changed.
+Agent Desk answers by pressing keys through agent-manager's tmux server (`tmux -L agentmgr send-keys`), limited to Up, Down, Enter and Escape, plus Left and Right to move between the questions of a prompt with several, and only while a question is on screen. Before choosing an option it reads the screen again and refuses if the choice changed.
 
 ## Search, files and settings
 

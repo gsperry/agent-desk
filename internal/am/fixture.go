@@ -62,7 +62,7 @@ func (f Fixture) Read(_ context.Context, id string) (string, error) {
 }
 
 // pendingMoves is how far Up and Down presses recorded in keys.log moved a
-// session's selection since its last Enter or Escape, so a fixture pane
+// session's selection since its last Enter, Escape or question step, so a fixture pane
 // follows key presses the way a real dialog does.
 func (f Fixture) pendingMoves(id string) int {
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(f.Path), "keys.log"))
@@ -81,7 +81,7 @@ func (f Fixture) pendingMoves(id string) int {
 				moves++
 			case "Up":
 				moves--
-			case "Enter", "Escape":
+			case "Enter", "Escape", "Left", "Right":
 				moves = 0
 			}
 		}

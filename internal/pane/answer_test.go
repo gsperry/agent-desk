@@ -36,6 +36,11 @@ func TestAnswer(t *testing.T) {
 	perm := read(t, "permission.txt")
 	ask := read(t, "ask-question.txt")
 	idle := read(t, "idle.txt")
+	tabs := read(t, "askq-tabs.txt")
+	review := read(t, "askq-review.txt")
+	// The same prompt with its text option selected, so the text field
+	// has the focus.
+	tabsTyping := strings.Replace(strings.Replace(tabs, "❯ 1. Small", "  1. Small", 1), "  3. Type something.", "❯ 3. Type something.", 1)
 	tests := []struct {
 		name     string
 		screen   string
@@ -56,6 +61,14 @@ func TestAnswer(t *testing.T) {
 		{"unknown action", perm, true, Answer{Action: "type"}, nil, reasonBadKey},
 		{"not running", perm, false, Answer{Action: "key", Key: "Enter"}, nil, send.ReasonNotRunning},
 		{"escape with no question", idle, true, Answer{Action: "key", Key: "Escape"}, nil, reasonNoDialog},
+		{"left is not a key answer", tabs, true, Answer{Action: "key", Key: "Left"}, nil, reasonBadKey},
+		{"previous question", tabs, true, Answer{Action: "step", Key: "Left"}, []string{"Left"}, ""},
+		{"next question", tabs, true, Answer{Action: "step", Key: "Right"}, []string{"Right"}, ""},
+		{"back from review", review, true, Answer{Action: "step", Key: "Left"}, []string{"Left"}, ""},
+		{"step out of the text field", tabsTyping, true, Answer{Action: "step", Key: "Left"}, []string{"Up", "Left"}, ""},
+		{"step on a single question", ask, true, Answer{Action: "step", Key: "Left"}, nil, reasonNoDialog},
+		{"step with no question", idle, true, Answer{Action: "step", Key: "Right"}, nil, reasonNoDialog},
+		{"step with another key", tabs, true, Answer{Action: "step", Key: "Enter"}, nil, reasonBadKey},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

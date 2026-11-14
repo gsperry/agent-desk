@@ -121,6 +121,9 @@ export type Answer =
   | { action: 'choose'; index: number; label: string }
   | { action: 'text'; index: number; label: string; text: string }
   | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }
+  // step moves to the previous (Left) or next (Right) question of a prompt
+  // with several.
+  | { action: 'step'; key: 'Left' | 'Right' }
 
 export interface SearchHit {
   sessionId: string

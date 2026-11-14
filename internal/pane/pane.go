@@ -438,6 +438,18 @@ func atoi(s string) int {
 
 // Moves returns the key presses that select option index and confirm it,
 // starting from the current selection.
+// stepKeys moves to the previous or next question. Claude Code's question
+// tabs ignore Left and Right while its text field has the focus, where they
+// move the cursor, so the selection first moves up off the text option.
+func (d *Dialog) stepKeys(key string) []string {
+	for _, o := range d.Options {
+		if o.Selected && o.Free && o.Index > 0 {
+			return []string{"Up", key}
+		}
+	}
+	return []string{key}
+}
+
 func (d *Dialog) Moves(index int) []string {
 	cur := 0
 	for _, o := range d.Options {
