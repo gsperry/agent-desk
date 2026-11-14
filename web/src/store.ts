@@ -7,7 +7,7 @@ import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { defaultNotifier, type Notifier, type Permission } from './notify'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
-import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -326,6 +326,21 @@ export class Store {
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
+  }
+
+  async setup(): Promise<{ data?: SetupReport; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/setup')
+      const data = (await res.json().catch(() => ({}))) as SetupReport & SendRefusal
+      return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async applySetup(choice: { shown: string[]; defaultTool: string }): Promise<{ data?: SetupReport; error?: string }> {
+    const r = await this.post('/api/setup', choice)
+    return { data: r.data as SetupReport | undefined, error: r.error }
   }
 
   async spawn(req: SpawnRequest): Promise<{ data?: SessionView; error?: string }> {

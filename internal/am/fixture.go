@@ -293,10 +293,45 @@ func (f Fixture) DeleteGroup(_ context.Context, path string) error {
 	})
 }
 
+// Settings serves <dir>/settings.json when a test has stored settings,
+// else a fixed set.
 func (f Fixture) Settings(context.Context) ([]Setting, error) {
+	if data, err := os.ReadFile(f.settingsPath()); err == nil {
+		var s []Setting
+		if err := json.Unmarshal(data, &s); err != nil {
+			return nil, fmt.Errorf("fixture settings: %w", err)
+		}
+		return s, nil
+	}
 	return []Setting{
-		{Key: "default_tool", Value: ""},
+		{Key: "default_tool", Value: "", Values: []string{"claude", "opencode", "codex"}},
 		{Key: "worktree_default", Value: "off"},
 		{Key: "hidden_tools", Value: "codex", Values: []string{"claude", "opencode", "codex"}},
 	}, nil
+}
+
+// SetSetting changes a setting in <dir>/settings.json.
+func (f Fixture) SetSetting(ctx context.Context, key, value string) error {
+	settings, err := f.Settings(ctx)
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range settings {
+		if settings[i].Key == key {
+			settings[i].Value, found = value, true
+		}
+	}
+	if !found {
+		return fmt.Errorf("fixture settings: no setting %q", key)
+	}
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(f.settingsPath(), data, 0o600)
+}
+
+func (f Fixture) settingsPath() string {
+	return filepath.Join(filepath.Dir(f.Path), "settings.json")
 }

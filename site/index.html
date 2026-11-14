@@ -221,6 +221,12 @@
             <li><a href="https://brew.sh">Homebrew</a>, on macOS or Linux; it installs <a href="https://agent-manager.dev">agent-manager</a> and tmux with Agent Desk</li>
             <li><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a></li>
           </ul>
+          <h3>First run</h3>
+          <ol>
+            <li>A setup checklist opens. It checks that agent-manager, tmux and Claude Code are installed and that agent-manager is running, with a button to start it.</li>
+            <li>Choose the CLIs new sessions offer and the default one. Agent Desk saves them in agent-manager's own settings.</li>
+            <li>Sessions agent-manager already runs appear at once. Conversations you started with a plain <code>claude</code> are under All conversations; resume one to continue it as a session.</li>
+          </ol>
         </div>
         <pre class="terminal"><code><span class="out"># the command, which opens in your browser</span>
 <span class="prompt">$</span> brew install gsperry/tap/agent-desk

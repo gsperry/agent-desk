@@ -306,6 +306,8 @@ func TestRouteNeeds(t *testing.T) {
 		"POST /api/manager/start":                          remote.NeedManage,
 		"GET /api/remote":                                  remote.NeedRead,
 		"POST /api/remote":                                 remote.NeedLocal,
+		"GET /api/setup":                                   remote.NeedLocal,
+		"POST /api/setup":                                  remote.NeedLocal,
 		"GET /api/ws":                                      remote.NeedRead,
 	}
 	s := newTestServer(t, Config{})

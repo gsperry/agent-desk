@@ -263,3 +263,17 @@ export interface SlashCommand {
   kind: 'builtin' | 'command' | 'skill'
   source?: string
 }
+
+export interface SetupProgram {
+  name: string
+  found: boolean
+}
+
+// SetupReport is the welcome screen's checklist from GET /api/setup.
+export interface SetupReport {
+  programs: SetupProgram[]
+  clis: string[]
+  shown: string[]
+  defaultTool: string
+  settingsError?: string
+}

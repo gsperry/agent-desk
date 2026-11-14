@@ -32,6 +32,7 @@ func TestManageArgs(t *testing.T) {
 		{"move to root", func(c *CLI) error { return c.Move(context.Background(), "a1", "") }, "agent-manager|move|--json|--|a1|"},
 		{"create group", func(c *CLI) error { return c.CreateGroup(context.Background(), "backend/api", "/src/api") }, "agent-manager|create-group|--json|--directory=/src/api|--|backend/api"},
 		{"delete group", func(c *CLI) error { return c.DeleteGroup(context.Background(), "-weird") }, "agent-manager|delete-group|--json|--|-weird"},
+		{"set setting", func(c *CLI) error { return c.SetSetting(context.Background(), "hidden_tools", "") }, "agent-manager|settings|set|--|hidden_tools|"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
