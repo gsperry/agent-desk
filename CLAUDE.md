@@ -27,7 +27,7 @@ make e2e     # Playwright smoke test on testdata/fixtures/desk
 make desktop # desktop/target/release/bundle/macos/Agent Desk.app (Rust, Tauri CLI)
 make release-cli desktop-universal checksums VERSION=v0.1.0   # release files in dist/ (docs/releasing.md)
 scripts/homebrew.sh 0.1.0   # render the Homebrew formula and cask from a release's SHA256SUMS
-python3 tools/site-demo/gen.py /tmp/demo/desk && node tools/site-demo/record.mjs /tmp/demo/desk site/img/demo.webm   # site demo video from made-up sessions (DEMO_SHOTS=dir saves stills)
+go run ./tools/demogen /tmp/demo/desk && node tools/site-demo/record.mjs /tmp/demo/desk site/img/demo.webm   # site demo video from made-up sessions (DEMO_SHOTS=dir saves stills)
 node tools/site-demo/shots.mjs /tmp/demo/desk site/img   # site feature screenshots from the same made-up sessions
 node tools/site-demo/og.mjs   # site/img/og.png social preview
 go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl   # raw-item report on real data
@@ -40,7 +40,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 
 ## Layout
 
-- `cmd/agent-desk`: flags, token, listener, browser open, fixture mode
+- `cmd/agent-desk`: flags, token, listener, browser open, fixture mode, `--demo`
 - `internal/run`: argv-only process runner with timeouts
 - `internal/am`: agent-manager CLI client (`snapshot --json`, `serve --background`, `env show`) and the fixture client
 - `internal/grouping`: session to project (group, git repo via common dir, or directory)
@@ -59,6 +59,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
 - `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
 - `internal/remote`: remote access levels, settings (owner-only file), the Tailscale identity check and Cloudflare Access token verification
+- `internal/demo`: the made-up sessions behind `agent-desk --demo` and the site's images, and the demo's live behavior (an answered prompt plays out; a reply gets a note)
 - `internal/sysstat`: CPU load, memory, swap and free disk from sysctl/statfs (macOS) or /proc (Linux), sampled every 5 s; runs no commands
 - `internal/setup`: the first-run checklist: programs on PATH, and the CLIs new sessions offer, saved through `agent-manager settings set`
 - `internal/commands`: slash commands for autocomplete: built-ins generated from the Claude Code binary, custom commands, skills and enabled plugins (read-only)

@@ -28,6 +28,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/changes"
 	"github.com/gsperry/agent-desk/internal/commands"
 	"github.com/gsperry/agent-desk/internal/conflicts"
+	"github.com/gsperry/agent-desk/internal/demo"
 	"github.com/gsperry/agent-desk/internal/grouping"
 	"github.com/gsperry/agent-desk/internal/history"
 	"github.com/gsperry/agent-desk/internal/hub"
@@ -59,12 +60,26 @@ func main() {
 	fixtures := flag.String("fixtures", "", "serve sessions from a fixture directory instead of agent-manager (testing only)")
 	showVersion := flag.Bool("version", false, "print the version")
 	exitWithStdin := flag.Bool("exit-with-stdin", false, "stop when standard input closes (the desktop app holds it open, so the server ends with the app even if the app is killed)")
+	demoMode := flag.Bool("demo", false, "try Agent Desk on made-up sessions: no agent-manager, tmux or Claude Code needed, and nothing real is read or changed")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
 		return
 	}
+	if *demoMode {
+		if *fixtures != "" {
+			log.Fatal("--demo and --fixtures cannot be used together")
+		}
+		// Its own port, so the demo's browser storage stays apart from the
+		// real Agent Desk's.
+		portSet := false
+		flag.Visit(func(f *flag.Flag) { portSet = portSet || f.Name == "port" })
+		if !portSet {
+			*port = demoPort
+		}
+	}
 	err := run(options{
+		demo:          *demoMode,
 		port:          *port,
 		open:          !*noOpen,
 		devOrigins:    splitList(*devOrigins),
@@ -77,7 +92,12 @@ func main() {
 	}
 }
 
+// demoPort is where --demo listens unless --port says otherwise.
+const demoPort = 7319
+
 type options struct {
+	// demo serves made-up sessions from a temporary directory.
+	demo       bool
 	port       int
 	open       bool
 	devOrigins []string
@@ -91,6 +111,17 @@ func run(o options) error {
 	token, err := sessionToken()
 	if err != nil {
 		return err
+	}
+	if o.demo {
+		dir, err := os.MkdirTemp("", "agent-desk-demo-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
+		if err := demo.Write(dir, time.Now()); err != nil {
+			return err
+		}
+		o.fixtures = dir
 	}
 	poller, client, err := newPoller(o.fixtures)
 	if err != nil {
@@ -111,6 +142,11 @@ func run(o options) error {
 		return err
 	}
 	remoteAccess := newRemoteListener(remoteStore, o.fixtures)
+	// The demo has no remote access: it is for trying Agent Desk at the desk.
+	var remoteControl server.RemoteControl = remoteAccess
+	if o.demo {
+		remoteControl = nil
+	}
 	sampler := &sysstat.Sampler{Paths: statPaths(poller)}
 	l, err := listen(o.port)
 	if err != nil {
@@ -137,7 +173,8 @@ func run(o options) error {
 		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
-		Remote:      remoteAccess,
+		Remote:      remoteControl,
+		Demo:        o.demo,
 		Access:      &remote.AccessKeys{},
 		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
 		Setup:       &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
@@ -155,7 +192,9 @@ func run(o options) error {
 	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	remoteAccess.handler = s.RemoteHandler()
 	remoteAccess.onChange = s.DropRemote
-	if err := remoteAccess.apply(remoteStore.Get()); err != nil {
+	if o.demo {
+		// Nothing to apply.
+	} else if err := remoteAccess.apply(remoteStore.Get()); err != nil {
 		log.Printf("remote access: %v", err)
 	}
 	defer remoteAccess.stop()
@@ -165,6 +204,9 @@ func run(o options) error {
 		base = strings.TrimRight(o.openBase, "/")
 	}
 	url := base + "/#t=" + token
+	if o.demo {
+		fmt.Println("Agent Desk demo: made-up sessions, nothing real is read or changed. Ctrl+C ends it and deletes them.")
+	}
 	fmt.Printf("Agent Desk %s listening on http://%s\nOpen: %s\n", version, addr, url)
 	if o.open {
 		openBrowser(url)
@@ -178,6 +220,9 @@ func run(o options) error {
 	go poller.Run(ctx)
 	go transcripts.Run(ctx)
 	go cleanPastes(ctx, pastes)
+	if o.demo {
+		go (&demo.Live{Dir: o.fixtures}).Run(ctx)
+	}
 	go sampler.Run(ctx)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()

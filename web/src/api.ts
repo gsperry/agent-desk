@@ -5,7 +5,8 @@ import type { ServerMessage } from './types'
 
 export type ConnectionState =
   | { kind: 'connecting' }
-  | { kind: 'open'; version: string }
+  // demo is set when the server runs agent-desk --demo.
+  | { kind: 'open'; version: string; demo?: boolean }
   | { kind: 'closed'; retryInMs: number }
   | { kind: 'unauthorized' }
 
@@ -50,7 +51,7 @@ export function connect(
       const msg = JSON.parse(String(ev.data)) as ServerMessage
       if (msg.type === 'hello') {
         attempt = 0
-        onState({ kind: 'open', version: msg.version })
+        onState({ kind: 'open', version: msg.version, demo: msg.demo === true })
       }
       onMessage(msg)
     }

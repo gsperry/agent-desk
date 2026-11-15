@@ -1,10 +1,10 @@
 // Takes the site's feature screenshots from made-up sessions: the overview,
 // a waiting question, line comments on a session's changes, and usage, at
 // 1440×900 in the dark theme. Nothing real is shown: the sessions and the
-// system stats come from gen.py next to this file.
+// system stats come from internal/demo, the set agent-desk --demo serves.
 //
 //   make build
-//   python3 tools/site-demo/gen.py /tmp/site-demo/desk
+//   go run ./tools/demogen /tmp/site-demo/desk
 //   node tools/site-demo/shots.mjs /tmp/site-demo/desk site/img
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'

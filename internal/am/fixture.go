@@ -168,6 +168,18 @@ func (f Fixture) Type(ctx context.Context, id, text string) error {
 var fixtureMu sync.Mutex
 
 // update applies f to the fixture snapshot and writes it back.
+// SetStatus changes a fixture session's status, for the demo's agents.
+func (f Fixture) SetStatus(id, status string) error {
+	return f.update(func(snap *Snapshot) error {
+		s, err := f.session(snap, id)
+		if err != nil {
+			return err
+		}
+		s.Status = status
+		return nil
+	})
+}
+
 func (f Fixture) update(fn func(*Snapshot) error) error {
 	fixtureMu.Lock()
 	defer fixtureMu.Unlock()

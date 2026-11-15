@@ -283,6 +283,16 @@ function Banners({ state, conn, onStartManager, onSetup }: Pick<Props, 'state' |
   const [startError, setStartError] = useState<string | null>(null)
   const { remote } = useRemote()
   const banners = []
+  if (conn.kind === 'open' && conn.demo) {
+    banners.push(
+      <div key="demo" className="banner info">
+        <strong>Demo:</strong> made-up sessions. Nothing real is read or changed; answer the waiting one and watch it work.{' '}
+        <a href="https://agent-desk.app/#install" target="_blank" rel="noreferrer">
+          Install Agent Desk
+        </a>
+      </div>,
+    )
+  }
   if (conn.kind === 'closed') {
     banners.push(
       <div key="conn" className="banner warn">

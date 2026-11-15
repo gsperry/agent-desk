@@ -102,6 +102,8 @@ type Config struct {
 	// Setup checks the programs Agent Desk needs and changes the CLIs
 	// agent-manager offers, for the welcome screen. Nil leaves it out.
 	Setup SetupSource
+	// Demo is set by agent-desk --demo: the sessions are made up.
+	Demo bool
 	// Stats is the computer's load, memory, swap and free disk space. Nil
 	// leaves it out.
 	Stats StatsSource
@@ -380,7 +382,7 @@ func (s *Server) requireToken(next http.Handler) http.Handler {
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.cfg.Version})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.cfg.Version, "demo": s.cfg.Demo})
 }
 
 func (s *Server) sessions(w http.ResponseWriter, _ *http.Request) {

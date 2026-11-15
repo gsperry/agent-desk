@@ -1,10 +1,11 @@
 // Records the demo video on agent-desk.app from made-up sessions: the
 // overview, a waiting question answered with one click, the agent working
 // on with the live activity row, its reply, and a reply sent with Enter.
-// Nothing real is shown: the sessions come from gen.py next to this file.
+// Nothing real is shown: the sessions come from internal/demo, the set
+// agent-desk --demo serves.
 //
 //   make build
-//   python3 tools/site-demo/gen.py /tmp/site-demo/desk
+//   go run ./tools/demogen /tmp/site-demo/desk
 //   node tools/site-demo/record.mjs /tmp/site-demo/desk site/img/demo.webm
 import { spawn } from 'node:child_process'
 import { appendFileSync, copyFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
@@ -89,7 +90,12 @@ const freshPrompt = () => {
   const lines = readFileSync(transcriptPath, 'utf8').split('\n')
   let last = -1
   lines.forEach((l, i) => {
-    if (l.includes('"type": "user"') && !l.includes('tool_result')) last = i
+    try {
+      const r = JSON.parse(l)
+      if (r.type === 'user' && typeof r.message?.content === 'string') last = i
+    } catch {
+      // not a record
+    }
   })
   if (last < 0) return
   const r = JSON.parse(lines[last])
