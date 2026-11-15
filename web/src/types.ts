@@ -81,7 +81,7 @@ export interface Page {
 }
 
 export type ServerMessage =
-  | { type: 'hello'; version: string }
+  | { type: 'hello'; version: string; demo?: boolean }
   | { type: 'sessions'; state: State }
   | { type: 'transcript.page'; page: Page }
   | { type: 'transcript.append'; sessionId: string; items: Item[] }

@@ -67,6 +67,15 @@ It opens Agent Desk in your browser. The link carries a token that changes on ev
 | --- | --- | --- |
 | `--port` | `7317` | Port on 127.0.0.1. A busy port falls back to a free one. |
 | `--no-open` | off | Print the URL without opening a browser. |
+| `--demo` | off | Try Agent Desk on made-up sessions, on port 7319. |
+
+### Try it first
+
+```sh
+agent-desk --demo
+```
+
+opens Agent Desk on made-up sessions: no agent-manager, tmux or Claude Code needed, and nothing real is read or changed. Answer the waiting session and watch it carry on; a reply gets a note that this is a demo. Remote access is off. The sessions live in a temporary folder that is deleted when you stop it. With the Mac app installed, the same command is inside it: `"/Applications/Agent Desk.app/Contents/MacOS/agent-desk" --demo`.
 
 ### First run
 

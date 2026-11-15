@@ -106,7 +106,10 @@ function Desk({ token }: { token: string }) {
   const [historyRoute, setHistoryRoute] = useState<{ id: string | null } | null>(historyFromPath)
   const [conversations, setConversations] = useState<Conversation[] | null>(null)
   const [usageOpen, setUsageOpen] = useState(usageFromPath)
-  const [welcomeOpen, setWelcomeOpen] = useState(() => !remoteInfo.remote && (welcomeFromPath() || firstRun(remoteInfo.remote)))
+  // autoWelcome is the checklist opening by itself on the first run, which
+  // the demo skips.
+  const [autoWelcome, setAutoWelcome] = useState(() => !remoteInfo.remote && !welcomeFromPath() && firstRun(remoteInfo.remote))
+  const [welcomeOpen, setWelcomeOpen] = useState(() => autoWelcome || (!remoteInfo.remote && welcomeFromPath()))
   const [view, setView] = useState<ViewOptions>({ showArchived: false, onlyAttention: false })
   const [switcher, setSwitcher] = useState(false)
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
@@ -322,6 +325,7 @@ function Desk({ token }: { token: string }) {
     setSearchQuery(null)
   }, [])
   const openWelcome = useCallback(() => {
+    setAutoWelcome(false)
     history.pushState(null, '', '/welcome')
     setSelected(null)
     setHistoryRoute(null)
@@ -378,7 +382,10 @@ function Desk({ token }: { token: string }) {
   const session = sessions.find((s) => s.id === selected)
   // On a phone the list and a view take turns; a view is showing when a
   // session, search, history or usage is open.
-  const mainActive = searchQuery !== null || usageOpen || welcomeOpen || historyRoute !== null || selected !== null
+  // The demo needs no setup, so the first-run checklist steps aside.
+  const demo = conn.kind === 'open' && conn.demo === true
+  const showWelcome = welcomeOpen && !(demo && autoWelcome)
+  const mainActive = searchQuery !== null || usageOpen || showWelcome || historyRoute !== null || selected !== null
   const desktop = remoteInfo.remote ? undefined : desktopInvoke()
   return (
     <ViewPrefsContext.Provider value={viewPrefs}>
@@ -449,7 +456,7 @@ function Desk({ token }: { token: string }) {
                   setSearchQuery(null)
                 }}
               />
-            ) : welcomeOpen ? (
+            ) : showWelcome ? (
               <Welcome
                 state={data.sessions}
                 load={loadSetup}

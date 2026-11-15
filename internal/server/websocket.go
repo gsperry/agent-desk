@@ -83,7 +83,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 
 	c := &wsConn{server: s, conn: conn, ctx: ctx, out: make(chan any, 64), subs: map[string]context.CancelFunc{}}
 	defer c.stopAll()
-	if err := c.send(map[string]any{"type": "hello", "version": s.cfg.Version}); err != nil {
+	if err := c.send(map[string]any{"type": "hello", "version": s.cfg.Version, "demo": s.cfg.Demo}); err != nil {
 		return
 	}
 	updates, unsubscribe := s.cfg.Sessions.Subscribe()
