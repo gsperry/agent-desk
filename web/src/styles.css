@@ -1401,6 +1401,37 @@ pre.code-body,
   color: var(--finished);
 }
 
+.live-steps li.current {
+  border-color: var(--accent);
+  background: var(--info-bg);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.live-steps li:has(> .live-step) {
+  padding: 0;
+}
+
+.live-step {
+  padding: 0.1rem 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.live-step:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.live-answered {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  color: var(--finished);
+}
+
 .live-steps-row {
   display: flex;
   flex-wrap: wrap;

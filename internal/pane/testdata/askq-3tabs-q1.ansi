@@ -1,0 +1,32 @@
+
+[38;5;174m ▐[48;5;16m▛███▛█[39m[49m   [1mClaude Code[0m [38;5;246mv2.1.325[39m
+[38;5;174m▝▜[48;5;16m█████[49m█▀[39m  [38;5;246mHaiku 4.5 · Claude API[39m
+[38;5;174m ▝▝   ▝▝ [39m  [38;5;246m/private/tmp/agentdesk-scratch/tabs-probe[39m
+
+
+[38;5;246m[48;5;237m❯ [38;5;231mThis session is already named. You can rename it later with agent-manager rename "<name>" only [39m
+  [38;5;231mif the user asks. Do not rename it now. Then do the task:[39m
+
+  [38;5;231mThis is a UI test. Call the AskUserQuestion tool exactly once, with three questions, all [39m
+  [38;5;231mmultiSelect false. Question 1: header 'Size', question 'Pick a size', options 'Small' [39m
+  [38;5;231m(description 'Small size') and 'Large' (description 'Large size'). Question 2: header 'Shape', [39m
+  [38;5;231mquestion 'Pick a shape', options 'Circle' (description 'Round') and 'Hexagon' (description 'Six [39m
+  [38;5;231msides'). Question 3: header 'Color', question 'Pick a color', options 'Red' (description 'Warm')[39m
+  [38;5;231mand 'Blue' (description 'Cool'). After the user answers, reply with one line repeating the [39m
+  [38;5;231manswers and stop. Do not run any other tool.[39m
+
+[49m  [38;5;246mThought for [1m2s[0m[38;5;246m [39m
+[38;5;246m───────────────────────────────────────────────────────────────────────────────────────────────────
+← [38;5;16m[48;5;153m ☐ Size [39m[49m ☐ Shape  ☐ Color  ✔ Submit  →
+
+[1m[38;5;231mPick a size[0m
+
+[38;5;153m❯[39m [38;5;246m1.[39m [38;5;153mSmall[39m
+     [38;5;246mSmall size[39m
+  [38;5;246m2.[39m Large
+     [38;5;246mLarge size[39m
+  [38;5;246m3. Type something.[39m
+[38;5;246m───────────────────────────────────────────────────────────────────────────────────────────────────
+[39m  4. Chat about this
+
+[38;5;246mEnter to select · Tab/Arrow keys to navigate · Esc to cancel[39m

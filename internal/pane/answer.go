@@ -141,7 +141,16 @@ func (a *Answerer) Screen(ctx context.Context, id string) (Screen, error) {
 	if err != nil {
 		return Screen{}, err
 	}
-	return Screen{Text: tail(text, screenLines), Dialog: Parse(text)}, nil
+	d := Parse(text)
+	if d != nil && len(d.Steps) >= 2 {
+		// Which question is showing is drawn only in color.
+		if styled, err := a.Reader.ReadStyled(ctx, id); err == nil {
+			if i := currentStep(styled, d.Steps); i >= 0 {
+				d.Steps[i].Current = true
+			}
+		}
+	}
+	return Screen{Text: tail(text, screenLines), Dialog: d}, nil
 }
 
 // Styled returns the whole screen with its color escape sequences, for a
@@ -205,7 +214,13 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 		if d == nil || len(d.Steps) < 2 {
 			return &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a prompt with several questions."}
 		}
-		keys = d.stepKeys(ans.Key)
+		keys = d.stepKeys(ans.Key, 1)
+	case "tab":
+		k, err := a.tabKeys(ctx, id, ans)
+		if err != nil {
+			return err
+		}
+		keys = k
 	case "text":
 		err := a.answerText(ctx, id, ans)
 		a.Sessions.Trigger()
@@ -213,9 +228,44 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 	default:
 		return &send.Refused{Reason: reasonBadKey, Message: "Unknown answer."}
 	}
+	if len(keys) == 0 {
+		// Already showing the question asked for.
+		return nil
+	}
 	err := a.Keys.Send(ctx, id, keys...)
 	a.Sessions.Trigger()
 	return err
+}
+
+// tabKeys moves to the question at ans.Index, whose label must be
+// ans.Label, from the one showing, read from the screen's colors.
+func (a *Answerer) tabKeys(ctx context.Context, id string, ans Answer) ([]string, error) {
+	text, err := a.Reader.Read(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("could not read the session's screen, so nothing was pressed: %w", err)
+	}
+	d := Parse(text)
+	if d == nil || len(d.Steps) < 2 {
+		return nil, &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a prompt with several questions."}
+	}
+	if ans.Index < 0 || ans.Index >= len(d.Steps) || d.Steps[ans.Index].Label != ans.Label {
+		return nil, &send.Refused{Reason: reasonChanged, Message: "The questions on screen changed. Check them again."}
+	}
+	styled, err := a.Reader.ReadStyled(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("could not read the session's screen, so nothing was pressed: %w", err)
+	}
+	cur := currentStep(styled, d.Steps)
+	if cur < 0 {
+		return nil, &send.Refused{Reason: reasonChanged, Message: "Agent Desk cannot tell which question is showing. Use Previous question or Next question."}
+	}
+	switch {
+	case ans.Index < cur:
+		return d.stepKeys("Left", cur-ans.Index), nil
+	case ans.Index > cur:
+		return d.stepKeys("Right", ans.Index-cur), nil
+	}
+	return nil, nil
 }
 
 // answerText answers a text option: it moves the selection onto the option,

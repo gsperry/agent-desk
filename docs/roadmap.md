@@ -1,8 +1,8 @@
 # Roadmap after v1
 
-Status 2026-11-11: every buildable row is done. Rows marked deferred wait on a decision from the owner.
+Status 2026-11-14: every buildable row is done, through v0.1.3. Rows marked deferred wait on a decision from the owner.
 
-Milestones M7 to M10. Each lands on a local feature branch with step commits and is squash-merged into `main`. Nothing is pushed until reviewed.
+Milestones M7 to M10 landed on local branches squash-merged into `main`; later work goes through pull requests on GitHub, each merged by the owner.
 
 Constraints that apply to every milestone: the hard rules in [CLAUDE.md](../CLAUDE.md), anonymized fixtures only in `testdata/`, no sends or spawns against real sessions in tests, and screenshots from fixtures only.
 
@@ -53,7 +53,7 @@ Goal: supervise and correct work, not only chat.
 | 10.1 | Live terminal (read-only, done) | xterm.js fed by `agent-manager read --styled` polling; read-only first | Deferred (2026-11-11): typing |
 | 10.2 | Rules (done; suggested replies always need a click) | Local rules: when a session reaches a status, notify; optionally send a configured prompt, which asks for confirmation each time unless marked trusted | Deferred (2026-11-11): rules that send without a click |
 | 10.3 | Catch-up summaries (done, off by default) | [design/catch-up-summaries.md](design/catch-up-summaries.md) | Decided: opt-in, labelled as costing tokens |
-| 10.4 | Desktop app (built, see A2) | [design/desktop-app.md](design/desktop-app.md) | Deferred (2026-11-11): signing and notarization |
+| 10.4 | Desktop app (done, see A2) | [design/desktop-app.md](design/desktop-app.md) | Decided: signed with a Developer ID and notarized (v0.1.1) |
 | 10.5 | Away from the desk (Tailscale and Cloudflare built) | R0 groundwork, R1 Tailscale, R2 Cloudflare Tunnel and Access. A hosted relay (R3) is its own decision. [design/away-from-desk.md](design/away-from-desk.md) | Deferred (2026-11-11): R3 hosted relay, its own project |
 | 10.6 | Phone push notifications | Deferred; needs an outside service, so it would be a separate opt-in | Deferred (2026-11-11): needs an outside service such as ntfy, and a rule amendment |
 
@@ -62,5 +62,15 @@ Goal: supervise and correct work, not only chat.
 | Step | Feature | Notes |
 | --- | --- | --- |
 | A1 | Slash command autocomplete (done) | Built-ins from the Claude Code binary (`tools/claudecommands`), custom commands, skills and enabled plugins; snippets in the same menu |
-| A2 | Desktop app (done) | Tauri shell in `desktop/` around the Go binary: window, native notifications, dock badge and menu-bar count, Control-Option-A. Unsigned local builds. See [design/desktop-app.md](design/desktop-app.md) |
+| A2 | Desktop app (done) | Tauri shell in `desktop/` around the Go binary: window, native notifications, dock badge and menu-bar count, Control-Option-A, start at login, notifications that open their session. Universal, signed and notarized. See [design/desktop-app.md](design/desktop-app.md) |
 | A3 | Remote access over Cloudflare Tunnel (R2, done) | Access token verified in Agent Desk against the team's signing keys; see [design/away-from-desk.md](design/away-from-desk.md) |
+| A4 | Releases and Homebrew (done) | A `vX.Y.Z` tag builds the command and the app in GitHub Actions into a draft release; the owner publishes it and `scripts/homebrew.sh` updates the tap (`gsperry/tap`: the `agent-desk` formula and the `agent-desk-app` cask). See [releasing.md](releasing.md) |
+| A5 | First-run setup checklist (done) | Programs on PATH, the manager, the CLIs new sessions offer (through `agent-manager settings set`), and conversations started outside agent-manager to resume |
+| A6 | System stats (done) | CPU load, memory, swap and free disk in the sidebar from sysctl, statfs and /proc, with an alert when a disk nearly fills or memory runs out |
+| A7 | Questions, end to end (done) | Previous and next question, clickable question tabs (the current one read from the screen's colors), the earlier answer marked, typed answers edited after going back, and typed answers in several-answer questions ticked. Each checked against a live Claude Code prompt |
+
+## Next
+
+| Step | Feature | Notes |
+| --- | --- | --- |
+| N1 | Memory per session | Each session's process memory (its agent and what it started) on its row, to find the heavy one. Needs `ps`, a new local command |

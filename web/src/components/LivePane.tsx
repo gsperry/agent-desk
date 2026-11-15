@@ -127,12 +127,32 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
           {dialog.steps && dialog.steps.length > 1 && (
             <div className="live-steps-row">
               <ol className="live-steps" aria-label="Questions">
-                {dialog.steps.map((s) => (
-                  <li key={s.label} className={s.done ? 'done' : undefined}>
-                    {s.done ? '✓ ' : ''}
-                    {s.label}
-                  </li>
-                ))}
+                {dialog.steps.map((s, i) => {
+                  const text = `${s.done ? '✓ ' : ''}${s.label}`
+                  const cls = [s.done && 'done', s.current && 'current'].filter(Boolean).join(' ') || undefined
+                  // Once the current question is known, any other is a click away.
+                  const known = dialog.steps?.some((x) => x.current) ?? false
+                  return (
+                    <li key={s.label} className={cls} aria-current={s.current ? 'step' : undefined}>
+                      {known && !s.current ? (
+                        <button
+                          type="button"
+                          className="live-step"
+                          disabled={busy}
+                          title={s.submit ? 'Go to the review and submit' : `Go to ${s.label}`}
+                          onClick={() => {
+                            setTyping(null)
+                            send({ action: 'tab', index: i, label: s.label })
+                          }}
+                        >
+                          {text}
+                        </button>
+                      ) : (
+                        text
+                      )}
+                    </li>
+                  )
+                })}
               </ol>
               {/* Answers are kept until Submit, so an earlier question can
                   be answered again. */}
@@ -192,7 +212,10 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
                   </span>
                 )}{' '}
                 <span className="live-option-text">
-                  {o.label}
+                  <span>
+                    {o.label}
+                    {o.answered && <span className="chip live-answered">Your answer</span>}
+                  </span>
                   {o.description && <span className="live-option-desc">{o.description}</span>}
                 </span>
               </button>

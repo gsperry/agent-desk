@@ -72,7 +72,7 @@ func TestParse(t *testing.T) {
 			// Back on a question answered with typed text: the field shows
 			// the answer in place of "Type something.".
 			file:     "askq-typed-back.txt",
-			labels:   []string{"Small", "Large", "Medium, about 40 cm ✔", "Chat about this"},
+			labels:   []string{"Small", "Large", "Medium, about 40 cm", "Chat about this"},
 			selected: 0,
 			question: "Pick a size",
 			free:     []bool{false, false, true, false},
@@ -81,7 +81,7 @@ func TestParse(t *testing.T) {
 		{
 			// The cursor on the field draws one more space; labels match.
 			file:     "askq-typed-selected.txt",
-			labels:   []string{"Small", "Large", "Medium, about 40 cm ✔", "Chat about this"},
+			labels:   []string{"Small", "Large", "Medium, about 40 cm", "Chat about this"},
 			selected: 2,
 			question: "Pick a size",
 			free:     []bool{false, false, true, false},
@@ -89,7 +89,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			file:     "askq-typed-cleared.txt",
-			labels:   []string{"Small", "Large", "Type something. ✔", "Chat about this"},
+			labels:   []string{"Small", "Large", "Type something.", "Chat about this"},
 			selected: 2,
 			question: "Pick a size",
 			free:     []bool{false, false, true, false},
@@ -383,5 +383,22 @@ func TestParseMultiTypedField(t *testing.T) {
 				t.Fatalf("options = %+v", d.Options)
 			}
 		})
+	}
+}
+
+// Back on an answered question, the answer carries Claude Code's ✔, which
+// Agent Desk reports as Answered and leaves out of the label.
+func TestParseAnswered(t *testing.T) {
+	d := Parse(read(t, "askq-typed-back.txt"))
+	for i, o := range d.Options {
+		if o.Answered != (i == 2) {
+			t.Fatalf("option %d = %+v", i, o)
+		}
+	}
+	d = Parse(read(t, "askq-multi-typed-ticked.txt"))
+	for _, o := range d.Options {
+		if o.Answered {
+			t.Fatalf("a ticked checkbox is not Answered: %+v", o)
+		}
 	}
 }
