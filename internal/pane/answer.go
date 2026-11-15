@@ -187,7 +187,9 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 		if ans.Index < 0 || ans.Index >= len(d.Options) || d.Options[ans.Index].Label != ans.Label {
 			return &send.Refused{Reason: reasonChanged, Message: "The choice on screen changed. Check it again before answering."}
 		}
-		if d.Options[ans.Index].Free {
+		// A typed answer in a question that takes several is ticked and
+		// unticked like the other answers; any other text field takes text.
+		if o := d.Options[ans.Index]; o.Free && !(d.Multi && o.Text != "") {
 			return &send.Refused{Reason: reasonFree, Message: "That option takes text. Type your answer and send it."}
 		}
 		keys = d.Moves(ans.Index)
@@ -267,7 +269,41 @@ func (a *Answerer) answerText(ctx context.Context, id string, ans Answer) error 
 			return &send.Refused{Reason: reasonChanged, Message: "The earlier answer could not be cleared, so nothing was typed. Check the terminal."}
 		}
 	}
-	return a.Typer.Type(ctx, id, text)
+	if err := a.Typer.Type(ctx, id, text); err != nil {
+		return err
+	}
+	if after.Multi {
+		return a.tickTyped(ctx, id, ans.Index)
+	}
+	return nil
+}
+
+// tickTyped makes sure a typed answer in a question that takes several
+// answers is ticked. Typing ticks the field and Enter toggles it, so the
+// Enter that agent-manager type sends after the text leaves it unticked,
+// and the answer would be left out. It is pressed once more, then checked.
+func (a *Answerer) tickTyped(ctx context.Context, id string, index int) error {
+	typed, err := a.dialog(ctx, id)
+	if err != nil {
+		return err
+	}
+	if index >= len(typed.Options) || !typed.Options[index].Free || typed.Options[index].Text == "" || !typed.Options[index].Selected {
+		return &send.Refused{Reason: reasonChanged, Message: "Your answer was typed, but the question changed before it could be ticked. Check the terminal."}
+	}
+	if typed.Options[index].Checked != nil && *typed.Options[index].Checked {
+		return nil
+	}
+	if err := a.Keys.Send(ctx, id, "Enter"); err != nil {
+		return err
+	}
+	ticked, err := a.dialog(ctx, id)
+	if err != nil {
+		return err
+	}
+	if index >= len(ticked.Options) || ticked.Options[index].Checked == nil || !*ticked.Options[index].Checked {
+		return &send.Refused{Reason: reasonChanged, Message: "Your answer was typed but is not ticked. Tick it before Next."}
+	}
+	return nil
 }
 
 // dialog reads the screen and parses the dialog on it.
