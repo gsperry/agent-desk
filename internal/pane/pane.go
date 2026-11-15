@@ -43,6 +43,10 @@ type Option struct {
 	// Free options are a text field in the dialog ("Type something."):
 	// they are answered with text, not a key press.
 	Free bool `json:"free,omitempty"`
+	// Text is what a free option's field already holds, such as an answer
+	// typed before going back to the question; empty when it shows its
+	// placeholder.
+	Text string `json:"text,omitempty"`
 	// Checked is set on a checkbox option, true when it is ticked.
 	Checked *bool `json:"checked,omitempty"`
 	// Next moves a several-answer question on to its next step.
@@ -102,7 +106,37 @@ func Parse(screen string) *Dialog {
 	}
 	d.Question = question(lines, gaps, top, first, screenWidth(lines))
 	d.Steps = steps(lines, top, first)
+	typedField(d)
 	return d
+}
+
+// chatOption is the row under a question's text field that declines the
+// question.
+const chatOption = "Chat about this"
+
+// typedField finds a question's text field once it holds text. Claude Code
+// then shows the text in place of "Type something.", so the field is known
+// by where it sits: the row just above "Chat about this". Options a
+// question offers carry a description, and the field never does, so a
+// described row there is an option. Text is what the field holds.
+func typedField(d *Dialog) {
+	for i := 1; i < len(d.Options); i++ {
+		o := &d.Options[i-1]
+		if d.Options[i].Label == chatOption && !o.Free && o.Description == "" && o.Checked == nil && !o.Next {
+			o.Free = true
+		}
+	}
+	for i := range d.Options {
+		o := &d.Options[i]
+		if !o.Free {
+			continue
+		}
+		// A ✔ marks the field as the question's current answer.
+		text := strings.TrimSpace(strings.TrimSuffix(o.Label, "✔"))
+		if !freeLabel.MatchString(text) {
+			o.Text = text
+		}
+	}
 }
 
 // reviewPrompt is the question on Claude Code's review step for a prompt
@@ -241,7 +275,9 @@ func markedOptions(lines []string, top, footer int, d *Dialog) int {
 }
 
 func option(index int, label string, selected bool) Option {
-	label = strings.TrimSpace(label)
+	// Spaces collapse: Claude Code draws a text field's cursor as one more
+	// space, so the same row reads the same with the cursor on it or not.
+	label = strings.Join(strings.Fields(label), " ")
 	o := Option{Index: index, Label: label, Selected: selected}
 	if m := checkbox.FindStringSubmatch(label); m != nil {
 		ticked := m[1] != " "

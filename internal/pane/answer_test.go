@@ -62,6 +62,7 @@ func TestAnswer(t *testing.T) {
 		{"not running", perm, false, Answer{Action: "key", Key: "Enter"}, nil, send.ReasonNotRunning},
 		{"escape with no question", idle, true, Answer{Action: "key", Key: "Escape"}, nil, reasonNoDialog},
 		{"left is not a key answer", tabs, true, Answer{Action: "key", Key: "Left"}, nil, reasonBadKey},
+		{"clearing is not a key answer", tabs, true, Answer{Action: "key", Key: "C-u"}, nil, reasonBadKey},
 		{"previous question", tabs, true, Answer{Action: "step", Key: "Left"}, []string{"Left"}, ""},
 		{"next question", tabs, true, Answer{Action: "step", Key: "Right"}, []string{"Right"}, ""},
 		{"back from review", review, true, Answer{Action: "step", Key: "Left"}, []string{"Left"}, ""},
@@ -160,6 +161,9 @@ func TestAnswerText(t *testing.T) {
 	initial := read(t, "askq-free-initial.txt")
 	selected := read(t, "askq-free-selected.txt")
 	perm := read(t, "permission.txt")
+	typedBack := read(t, "askq-typed-back.txt")
+	typedSelected := read(t, "askq-typed-selected.txt")
+	typedCleared := read(t, "askq-typed-cleared.txt")
 	text := func(label, s string) Answer { return Answer{Action: "text", Index: 2, Label: label, Text: s} }
 	tests := []struct {
 		name     string
@@ -181,6 +185,9 @@ func TestAnswerText(t *testing.T) {
 		{"too long", []string{initial}, text("Type something.", strings.Repeat("x", maxAnswerText+1)), true, nil, nil, reasonBadText},
 		{"no typer", []string{initial}, text("Type something.", "Green"), false, nil, nil, reasonBadText},
 		{"dialog gone", []string{read(t, "idle.txt")}, text("Type something.", "Green"), true, nil, nil, reasonNoDialog},
+		{"edits an earlier typed answer: clears it, then types", []string{typedBack, typedSelected, typedCleared}, text("Medium, about 40 cm ✔", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, []string{"Medium, 45 cm"}, ""},
+		{"earlier answer did not clear", []string{typedBack, typedSelected, typedSelected}, text("Medium, about 40 cm ✔", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, nil, reasonChanged},
+		{"choosing a typed answer as an option is refused", []string{typedBack}, Answer{Action: "choose", Index: 2, Label: "Medium, about 40 cm ✔"}, true, nil, nil, reasonFree},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

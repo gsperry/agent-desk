@@ -15,8 +15,9 @@ import (
 
 // AllowedKeys are the only keys Agent Desk sends to an agent's pane. Left
 // and Right move between the questions of a multi-question prompt, and are
-// sent only by a step answer.
-var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true}
+// sent only by a step answer. C-u clears a question's text field before a
+// new answer is typed into it, and is sent only by a text answer.
+var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true, "C-u": true}
 
 // pressKeys are the keys a key answer may press.
 var pressKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true}
@@ -251,6 +252,20 @@ func (a *Answerer) answerText(ctx context.Context, id string, ans Answer) error 
 	}
 	if ans.Index >= len(after.Options) || !after.Options[ans.Index].Selected || !after.Options[ans.Index].Free || after.Options[ans.Index].Label != ans.Label {
 		return &send.Refused{Reason: reasonChanged, Message: "The text field did not become active, so nothing was typed. Check the terminal."}
+	}
+	// A field that already holds an answer, as after going back to the
+	// question, is cleared first; typing would add to the old text.
+	if after.Options[ans.Index].Text != "" {
+		if err := a.Keys.Send(ctx, id, "C-u"); err != nil {
+			return err
+		}
+		cleared, err := a.dialog(ctx, id)
+		if err != nil {
+			return err
+		}
+		if ans.Index >= len(cleared.Options) || !cleared.Options[ans.Index].Selected || !cleared.Options[ans.Index].Free || cleared.Options[ans.Index].Text != "" {
+			return &send.Refused{Reason: reasonChanged, Message: "The earlier answer could not be cleared, so nothing was typed. Check the terminal."}
+		}
 	}
 	return a.Typer.Type(ctx, id, text)
 }

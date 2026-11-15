@@ -32,6 +32,8 @@ func TestParse(t *testing.T) {
 		selected int
 		question string
 		free     []bool
+		// text is what a free option's field holds, by option.
+		text []string
 	}{
 		{
 			file:     "permission.txt",
@@ -67,6 +69,33 @@ func TestParse(t *testing.T) {
 			free:     []bool{false, false, true, false},
 		},
 		{
+			// Back on a question answered with typed text: the field shows
+			// the answer in place of "Type something.".
+			file:     "askq-typed-back.txt",
+			labels:   []string{"Small", "Large", "Medium, about 40 cm ✔", "Chat about this"},
+			selected: 0,
+			question: "Pick a size",
+			free:     []bool{false, false, true, false},
+			text:     []string{"", "", "Medium, about 40 cm", ""},
+		},
+		{
+			// The cursor on the field draws one more space; labels match.
+			file:     "askq-typed-selected.txt",
+			labels:   []string{"Small", "Large", "Medium, about 40 cm ✔", "Chat about this"},
+			selected: 2,
+			question: "Pick a size",
+			free:     []bool{false, false, true, false},
+			text:     []string{"", "", "Medium, about 40 cm", ""},
+		},
+		{
+			file:     "askq-typed-cleared.txt",
+			labels:   []string{"Small", "Large", "Type something. ✔", "Chat about this"},
+			selected: 2,
+			question: "Pick a size",
+			free:     []bool{false, false, true, false},
+			text:     []string{"", "", "", ""},
+		},
+		{
 			file:     "askq-tabs.txt",
 			labels:   []string{"Small", "Large", "Type something.", "Chat about this"},
 			selected: 0,
@@ -100,6 +129,9 @@ func TestParse(t *testing.T) {
 				}
 				if tt.free != nil && o.Free != tt.free[i] {
 					t.Fatalf("option %d free = %v", i, o.Free)
+				}
+				if tt.text != nil && o.Text != tt.text[i] {
+					t.Fatalf("option %d text = %q, want %q", i, o.Text, tt.text[i])
 				}
 			}
 			if d.Question != tt.question {
@@ -299,5 +331,24 @@ func TestReviewWithTitledRule(t *testing.T) {
 	}
 	if !isRule(rule) || isRule("──── just a short line of text that is not a rule") {
 		t.Fatal("titled rule detection")
+	}
+}
+
+// A described row above "Chat about this" is an option the question
+// offers, even when its label is not "Type something.".
+func TestTypedFieldNeedsNoDescription(t *testing.T) {
+	d := &Dialog{Options: []Option{
+		{Index: 0, Label: "Small", Description: "Small size"},
+		{Index: 1, Label: "Large", Description: "Large size"},
+		{Index: 2, Label: "Chat about this"},
+	}}
+	typedField(d)
+	if d.Options[1].Free || d.Options[1].Text != "" {
+		t.Fatalf("option = %+v", d.Options[1])
+	}
+	d.Options[1].Description = ""
+	typedField(d)
+	if !d.Options[1].Free || d.Options[1].Text != "Large" {
+		t.Fatalf("option = %+v", d.Options[1])
 	}
 }

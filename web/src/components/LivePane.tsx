@@ -174,9 +174,10 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
                 className={['live-option', o.selected && 'selected', o.next && 'live-next', o.checked && 'checked'].filter(Boolean).join(' ')}
                 disabled={busy}
                 aria-pressed={o.checked}
-                title={o.free ? 'Answer in your own words' : undefined}
+                title={o.free ? (o.text ? 'Edit your typed answer' : 'Answer in your own words') : undefined}
                 onClick={() => {
-                  if (o.free) setTyping({ index: o.index, label: o.label, text: typing?.index === o.index ? typing.text : '' })
+                  // A field that holds an earlier answer opens with it, to edit.
+                  if (o.free) setTyping({ index: o.index, label: o.label, text: typing?.index === o.index ? typing.text : (o.text ?? '') })
                   else send({ action: 'choose', index: o.index, label: o.label })
                 }}
               >
