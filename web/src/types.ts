@@ -94,6 +94,9 @@ export interface DialogOption {
   /** The number on screen; Next has none. */
   number?: number
   free?: boolean
+  // text is what a free option's field already holds, such as an answer
+  // typed before going back to the question.
+  text?: string
   /** Set on checkbox options; true when ticked. */
   checked?: boolean
   /** Moves a several-answer question on. */

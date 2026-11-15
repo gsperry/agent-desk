@@ -212,6 +212,22 @@ test('a prompt with several questions shows its steps and moves between them', a
   }
 })
 
+test('an answer typed before going back opens to edit, not to send', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-typed-back.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await pane.getByRole('button', { name: /Medium, about 40 cm/ }).click()
+    await expect(pane.getByRole('textbox', { name: 'Your answer' })).toHaveValue('Medium, about 40 cm')
+    // Opening the box presses nothing.
+    expect(keys()).toBe('')
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})
+
 test('a working session shows its live activity, and Interrupt presses Escape', async ({ page }) => {
   await open(page, 'a0000001')
   const activity = page.getByRole('status', { name: 'Agent activity' })
