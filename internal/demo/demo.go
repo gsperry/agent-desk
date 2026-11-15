@@ -233,8 +233,9 @@ func Write(dir string, now time.Time) error {
 	}
 	add(1, "checkout-redesign", "shopfront", "${FIXTURES}/repo", "working", c.id)
 
-	// 2. flaky-auth-test: waiting on a permission prompt.
-	c = newConv(ConvID(2), ago(9*time.Minute), "/home/dev/src/platform")
+	// 2. flaky-auth-test: waiting on a permission prompt. Its turn began a
+	// minute ago, so once answered the live row counts from there.
+	c = newConv(ConvID(2), ago(75*time.Second), "/home/dev/src/platform")
 	c.prompt("The login integration test fails about one run in ten on CI. Find out why and fix it.", 20)
 	c.title("Flaky login integration test")
 	c.reply("Running it in a loop to reproduce.", 40000, 400, 12)
