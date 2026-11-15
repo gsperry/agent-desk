@@ -833,15 +833,17 @@ func TestStatic(t *testing.T) {
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	}
 	tests := []struct {
-		name   string
-		assets fstest.MapFS
-		path   string
-		want   string
+		name    string
+		assets  fstest.MapFS
+		path    string
+		want    string
+		noCache bool
 	}{
-		{"index", assets, "/", "app"},
-		{"asset", assets, "/assets/app.js", "console.log"},
-		{"client route falls back to shell", assets, "/session/abc", "app"},
-		{"placeholder when not built", fstest.MapFS{".gitkeep": {}}, "/", "not built"},
+		{"index", assets, "/", "app", true},
+		{"index by name", assets, "/index.html", "app", true},
+		{"asset", assets, "/assets/app.js", "console.log", false},
+		{"client route falls back to shell", assets, "/session/abc", "app", true},
+		{"placeholder when not built", fstest.MapFS{".gitkeep": {}}, "/", "not built", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -852,6 +854,11 @@ func TestStatic(t *testing.T) {
 			s.Handler().ServeHTTP(rec, req)
 			if rec.Code != 200 || !strings.Contains(rec.Body.String(), tt.want) {
 				t.Fatalf("status %d body %q, want 200 containing %q", rec.Code, rec.Body.String(), tt.want)
+			}
+			// The shell is fetched again on every load, so an upgrade
+			// never runs a stale page.
+			if got := rec.Header().Get("Cache-Control") == "no-cache"; got != tt.noCache {
+				t.Fatalf("Cache-Control = %q", rec.Header().Get("Cache-Control"))
 			}
 		})
 	}

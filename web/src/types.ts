@@ -94,6 +94,8 @@ export interface DialogOption {
   /** The number on screen; Next has none. */
   number?: number
   free?: boolean
+  // answered marks the question's current answer, on returning to it.
+  answered?: boolean
   // text is what a free option's field already holds, such as an answer
   // typed before going back to the question.
   text?: string
@@ -112,7 +114,8 @@ export interface Dialog {
   /** Several answers: Enter ticks a checkbox and Next moves on. */
   multi?: boolean
   /** The tabs of a prompt with several questions. */
-  steps?: { label: string; done?: boolean; submit?: boolean }[]
+  // current is the question showing, when the screen's colors tell.
+  steps?: { label: string; done?: boolean; submit?: boolean; current?: boolean }[]
 }
 
 export interface Screen {
@@ -127,6 +130,8 @@ export type Answer =
   // step moves to the previous (Left) or next (Right) question of a prompt
   // with several.
   | { action: 'step'; key: 'Left' | 'Right' }
+  // tab moves straight to the question at index, named label.
+  | { action: 'tab'; index: number; label: string }
 
 export interface SearchHit {
   sessionId: string

@@ -718,16 +718,19 @@ func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.cfg.Assets)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/")
-		if name != "" {
-			if _, err := fs.Stat(s.cfg.Assets, name); err != nil {
-				// Client-side routes fall back to the app shell.
-				r2 := r.Clone(r.Context())
-				r2.URL.Path = "/"
-				files.ServeHTTP(w, r2)
+		if name != "" && name != "index.html" {
+			if _, err := fs.Stat(s.cfg.Assets, name); err == nil {
+				files.ServeHTTP(w, r)
 				return
 			}
 		}
-		files.ServeHTTP(w, r)
+		// The app shell, for / and for client-side routes. It names the
+		// current build's assets, so it is fetched again on every load and
+		// an upgrade never runs a stale page.
+		w.Header().Set("Cache-Control", "no-cache")
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/"
+		files.ServeHTTP(w, r2)
 	})
 }
 

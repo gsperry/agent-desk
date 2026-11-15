@@ -30,6 +30,8 @@ type Step struct {
 	Label  string `json:"label"`
 	Done   bool   `json:"done,omitempty"`
 	Submit bool   `json:"submit,omitempty"`
+	// Current is the question showing, known from the screen's colors.
+	Current bool `json:"current,omitempty"`
 }
 
 // Option is one entry in the dialog's list. Index is its position in the
@@ -43,6 +45,10 @@ type Option struct {
 	// Free options are a text field in the dialog ("Type something."):
 	// they are answered with text, not a key press.
 	Free bool `json:"free,omitempty"`
+	// Answered marks the question's current answer, which Claude Code shows
+	// with a ✔ after the label when you return to an answered question.
+	// The ✔ is not part of Label.
+	Answered bool `json:"answered,omitempty"`
 	// Text is what a free option's field already holds, such as an answer
 	// typed before going back to the question; empty when it shows its
 	// placeholder.
@@ -137,10 +143,8 @@ func typedField(d *Dialog) {
 		if !o.Free {
 			continue
 		}
-		// A ✔ marks the field as the question's current answer.
-		text := strings.TrimSpace(strings.TrimSuffix(o.Label, "✔"))
-		if !freeLabel.MatchString(text) {
-			o.Text = text
+		if !freeLabel.MatchString(o.Label) {
+			o.Text = o.Label
 		}
 	}
 }
@@ -288,6 +292,8 @@ func option(index int, label string, selected bool) Option {
 	if m := checkbox.FindStringSubmatch(label); m != nil {
 		ticked := m[1] != " "
 		o.Label, o.Checked = m[2], &ticked
+	} else if l, ok := strings.CutSuffix(label, " ✔"); ok {
+		o.Label, o.Answered = l, true
 	}
 	o.Free = freeLabel.MatchString(o.Label)
 	return o
@@ -480,16 +486,21 @@ func atoi(s string) int {
 
 // Moves returns the key presses that select option index and confirm it,
 // starting from the current selection.
-// stepKeys moves to the previous or next question. Claude Code's question
-// tabs ignore Left and Right while its text field has the focus, where they
-// move the cursor, so the selection first moves up off the text option.
-func (d *Dialog) stepKeys(key string) []string {
+// stepKeys presses key (Left or Right) times times to move between
+// questions. Claude Code's question tabs ignore Left and Right while its
+// text field has the focus, where they move the cursor, so the selection
+// first moves up off the text option.
+func (d *Dialog) stepKeys(key string, times int) []string {
+	var keys []string
 	for _, o := range d.Options {
 		if o.Selected && o.Free && o.Index > 0 {
-			return []string{"Up", key}
+			keys = append(keys, "Up")
 		}
 	}
-	return []string{key}
+	for range times {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func (d *Dialog) Moves(index int) []string {

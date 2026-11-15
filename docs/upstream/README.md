@@ -9,4 +9,5 @@ Gaps Agent Desk works around today. Each file is written as a pull request propo
 | [snapshot --watch](snapshot-watch.md) | Polls `snapshot --json` every second |
 | [dialog field](dialog-field.md) | Parses dialogs from `read` output by footer text and option markers |
 | [keys](send-keys.md) | Calls `tmux -L agentmgr send-keys` directly for dialog answers |
+| [type --no-enter](type-no-enter.md) | Presses Enter again after `type` when a typed answer to a several-answer question ends unticked |
 | [session commands](session-commands.md) | Rename, delete, restart and fork stay in the TUI; the spawn form takes model and effort as free text |

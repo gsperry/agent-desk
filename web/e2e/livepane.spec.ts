@@ -245,6 +245,40 @@ test('a typed answer to a several-answer question opens to edit, with a way to t
   }
 })
 
+test('the current question is marked, and another is one click away', async ({ page }) => {
+  const dir = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes')
+  const testdata = join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata')
+  const panePath = join(dir, 'a0000002.txt')
+  const ansiPath = join(dir, 'a0000002.ansi')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(testdata, 'askq-3tabs-q1.txt'), 'utf8'))
+  writeFileSync(ansiPath, readFileSync(join(testdata, 'askq-3tabs-q1.ansi'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const steps = page.getByRole('region', { name: 'Terminal' }).getByRole('list', { name: 'Questions' })
+    await expect(steps.locator('[aria-current="step"]')).toHaveText('Size')
+    await steps.getByRole('button', { name: 'Color' }).click()
+    await expect.poll(keys).toBe('a0000002 Right Right\n')
+  } finally {
+    writeFileSync(panePath, original)
+    rmSync(ansiPath, { force: true })
+  }
+})
+
+test('back on an answered question, the earlier answer is marked', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-typed-back.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await expect(pane.locator('.live-option').filter({ hasText: 'Your answer' })).toHaveCount(1)
+    await expect(pane.locator('.live-option').filter({ hasText: 'Your answer' })).toContainText('Medium, about 40 cm')
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})
+
 test('a working session shows its live activity, and Interrupt presses Escape', async ({ page }) => {
   await open(page, 'a0000001')
   const activity = page.getByRole('status', { name: 'Agent activity' })

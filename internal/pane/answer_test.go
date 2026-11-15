@@ -191,13 +191,13 @@ func TestAnswerText(t *testing.T) {
 		{"too long", []string{initial}, text("Type something.", strings.Repeat("x", maxAnswerText+1)), true, nil, nil, reasonBadText},
 		{"no typer", []string{initial}, text("Type something.", "Green"), false, nil, nil, reasonBadText},
 		{"dialog gone", []string{read(t, "idle.txt")}, text("Type something.", "Green"), true, nil, nil, reasonNoDialog},
-		{"edits an earlier typed answer: clears it, then types", []string{typedBack, typedSelected, typedCleared}, text("Medium, about 40 cm ✔", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, []string{"Medium, 45 cm"}, ""},
-		{"earlier answer did not clear", []string{typedBack, typedSelected, typedSelected}, text("Medium, about 40 cm ✔", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, nil, reasonChanged},
+		{"edits an earlier typed answer: clears it, then types", []string{typedBack, typedSelected, typedCleared}, text("Medium, about 40 cm", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, []string{"Medium, 45 cm"}, ""},
+		{"earlier answer did not clear", []string{typedBack, typedSelected, typedSelected}, text("Medium, about 40 cm", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, nil, reasonChanged},
 		{"several answers: edits, then ticks what typing left unticked", []string{mBack, mSelected, mCleared, mUnticked, mTicked}, mText("Security scan"), true, []string{"Down", "Down", "Down", "C-u", "Enter"}, []string{"Security scan"}, ""},
 		{"several answers: already ticked after typing", []string{mBack, mSelected, mCleared, mTicked}, mText("Security scan"), true, []string{"Down", "Down", "Down", "C-u"}, []string{"Security scan"}, ""},
 		{"several answers: still unticked after Enter", []string{mBack, mSelected, mCleared, mUnticked, mUnticked}, mText("Security scan"), true, []string{"Down", "Down", "Down", "C-u", "Enter"}, []string{"Security scan"}, reasonChanged},
 		{"several answers: a typed answer ticks and unticks", []string{mBack}, Answer{Action: "choose", Index: 3, Label: "Security scan"}, true, []string{"Down", "Down", "Down", "Enter"}, nil, ""},
-		{"choosing a typed answer as an option is refused", []string{typedBack}, Answer{Action: "choose", Index: 2, Label: "Medium, about 40 cm ✔"}, true, nil, nil, reasonFree},
+		{"choosing a typed answer as an option is refused", []string{typedBack}, Answer{Action: "choose", Index: 2, Label: "Medium, about 40 cm"}, true, nil, nil, reasonFree},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
