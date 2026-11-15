@@ -164,6 +164,12 @@ func TestAnswerText(t *testing.T) {
 	typedBack := read(t, "askq-typed-back.txt")
 	typedSelected := read(t, "askq-typed-selected.txt")
 	typedCleared := read(t, "askq-typed-cleared.txt")
+	mBack := read(t, "askq-multi-typed-back.txt")
+	mSelected := read(t, "askq-multi-typed-selected.txt")
+	mCleared := read(t, "askq-multi-typed-cleared.txt")
+	mUnticked := read(t, "askq-multi-typed-unticked.txt")
+	mTicked := read(t, "askq-multi-typed-ticked.txt")
+	mText := func(s string) Answer { return Answer{Action: "text", Index: 3, Label: "Security scan", Text: s} }
 	text := func(label, s string) Answer { return Answer{Action: "text", Index: 2, Label: label, Text: s} }
 	tests := []struct {
 		name     string
@@ -187,6 +193,10 @@ func TestAnswerText(t *testing.T) {
 		{"dialog gone", []string{read(t, "idle.txt")}, text("Type something.", "Green"), true, nil, nil, reasonNoDialog},
 		{"edits an earlier typed answer: clears it, then types", []string{typedBack, typedSelected, typedCleared}, text("Medium, about 40 cm ✔", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, []string{"Medium, 45 cm"}, ""},
 		{"earlier answer did not clear", []string{typedBack, typedSelected, typedSelected}, text("Medium, about 40 cm ✔", "Medium, 45 cm"), true, []string{"Down", "Down", "C-u"}, nil, reasonChanged},
+		{"several answers: edits, then ticks what typing left unticked", []string{mBack, mSelected, mCleared, mUnticked, mTicked}, mText("Security scan"), true, []string{"Down", "Down", "Down", "C-u", "Enter"}, []string{"Security scan"}, ""},
+		{"several answers: already ticked after typing", []string{mBack, mSelected, mCleared, mTicked}, mText("Security scan"), true, []string{"Down", "Down", "Down", "C-u"}, []string{"Security scan"}, ""},
+		{"several answers: still unticked after Enter", []string{mBack, mSelected, mCleared, mUnticked, mUnticked}, mText("Security scan"), true, []string{"Down", "Down", "Down", "C-u", "Enter"}, []string{"Security scan"}, reasonChanged},
+		{"several answers: a typed answer ticks and unticks", []string{mBack}, Answer{Action: "choose", Index: 3, Label: "Security scan"}, true, []string{"Down", "Down", "Down", "Enter"}, nil, ""},
 		{"choosing a typed answer as an option is refused", []string{typedBack}, Answer{Action: "choose", Index: 2, Label: "Medium, about 40 cm ✔"}, true, nil, nil, reasonFree},
 	}
 	for _, tt := range tests {

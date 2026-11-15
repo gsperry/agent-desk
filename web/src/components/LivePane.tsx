@@ -232,6 +232,24 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
               <button type="submit" className="send" disabled={busy || !typing.text.trim()}>
                 Send answer
               </button>
+              {(() => {
+                // A typed answer to a question that takes several is ticked
+                // like the others; this includes or leaves it out as it is.
+                const o = dialog.options[typing.index]
+                if (!dialog.multi || !o?.free || !o.text || o.label !== typing.label) return null
+                return (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      send({ action: 'choose', index: o.index, label: o.label })
+                    }}
+                  >
+                    {o.checked ? 'Leave it out' : 'Include it'}
+                  </button>
+                )
+              })()}
               <button
                 type="button"
                 className="link-button"

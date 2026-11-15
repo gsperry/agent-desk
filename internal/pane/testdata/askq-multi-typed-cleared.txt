@@ -1,0 +1,34 @@
+ ▐▛███▛█   Claude Code v2.1.325
+▝▜██████▀  Haiku 4.5 · Claude API
+ ▝▝   ▝▝   /private/tmp/agentdesk-scratch/multi-typed-probe
+
+
+❯ This session is already named. You can rename it later with agent-manager rename "<name>" only 
+  if the user asks. Do not rename it now. Then do the task:
+
+  This is a UI test. Call the AskUserQuestion tool exactly once, with two questions. Question 1: 
+  header 'Checks', question 'Which checks should run?', multiSelect true, options 'Lint' 
+  (description 'Run the linter'), 'Tests' (description 'Run the test suite'), 'Docs' (description 
+  'Build the docs'). Question 2: header 'Timing', question 'When should they run?', multiSelect 
+  false, options 'Now' (description 'Start right away') and 'Tonight' (description 'Run at 10 
+  PM'). After the user answers, reply with one line repeating the answers and stop. Do not run any
+  other tool.
+
+  Thought for 2s 
+───────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Checks  ☒ Timing  ✔ Submit  →
+
+Which checks should run?
+
+  1. [ ] Lint
+         Run the linter
+  2. [✔] Tests
+         Run the test suite
+  3. [ ] Docs
+         Build the docs
+❯ 4. [ ] Type something
+     Next
+───────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · ctrl+g to edit in VS Code · Esc to cancel

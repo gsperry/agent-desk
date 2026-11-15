@@ -115,14 +115,20 @@ func Parse(screen string) *Dialog {
 const chatOption = "Chat about this"
 
 // typedField finds a question's text field once it holds text. Claude Code
-// then shows the text in place of "Type something.", so the field is known
-// by where it sits: the row just above "Chat about this". Options a
+// then shows the text in place of "Type something", so the field is known
+// by where it sits: the row just above "Chat about this", or in a question
+// that takes several answers, the checkbox row just above Next. Options a
 // question offers carry a description, and the field never does, so a
 // described row there is an option. Text is what the field holds.
 func typedField(d *Dialog) {
 	for i := 1; i < len(d.Options); i++ {
-		o := &d.Options[i-1]
-		if d.Options[i].Label == chatOption && !o.Free && o.Description == "" && o.Checked == nil && !o.Next {
+		o, below := &d.Options[i-1], d.Options[i]
+		if o.Free || o.Description != "" || o.Next {
+			continue
+		}
+		single := below.Label == chatOption && o.Checked == nil
+		multi := d.Multi && below.Next && o.Checked != nil
+		if single || multi {
 			o.Free = true
 		}
 	}

@@ -352,3 +352,36 @@ func TestTypedFieldNeedsNoDescription(t *testing.T) {
 		t.Fatalf("option = %+v", d.Options[1])
 	}
 }
+
+// In a question that takes several answers, the text field is the
+// checkbox row above Next; once it holds text it shows the text.
+func TestParseMultiTypedField(t *testing.T) {
+	tests := []struct {
+		file     string
+		label    string
+		text     string
+		checked  bool
+		selected bool
+	}{
+		{"askq-multi-typed-back.txt", "Security scan", "Security scan", false, false},
+		{"askq-multi-typed-selected.txt", "Security scan", "Security scan", false, true},
+		{"askq-multi-typed-cleared.txt", "Type something", "", false, true},
+		{"askq-multi-typed-ticking.txt", "Perf", "Perf", true, true},
+		{"askq-multi-typed-ticked.txt", "Security scan", "Security scan", true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			d := Parse(read(t, tt.file))
+			if d == nil || !d.Multi || len(d.Options) != 6 {
+				t.Fatalf("dialog = %+v", d)
+			}
+			o := d.Options[3]
+			if !o.Free || o.Label != tt.label || o.Text != tt.text || o.Checked == nil || *o.Checked != tt.checked || o.Selected != tt.selected {
+				t.Fatalf("field = %+v", o)
+			}
+			if d.Options[1].Free || !d.Options[4].Next {
+				t.Fatalf("options = %+v", d.Options)
+			}
+		})
+	}
+}

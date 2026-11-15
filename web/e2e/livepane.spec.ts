@@ -228,6 +228,23 @@ test('an answer typed before going back opens to edit, not to send', async ({ pa
   }
 })
 
+test('a typed answer to a several-answer question opens to edit, with a way to tick it', async ({ page }) => {
+  const panePath = join(import.meta.dirname, '..', '.e2e-fixtures', 'panes', 'a0000002.txt')
+  const original = readFileSync(panePath, 'utf8')
+  writeFileSync(panePath, readFileSync(join(import.meta.dirname, '..', '..', 'internal', 'pane', 'testdata', 'askq-multi-typed-back.txt'), 'utf8'))
+  try {
+    await open(page, 'a0000002')
+    const pane = page.getByRole('region', { name: 'Terminal' })
+    await pane.getByRole('button', { name: /Security scan/ }).click()
+    await expect(pane.getByRole('textbox', { name: 'Your answer' })).toHaveValue('Security scan')
+    await pane.getByRole('button', { name: 'Include it' }).click()
+    // Three rows down to the field, then Enter ticks it.
+    await expect.poll(keys).toBe('a0000002 Down Down Down Enter\n')
+  } finally {
+    writeFileSync(panePath, original)
+  }
+})
+
 test('a working session shows its live activity, and Interrupt presses Escape', async ({ page }) => {
   await open(page, 'a0000001')
   const activity = page.getByRole('status', { name: 'Agent activity' })
