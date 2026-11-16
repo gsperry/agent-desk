@@ -198,7 +198,13 @@ func (f Fixture) update(fn func(*Snapshot) error) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(f.Path, append(out, '\n'), 0o600)
+	// Written whole and renamed into place, so a reader never sees half a
+	// file: the poller and the demo read it while it changes.
+	tmp := f.Path + ".tmp"
+	if err := os.WriteFile(tmp, append(out, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, f.Path)
 }
 
 func (f Fixture) session(snap *Snapshot, id string) (*Session, error) {

@@ -528,6 +528,20 @@ export class Store {
     return ((await res.json()) as { agents: SubAgent[] }).agents
   }
 
+  // messageAgent sends a message to a running subagent; it returns why it
+  // was refused, or null once Claude Code has queued it.
+  async messageAgent(sessionId: string, agentId: string, text: string): Promise<string | null> {
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/message`, { text })
+    return r.error ?? null
+  }
+
+  // stopAgent stops a running subagent; it returns why it was refused, or
+  // null.
+  async stopAgent(sessionId: string, agentId: string): Promise<string | null> {
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/stop`, {})
+    return r.error ?? null
+  }
+
   async agentTranscript(sessionId: string, agentId: string): Promise<Item[] | null> {
     const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/transcript`).catch(
       () => null,
