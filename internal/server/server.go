@@ -198,6 +198,9 @@ type Panes interface {
 	Answer(ctx context.Context, sessionID string, a pane.Answer) error
 	// Interrupt stops a working session's turn, as Esc does.
 	Interrupt(ctx context.Context, sessionID string) error
+	// MessageAgent types a message to one of the session's running
+	// subagents through Claude Code's agent list.
+	MessageAgent(ctx context.Context, sessionID string, t pane.AgentTarget, text string) error
 }
 
 type TranscriptSource interface {
@@ -281,6 +284,7 @@ func (s *Server) routes() {
 	s.route("POST /api/sessions/{id}/interrupt", remote.NeedReply, s.interrupt)
 	s.route("GET /api/sessions/{id}/agents", remote.NeedRead, s.listAgents)
 	s.route("GET /api/sessions/{id}/agents/{agent}/transcript", remote.NeedRead, s.agentTranscript)
+	s.route("POST /api/sessions/{id}/agents/{agent}/message", remote.NeedReply, s.messageAgent)
 	s.route("GET /api/sessions/{id}/changes", remote.NeedRead, s.changes)
 	s.route("GET /api/sessions/{id}/commands", remote.NeedRead, s.sessionCommands)
 	s.route("POST /api/paste", remote.NeedLocal, s.paste)
@@ -435,6 +439,45 @@ func (s *Server) applySetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
+}
+
+// messageAgent sends a message to a running subagent, found by id in the
+// session's conversation and reached by its type and description.
+func (s *Server) messageAgent(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSendBody)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON with a text field"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	id, agentID := r.PathValue("id"), r.PathValue("agent")
+	list, err := s.cfg.Transcripts.Agents(ctx, id)
+	if writeRefusal(w, err) {
+		return
+	}
+	var target *agents.Agent
+	for i := range list {
+		if list[i].ID == agentID {
+			target = &list[i]
+		}
+	}
+	if target == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "this session has no such subagent"})
+		return
+	}
+	if target.Status != agents.StatusRunning {
+		writeJSON(w, http.StatusConflict, send.Refused{Reason: "agent_finished", Message: "This subagent has " + target.Status + ", so it cannot take a message."})
+		return
+	}
+	err = s.cfg.Panes.MessageAgent(ctx, id, pane.AgentTarget{Type: target.Type, Description: target.Description}, body.Text)
+	logOutcome("message-agent", id, fmt.Sprintf("agent=%s bytes=%d", agentID, len(body.Text)), "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // maxSendBody bounds the request; the sender's own cap is lower.

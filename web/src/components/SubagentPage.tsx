@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AgentLinksContext } from '../agents-context'
 import { agentDuration, agentType, childAgents } from '../model/agents'
+import { enterAction, insertNewline, isTouch, nativeNewline } from '../model/compose'
+import { can, useRemote } from '../remote-context'
 import type { Item, SessionView, SubAgent } from '../types'
 import { LiveActivity } from './LiveActivity'
 import { Transcript } from './Transcript'
@@ -15,6 +17,8 @@ interface Props {
   readTranscript: (sessionId: string, agentId: string) => Promise<Item[] | null>
   onBack: () => void
   onOpenAgent: (agentId: string) => void
+  // sendMessage messages the subagent; it resolves to a refusal, or null.
+  sendMessage: (agentId: string, text: string) => Promise<string | null>
 }
 
 // A running subagent's transcript refreshes this often.
@@ -23,7 +27,8 @@ const refreshMs = 3000
 // SubagentPage is one subagent of a session, read live: what it was asked,
 // every step it takes, the subagents it starts in turn, and a live row
 // while it works.
-export function SubagentPage({ sessionId, session, agentId, agents, readTranscript, onBack, onOpenAgent }: Props) {
+export function SubagentPage({ sessionId, session, agentId, agents, readTranscript, onBack, onOpenAgent, sendMessage }: Props) {
+  const remote = useRemote()
   const agent = agents?.find((a) => a.id === agentId)
   const running = agent?.status === 'running'
   const [items, setItems] = useState<Item[] | null | undefined>(undefined)
@@ -98,10 +103,80 @@ export function SubagentPage({ sessionId, session, agentId, agents, readTranscri
         </AgentLinksContext.Provider>
       )}
       {items && running && (
-        <div className="composer-wrap subagent-foot">
+        <div className="subagent-foot">
           <LiveActivity items={items} />
+          {can(remote, 'reply') && session?.running && (
+            <MessageBox
+              type={agent.type}
+              send={(text) => sendMessage(agentId, text)}
+              onSent={() => {
+                setTick((n) => n + 1)
+              }}
+            />
+          )}
         </div>
       )}
     </main>
+  )
+}
+
+// MessageBox sends a message to the subagent. Enter sends, as in Claude
+// Code; Shift, Cmd or Ctrl with Enter adds a line.
+function MessageBox({ type, send, onSent }: { type: string; send: (text: string) => Promise<string | null>; onSent: () => void }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<{ error: boolean; text: string } | null>(null)
+  const box = useRef<HTMLTextAreaElement>(null)
+  const [touch] = useState(isTouch)
+  const submit = () => {
+    const t = text.trim()
+    if (!t || busy) return
+    setBusy(true)
+    setNote(null)
+    void send(t).then((err) => {
+      setBusy(false)
+      if (err) {
+        setNote({ error: true, text: err })
+        return
+      }
+      setText('')
+      setNote({ error: false, text: 'Sent. Claude Code queues it, and the subagent reads it at its next step.' })
+      onSent()
+    })
+  }
+  return (
+    <form
+      className="subagent-message"
+      onSubmit={(e) => {
+        e.preventDefault()
+        submit()
+      }}
+    >
+      <textarea
+        ref={box}
+        rows={2}
+        aria-label={`Message the subagent`}
+        placeholder={`Message @${agentType(type).name}…`}
+        value={text}
+        disabled={busy}
+        onChange={(e) => {
+          setText(e.target.value)
+        }}
+        onKeyDown={(e) => {
+          const enter = enterAction(e.nativeEvent, touch)
+          if (enter === 'send') {
+            e.preventDefault()
+            submit()
+          } else if (enter === 'newline' && !nativeNewline(e.nativeEvent, touch)) {
+            e.preventDefault()
+            insertNewline(e.currentTarget)
+          }
+        }}
+      />
+      <button type="submit" className="send" disabled={busy || !text.trim()}>
+        {busy ? 'Sending…' : 'Send'}
+      </button>
+      {note && <p className={note.error ? 'form-error' : 'muted subagent-sent'}>{note.text}</p>}
+    </form>
   )
 }

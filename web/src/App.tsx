@@ -578,6 +578,7 @@ function Desk({ token }: { token: string }) {
                 onOpenAgent={(id) => {
                   openAgent(selected, id)
                 }}
+                sendMessage={(id, text) => store.messageAgent(selected, id, text)}
               />
             ) : selected ? (
               data.sessions ? (
