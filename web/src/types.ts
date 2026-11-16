@@ -195,6 +195,8 @@ export interface Summary {
   contextTokens?: number
   model?: string
   updated?: string
+  // activeAgents counts subagents that wrote to their transcripts lately.
+  activeAgents?: number
 }
 
 export interface ChangedFile {

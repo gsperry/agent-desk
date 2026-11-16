@@ -8,7 +8,7 @@ import { OpenPathContext, SessionDirContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
-import type { CatchUp, Changes, Item, SlashCommand, SubAgent } from '../types'
+import type { CatchUp, Changes, SlashCommand, SubAgent } from '../types'
 import { AgentsPanel } from './AgentsPanel'
 import { NotesPanel } from './NotesPanel'
 import { togglePin } from '../model/pins'
@@ -50,8 +50,10 @@ interface Props {
   act: (id: string, a: SessionAction) => Promise<string | null>
   // seenMark is how far the reader had looked before opening this session.
   seenMark?: { seq: number }
-  readAgents: (id: string) => Promise<SubAgent[] | null>
-  readAgentTranscript: (id: string, agentId: string) => Promise<Item[] | null>
+  // agents is this session's subagents, read by the caller; null until
+  // first read.
+  agents: SubAgent[] | null
+  onOpenAgent: (agentId: string) => void
   readChanges: (id: string, mode: Changes['mode']) => Promise<{ data?: Changes; error?: string }>
   conflicts: Conflict[]
   sessions: Session[]
@@ -65,7 +67,6 @@ interface Props {
 }
 
 // The subagent list refreshes this often while a session is open.
-const agentsRefreshMs = 5000
 
 // A session reading waiting has its screen checked this often.
 const waitingCheckMs = 1500
@@ -91,43 +92,24 @@ export function SessionView(props: Props) {
   // Captured once, so the divider stays put while the session is marked
   // read underneath it.
   const [markAtOpen] = useState(props.seenMark)
-  const [agents, setAgents] = useState<SubAgent[]>([])
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [changesOpen, setChangesOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
   const [catchUpState, setCatchUpState] = useState<{ busy: boolean; data?: CatchUp; error?: string } | null>(null)
   const [notebook, setNotebook] = useNotebook(props.session?.agentSessionId)
   const pins = pinsFor(notebook, setNotebook, togglePin)
-  const [openAgent, setOpenAgent] = useState<string | null>(null)
-  const { readAgents } = props
+  const agents = useMemo(() => props.agents ?? [], [props.agents])
+  const { onOpenAgent } = props
   const isClaude = session?.tool === 'claude'
-  useEffect(() => {
-    if (!isClaude) return
-    let live = true
-    const load = () => {
-      void readAgents(sessionId).then((list) => {
-        if (live && list) setAgents(list)
-      })
-    }
-    load()
-    const t = setInterval(load, agentsRefreshMs)
-    return () => {
-      live = false
-      clearInterval(t)
-    }
-  }, [readAgents, sessionId, isClaude])
   const agentLinks = useMemo(() => {
     const byToolUse = new Map(agents.map((a) => [a.toolUseId, a.id]))
     const ids = new Set(agents.map((a) => a.id))
     return {
       agentFor: (toolUseId: string) => byToolUse.get(toolUseId),
       has: (id: string) => ids.has(id),
-      open: (id: string) => {
-        setOpenAgent(id)
-        setAgentsOpen(true)
-      },
+      open: onOpenAgent,
     }
-  }, [agents])
+  }, [agents, onOpenAgent])
   const counts = agentCounts(agents)
   const [restore, setRestore] = useState<{ text: string; nonce: number } | undefined>()
   useEffect(() => {
@@ -229,7 +211,6 @@ export function SessionView(props: Props) {
                 aria-pressed={agentsOpen}
                 onClick={() => {
                   setAgentsOpen(!agentsOpen)
-                  setOpenAgent(null)
                   setNotesOpen(false)
                 }}
               >
@@ -480,15 +461,11 @@ export function SessionView(props: Props) {
         )}
         {agentsOpen && (
             <AgentsPanel
-              sessionId={sessionId}
               agents={agents}
-              openAgent={openAgent}
-              onOpen={setOpenAgent}
+              onOpen={onOpenAgent}
               onClose={() => {
                 setAgentsOpen(false)
-                setOpenAgent(null)
               }}
-              readTranscript={props.readAgentTranscript}
             />
           )}
         {notesOpen && (

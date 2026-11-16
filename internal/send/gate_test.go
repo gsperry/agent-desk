@@ -89,6 +89,10 @@ func TestCheckPane(t *testing.T) {
 		{"ask-question.txt", ReasonDialog},
 		{"auto-mode-dialog.txt", ReasonDialog},
 		{"agent-quotes-dialog.txt", ""},
+		// The agent list under the prompt does not stop a reply to main...
+		{"agents-main.txt", ""},
+		// ...but a screen showing a subagent would send the reply to it.
+		{"agents-viewing.txt", ReasonSubagent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.file, func(t *testing.T) {

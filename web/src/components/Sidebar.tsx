@@ -7,8 +7,9 @@ import { hasNew, type Seen } from '../model/seen'
 import { archivedCount, type SidebarGroup } from '../model/sidebar'
 import type { Permission } from '../notify'
 import type { Prefs } from '../store'
-import type { Project, State } from '../types'
+import type { Project, State, SubAgent } from '../types'
 import { glyph } from './status'
+import { agentType, sidebarAgents } from '../model/agents'
 import { SystemStats } from './SystemStats'
 import type { SystemStats as Stats } from '../types'
 
@@ -31,6 +32,11 @@ interface Props {
   onSelect: (id: string) => void
   onStartManager: () => Promise<string | null>
   onSetup: () => void
+  // subagents is the selected session's subagents, nested under its row.
+  subagents: SubAgent[] | null
+  // currentAgent is the subagent open in the main view, if any.
+  currentAgent: string | null
+  onOpenAgent: (agentId: string) => void
   // stats is the system stats feed; null hides the block.
   stats: { subscribe: (l: () => void) => () => void; get: () => Stats | null } | null
   prefs: Prefs
@@ -179,6 +185,9 @@ export function Sidebar(props: Props) {
                     {s.tool !== 'claude' && <span className="row-tool">{s.tool}</span>}
                     <span className="row-status">{s.status}</span>
                   </button>
+                  {s.id === selected && props.subagents && props.subagents.length > 0 && (
+                    <SubagentRows agents={props.subagents} current={props.currentAgent} onOpen={props.onOpenAgent} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -344,4 +353,37 @@ function Banners({ state, conn, onStartManager, onSetup }: Pick<Props, 'state' |
     )
   }
   return banners.length ? <div className="banners">{banners}</div> : null
+}
+
+// subagentRowsLimit is how many subagents show under a session before the
+// rest fold into a count; running ones always show.
+const subagentRowsLimit = 5
+
+// SubagentRows lists a session's subagents under its sidebar row.
+function SubagentRows({ agents, current, onOpen }: { agents: SubAgent[]; current: string | null; onOpen: (id: string) => void }) {
+  const { shown, more } = sidebarAgents(agents, subagentRowsLimit)
+  return (
+    <ul className="subagent-rows" aria-label="Subagents">
+      {shown.map((a) => (
+        <li key={a.id}>
+          <button
+            type="button"
+            className={`row subrow agent-${a.status}${a.id === current ? ' selected' : ''}`}
+            aria-current={a.id === current ? 'page' : undefined}
+            title={`${agentType(a.type).name}: ${a.description}`}
+            onClick={() => {
+              onOpen(a.id)
+            }}
+          >
+            <span className="glyph" aria-hidden>
+              {a.status === 'running' ? '◐' : a.status === 'failed' ? '✕' : '·'}
+            </span>
+            <span className="row-name">{a.description || agentType(a.type).name}</span>
+            <span className="row-status">{a.status}</span>
+          </button>
+        </li>
+      ))}
+      {more > 0 && <li className="muted subrow-more">{String(more)} more in Agents</li>}
+    </ul>
+  )
 }
