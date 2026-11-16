@@ -453,6 +453,14 @@ func TestSamples(t *testing.T) {
 				}
 				return
 			}
+			if filepath.Base(path) == "mid-turn-message.jsonl" {
+				// The user's own words, without Claude Code's wrapper.
+				it := items[0]
+				if it.Kind != KindUser || it.Meta["source"] != "mid-turn" || strings.Contains(it.Text, "while you were working") || strings.Contains(it.Text, "This is how") || it.Text == "" {
+					t.Fatalf("mid-turn = %s %v %q", it.Kind, it.Meta, it.Text)
+				}
+				return
+			}
 			if filepath.Base(path) == "peer-handback.jsonl" {
 				// A subagent's report: the clean report text, its agent
 				// and task id, not the delivery wrapper.

@@ -21,6 +21,7 @@ const (
 	ReasonWaiting        Reason = "waiting"
 	ReasonDialog         Reason = "dialog"
 	ReasonDraft          Reason = "draft"
+	ReasonSubagent       Reason = "subagent_view"
 	ReasonInsideSession  Reason = "inside_session"
 	ReasonEmpty          Reason = "empty"
 	ReasonTooLong        Reason = "too_long"
@@ -130,6 +131,10 @@ var (
 // words sits higher up.
 const footerLines = 8
 
+// subagentBox is the prompt while the screen shows a subagent: Claude Code
+// puts a no-break space after the ❯.
+var subagentBox = regexp.MustCompile(`^❯[\s\x{00a0}]+Message @\S+…$`)
+
 // CheckPane refuses when the visible screen shows a dialog, or text already
 // typed into the agent's own composer, which a paste would append to.
 func CheckPane(screen string) *Refused {
@@ -153,6 +158,11 @@ func CheckPane(screen string) *Refused {
 	}
 	if len(rules) >= 2 {
 		for _, l := range lines[rules[len(rules)-2]+1 : rules[len(rules)-1]] {
+			// Viewing a subagent turns the prompt into a message box for it,
+			// so a reply would reach the subagent, not the agent.
+			if subagentBox.MatchString(strings.TrimSpace(l)) {
+				return &Refused{ReasonSubagent, "The session's screen is showing a subagent's conversation, so a reply would go to that subagent. Switch the screen back to main in agent-manager, or message the subagent from its page."}
+			}
 			if isDraft(l) {
 				return &Refused{ReasonDraft, "There is unsent text in the session's own prompt. Sending would append to it. Clear or send it in agent-manager first."}
 			}
