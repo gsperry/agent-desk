@@ -133,3 +133,25 @@ test('a running subagent takes a message from its page, and a refusal says why',
   await expect(page.getByRole('main', { name: 'Subagent' }).locator('.agent-status')).toHaveText('completed')
   await expect(page.getByRole('textbox', { name: 'Message the subagent' })).toHaveCount(0)
 })
+
+test('Stop asks first, and a refusal shows in the dialog', async ({ page }) => {
+  const keysLog = join(import.meta.dirname, '..', '.e2e-fixtures', 'keys.log')
+  rmSync(keysLog, { force: true })
+  await open(page, '/s/a0000010')
+  const nested = page.getByRole('navigation', { name: 'Sessions' }).getByRole('list', { name: 'Subagents' })
+  await nested.getByRole('button').filter({ hasText: 'running' }).click()
+  const view = page.getByRole('main', { name: 'Subagent' })
+  await view.getByRole('button', { name: 'Stop' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Stop this subagent?' })
+  await expect(dialog).toContainText('Its work so far stays')
+  await dialog.getByRole('button', { name: 'Stop subagent' }).click()
+  // The fixture screen has no agent list: refused, nothing pressed.
+  await expect(dialog).toContainText('not showing its agent list')
+  expect(existsSync(keysLog) ? readFileSync(keysLog, 'utf8') : '').toBe('')
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toHaveCount(0)
+  // A completed subagent has nothing to stop.
+  await nested.getByRole('button').filter({ hasText: 'completed' }).click()
+  await expect(view.locator('.agent-status')).toHaveText('completed')
+  await expect(view.getByRole('button', { name: 'Stop' })).toHaveCount(0)
+})

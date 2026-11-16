@@ -119,6 +119,7 @@ type fakePanes struct {
 	// target and message record MessageAgent's arguments.
 	target  pane.AgentTarget
 	message string
+	stopped pane.AgentTarget
 	// interrupted is set when Interrupt is called.
 	interrupted bool
 }
@@ -139,6 +140,11 @@ func (f *fakePanes) Interrupt(context.Context, string) error {
 
 func (f *fakePanes) MessageAgent(_ context.Context, _ string, t pane.AgentTarget, text string) error {
 	f.target, f.message = t, text
+	return f.err
+}
+
+func (f *fakePanes) StopAgent(_ context.Context, _ string, t pane.AgentTarget) error {
+	f.stopped = t
 	return f.err
 }
 
@@ -756,6 +762,41 @@ func TestMessageAgentRoute(t *testing.T) {
 			}
 			if tt.name == "delivered" && (p.target != (pane.AgentTarget{Type: "general-purpose", Description: "Pinger"}) || p.message != "Also say hello.") {
 				t.Fatalf("target %+v message %q", p.target, p.message)
+			}
+		})
+	}
+}
+
+func TestStopAgentRoute(t *testing.T) {
+	own := "http://127.0.0.1:7317"
+	tests := []struct {
+		name, agent, origin string
+		err                 error
+		want                int
+	}{
+		{"stopped", "aaa", own, nil, 200},
+		{"unknown subagent", "zzz", own, nil, 404},
+		{"finished subagent", "bbb", own, nil, 409},
+		{"refused by the screen", "aaa", own, &send.Refused{Reason: "agent_not_listed", Message: "gone"}, 409},
+		{"no origin", "aaa", "", nil, 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &fakePanes{err: tt.err}
+			s := newTestServer(t, Config{Panes: p})
+			req := httptest.NewRequest("POST", "/api/sessions/a1/agents/"+tt.agent+"/stop", nil)
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tt.want, rec.Body.String())
+			}
+			if tt.name == "stopped" && p.stopped.Description != "Pinger" {
+				t.Fatalf("stopped %+v", p.stopped)
 			}
 		})
 	}
