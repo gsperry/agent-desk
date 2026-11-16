@@ -17,6 +17,12 @@ import (
 // while a subagent is viewed), the hint line, then main and each subagent.
 // cursor is -1 when not selecting; shown is the row the screen shows.
 func listScreen(texts []string, cursor, shown int, title, prompt string) string {
+	return listScreenHint(texts, cursor, shown, title, prompt, "")
+}
+
+// listScreenHint is listScreen with the hint line given, such as the one
+// offering x on a running subagent.
+func listScreenHint(texts []string, cursor, shown int, title, prompt, hintLine string) string {
 	rule := strings.Repeat("─", 99)
 	top := rule
 	if title != "" {
@@ -32,6 +38,9 @@ func listScreen(texts []string, cursor, shown int, title, prompt string) string 
 	hint := "⏸ manual mode on · ? for shortcuts · ↓ to manage"
 	if cursor >= 0 {
 		hint = "↑/↓ to select"
+	}
+	if hintLine != "" {
+		hint = hintLine
 	}
 	lines := []string{"⏺ Working on it.", "", top, box, rule, "  " + hint, ""}
 	rows := append([]string{"main"}, texts...)
@@ -159,5 +168,107 @@ func TestMessageAgent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStopAgent(t *testing.T) {
+	one := []string{"Pinger"}
+	pinger := AgentTarget{Type: "general-purpose", Description: "Pinger"}
+	stop := "Enter to view · x to stop · ctrl+x ctrl+k to stop all agents"
+	cleared := "Enter to view · x to clear"
+	// Confirm the row by showing it, then back to main.
+	confirm := []string{
+		listScreen(one, -1, 0, "", ""),      // StopAgent reads
+		listScreen(one, -1, 0, "", ""),      // selectRow reads; Down
+		listScreen(one, 0, 0, "", ""),       // Down
+		listScreen(one, 1, 0, "", ""),       // Enter
+		listScreen(one, 1, 1, "Pinger", ""), // it is Pinger
+		listScreen(one, 1, 1, "Pinger", ""), // restoreMain reads
+		listScreen(one, 1, 1, "Pinger", ""), // selectRow reads; Up
+		listScreen(one, 0, 1, "Pinger", ""), // Enter on main
+		listScreen(one, 0, 0, "", ""),       // Up closes the list
+		listScreen(one, -1, 0, "", ""),
+	}
+	// From main, select the row again; the hint decides.
+	reselect := func(hint string) []string {
+		return []string{
+			listScreen(one, -1, 0, "", ""), // selectRow reads; Down
+			listScreen(one, 0, 0, "", ""),  // Down
+			listScreenHint(one, 1, 0, "", "", hint),
+		}
+	}
+	closeList := []string{
+		listScreenHint(one, 1, 0, "", "", cleared), // restoreMain reads
+		listScreenHint(one, 1, 0, "", "", cleared), // selectRow reads; Up
+		listScreen(one, 0, 0, "", ""),              // Up closes the list
+		listScreen(one, -1, 0, "", ""),
+	}
+	cat := func(parts ...[]string) []string {
+		var out []string
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	tests := []struct {
+		name     string
+		screens  []string
+		wantKeys []string
+		reason   send.Reason
+	}{
+		{"stops the subagent", cat(confirm, reselect(stop), []string{listScreenHint(one, 1, 0, "", "", cleared)}, closeList),
+			[]string{"Down", "Down", "Enter", "Up", "Enter", "Up", "Down", "Down", "x", "Up", "Up"}, ""},
+		{"already stopped", cat(confirm, reselect(cleared), closeList),
+			[]string{"Down", "Down", "Enter", "Up", "Enter", "Up", "Down", "Down", "Up", "Up"}, reasonNotListed},
+		{"x changes nothing", cat(confirm, reselect(stop), []string{listScreenHint(one, 1, 0, "", "", stop)}, []string{
+			listScreenHint(one, 1, 0, "", "", stop), listScreenHint(one, 1, 0, "", "", stop), listScreen(one, 0, 0, "", ""), listScreen(one, -1, 0, "", ""),
+		}), []string{"Down", "Down", "Enter", "Up", "Enter", "Up", "Down", "Down", "x", "Up", "Up"}, reasonLost},
+		{"not listed", []string{listScreen(one, -1, 0, "", "")}, nil, reasonNotListed},
+		{"a dialog on screen", []string{read(t, "permission.txt")}, nil, reasonAsking},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keys := &recordKeys{}
+			a := &Answerer{
+				Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true, Status: "working"}}}},
+				Reader:   &seqReader{screens: tt.screens},
+				Keys:     keys,
+			}
+			target := pinger
+			if tt.name == "not listed" {
+				target = AgentTarget{Type: "Explore", Description: "Pinger"}
+			}
+			err := a.StopAgent(context.Background(), "s1", target)
+			if tt.reason != "" {
+				var refused *send.Refused
+				if !errors.As(err, &refused) || refused.Reason != tt.reason {
+					t.Fatalf("err = %v, want %s", err, tt.reason)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			for _, k := range keys.got {
+				if k == "Escape" {
+					t.Fatal("pressed Escape")
+				}
+			}
+			if !reflect.DeepEqual(keys.got, tt.wantKeys) {
+				t.Fatalf("keys = %v, want %v", keys.got, tt.wantKeys)
+			}
+		})
+	}
+}
+
+// x reaches the pane only through StopAgent: a key answer refuses it.
+func TestStopKeyIsNotAKeyAnswer(t *testing.T) {
+	keys := &recordKeys{}
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+		Reader:   fakeReader{screen: read(t, "permission.txt")},
+		Keys:     keys,
+	}
+	var refused *send.Refused
+	if err := a.Answer(context.Background(), "s1", Answer{Action: "key", Key: "x"}); !errors.As(err, &refused) || refused.Reason != reasonBadKey || len(keys.got) != 0 {
+		t.Fatalf("err = %v keys = %v", err, keys.got)
 	}
 }

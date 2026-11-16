@@ -6,6 +6,7 @@ import { can, useRemote } from '../remote-context'
 import type { Item, SessionView, SubAgent } from '../types'
 import { LiveActivity } from './LiveActivity'
 import { Transcript } from './Transcript'
+import { ConfirmDialog } from './Dialog'
 
 interface Props {
   sessionId: string
@@ -19,6 +20,8 @@ interface Props {
   onOpenAgent: (agentId: string) => void
   // sendMessage messages the subagent; it resolves to a refusal, or null.
   sendMessage: (agentId: string, text: string) => Promise<string | null>
+  // stopAgent stops the subagent; it resolves to a refusal, or null.
+  stopAgent: (agentId: string) => Promise<string | null>
 }
 
 // A running subagent's transcript refreshes this often.
@@ -27,7 +30,8 @@ const refreshMs = 3000
 // SubagentPage is one subagent of a session, read live: what it was asked,
 // every step it takes, the subagents it starts in turn, and a live row
 // while it works.
-export function SubagentPage({ sessionId, session, agentId, agents, readTranscript, onBack, onOpenAgent, sendMessage }: Props) {
+export function SubagentPage({ sessionId, session, agentId, agents, readTranscript, onBack, onOpenAgent, sendMessage, stopAgent }: Props) {
+  const [stopping, setStopping] = useState<{ busy: boolean; error: string | null } | null>(null)
   const remote = useRemote()
   const agent = agents?.find((a) => a.id === agentId)
   const running = agent?.status === 'running'
@@ -70,6 +74,17 @@ export function SubagentPage({ sessionId, session, agentId, agents, readTranscri
         <div className="session-title">
           <h1>{agent?.description || (agents ? 'Subagent' : 'Loading…')}</h1>
           {agent && <span className={`chip agent-status agent-${agent.status}`}>{agent.status}</span>}
+          {running && can(remote, 'reply') && session?.running && (
+            <button
+              type="button"
+              className="secondary subagent-stop"
+              onClick={() => {
+                setStopping({ busy: false, error: null })
+              }}
+            >
+              Stop
+            </button>
+          )}
         </div>
         {agent && (
           <div className="session-sub muted" title={agent.type}>
@@ -115,6 +130,26 @@ export function SubagentPage({ sessionId, session, agentId, agents, readTranscri
             />
           )}
         </div>
+      )}
+      {stopping && (
+        <ConfirmDialog
+          title="Stop this subagent?"
+          message="It stops at once, as x does in Claude Code's agent list. Its work so far stays, and the main agent is told it was stopped."
+          confirm="Stop subagent"
+          danger
+          busy={stopping.busy}
+          error={stopping.error}
+          onConfirm={() => {
+            setStopping({ busy: true, error: null })
+            void stopAgent(agentId).then((err) => {
+              setStopping(err ? { busy: false, error: err } : null)
+              if (!err) setTick((n) => n + 1)
+            })
+          }}
+          onClose={() => {
+            setStopping(null)
+          }}
+        />
       )}
     </main>
   )

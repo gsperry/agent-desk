@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gsperry/agent-desk/internal/send"
 )
@@ -226,4 +227,66 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// StopAgent stops a running subagent as Claude Code's agent list does: it
+// confirms which row is the subagent by showing it, as MessageAgent does,
+// brings the screen back to main, selects that row again, and presses x
+// only while the list's hint offers "x to stop". It then checks the hint
+// changed to "x to clear" and closes the list. The subagent's work so far
+// stays; the main agent is told it was stopped.
+func (a *Answerer) StopAgent(ctx context.Context, id string, t AgentTarget) error {
+	if refused := a.check(id); refused != nil {
+		return refused
+	}
+	l, err := a.agentList(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !l.PromptEmpty {
+		return &send.Refused{Reason: send.ReasonDraft, Message: "There is unsent text in the session's own prompt. Clear or send it in agent-manager first."}
+	}
+	rows := l.candidates(t.Type, t.Description)
+	if len(rows) == 0 {
+		return &send.Refused{Reason: reasonNotListed, Message: "Claude Code is not listing this subagent. It may have finished already."}
+	}
+	for _, row := range rows {
+		found, err := a.viewAgent(ctx, id, row, t)
+		if err != nil {
+			return a.backToMain(ctx, id, err)
+		}
+		if !found {
+			continue
+		}
+		if err := a.restoreMain(ctx, id); err != nil {
+			return err
+		}
+		return a.backToMain(ctx, id, a.pressStop(ctx, id, row, t))
+	}
+	return a.backToMain(ctx, id, &send.Refused{Reason: reasonNotListed, Message: fmt.Sprintf("Claude Code's agent list has no subagent described %q.", t.Description)})
+}
+
+// pressStop selects row from the main conversation and presses x.
+func (a *Answerer) pressStop(ctx context.Context, id string, row int, t AgentTarget) error {
+	l, err := a.selectRow(ctx, id, row)
+	if err != nil {
+		return err
+	}
+	if l.Viewing || l.Shown != 0 || !l.Rows[row].matchesType(t.Type) {
+		return &send.Refused{Reason: reasonLost, Message: "The agent list changed."}
+	}
+	if !strings.Contains(l.Hint, "x to stop") {
+		return &send.Refused{Reason: reasonNotListed, Message: "Claude Code does not offer to stop this subagent. It may have finished or been stopped already."}
+	}
+	if err := a.Keys.Send(ctx, id, "x"); err != nil {
+		return err
+	}
+	after, err := a.agentList(ctx, id)
+	if err != nil {
+		return err
+	}
+	if after.Cursor == row && strings.Contains(after.Hint, "x to stop") {
+		return &send.Refused{Reason: reasonLost, Message: "Claude Code still offers to stop the subagent after x was pressed. Check the session in agent-manager."}
+	}
+	return nil
 }
