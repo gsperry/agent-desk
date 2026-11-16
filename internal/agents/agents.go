@@ -45,6 +45,26 @@ var ErrNotFound = errors.New("subagent not found")
 
 var validID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// Active counts the subagents whose transcripts changed within the last
+// window: a cheap sign of work in progress that needs no parsing, for the
+// overview. A subagent waiting on a long command may not count.
+func Active(conversationPath string, window time.Duration, now time.Time) int {
+	entries, err := os.ReadDir(Dir(conversationPath))
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "agent-") || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && now.Sub(info.ModTime()) <= window {
+			n++
+		}
+	}
+	return n
+}
+
 // Dir is where a conversation's subagent files live.
 func Dir(conversationPath string) string {
 	return filepath.Join(strings.TrimSuffix(conversationPath, ".jsonl"), "subagents")

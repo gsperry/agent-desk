@@ -11,6 +11,8 @@ import { SearchView } from './components/SearchView'
 import { Settings } from './components/Settings'
 import { UsageView } from './components/UsageView'
 import { Welcome } from './components/Welcome'
+import { SubagentPage } from './components/SubagentPage'
+import { agentFromPath, agentPath } from './model/agents'
 import { NotifyControls } from './components/Sidebar'
 import { StartAtLogin } from './components/StartAtLogin'
 import { markWelcomed, welcomed } from './model/welcome'
@@ -26,7 +28,7 @@ import { loadSummaries, saveSummaries, type SummarySettings } from './model/summ
 import { directorySuggestions, resumeDefaults, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
-import type { Answer, Conversation, Project, SessionAction, SpawnRequest } from './types'
+import type { Answer, Conversation, Project, SessionAction, SpawnRequest, SubAgent } from './types'
 import { SnippetsContext } from './snippets-context'
 import { RemoteContext, localInfo, useRemote, type RemoteInfo, type RemoteLevel } from './remote-context'
 import type { RemoteSettings } from './components/RemoteAccess'
@@ -92,6 +94,9 @@ function firstRun(remote: boolean): boolean {
 
 const noPending: never[] = []
 
+// The open session's subagents are read again this often.
+const agentsRefreshMs = 3000
+
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
@@ -103,6 +108,8 @@ function Desk({ token }: { token: string }) {
   useEffect(() => store.start(), [store])
   const { conn, data, pending, acks, prefs, permission, toast, seen, rules, suggestions } = useStore(store)
   const [selected, setSelected] = useState<string | null>(sessionFromPath)
+  // agentRoute is the subagent open at /s/<session>/agents/<id>.
+  const [agentRoute, setAgentRoute] = useState<string | null>(() => agentFromPath(window.location.pathname))
   const [historyRoute, setHistoryRoute] = useState<{ id: string | null } | null>(historyFromPath)
   const [conversations, setConversations] = useState<Conversation[] | null>(null)
   const [usageOpen, setUsageOpen] = useState(usageFromPath)
@@ -186,6 +193,7 @@ function Desk({ token }: { token: string }) {
   const select = useCallback((id: string) => {
     history.pushState(null, '', `/s/${encodeURIComponent(id)}`)
     setSelected(id)
+    setAgentRoute(null)
     setHistoryRoute(null)
     setUsageOpen(false)
     setWelcomeOpen(false)
@@ -196,6 +204,7 @@ function Desk({ token }: { token: string }) {
   useEffect(() => {
     const onPop = () => {
       setSelected(sessionFromPath())
+      setAgentRoute(agentFromPath(window.location.pathname))
       setHistoryRoute(historyFromPath())
       setUsageOpen(usageFromPath())
       setWelcomeOpen(!remoteInfo.remote && welcomeFromPath())
@@ -278,13 +287,43 @@ function Desk({ token }: { token: string }) {
   const answer = useCallback((id: string, a: Answer) => store.answer(id, a), [store])
   const interrupt = useCallback((id: string) => store.interrupt(id), [store])
   const loadOptions = useCallback(() => store.spawnOptions(), [store])
-  const readAgents = useCallback((id: string) => store.agents(id), [store])
+  // The open session's subagents, shared by its view, the sidebar and the
+  // subagent page.
+  const [agents, setAgents] = useState<{ sessionId: string; list: SubAgent[] } | null>(null)
+  const selectedTool = sessions.find((s) => s.id === selected)?.tool
+  useEffect(() => {
+    if (!selected || selectedTool !== 'claude') return
+    let live = true
+    const load = () => {
+      void store.agents(selected).then((list) => {
+        if (live && list) setAgents({ sessionId: selected, list })
+      })
+    }
+    load()
+    const t = setInterval(load, agentsRefreshMs)
+    return () => {
+      live = false
+      clearInterval(t)
+    }
+  }, [store, selected, selectedTool])
+  const agentList = agents && agents.sessionId === selected ? agents.list : null
+  const openAgent = useCallback((sessionId: string, agentId: string) => {
+    history.pushState(null, '', agentPath(sessionId, agentId))
+    setSelected(sessionId)
+    setAgentRoute(agentId)
+    setHistoryRoute(null)
+    setUsageOpen(false)
+    setWelcomeOpen(false)
+    setSearchText('')
+    setSearchQuery(null)
+  }, [])
   const loadOverview = useCallback(() => store.overview(), [store])
   const pasteImage = useCallback((image: Blob) => store.paste(image), [store])
   const readChanges = useCallback((id: string, mode: 'uncommitted' | 'branch') => store.changes(id, mode), [store])
   const goHome = useCallback(() => {
     history.pushState(null, '', '/')
     setSelected(null)
+    setAgentRoute(null)
     setHistoryRoute(null)
     setUsageOpen(false)
     setWelcomeOpen(false)
@@ -294,6 +333,7 @@ function Desk({ token }: { token: string }) {
   const openHistory = useCallback((id: string | null) => {
     history.pushState(null, '', id ? `/history/${encodeURIComponent(id)}` : '/history')
     setSelected(null)
+    setAgentRoute(null)
     setHistoryRoute({ id })
     setUsageOpen(false)
     setWelcomeOpen(false)
@@ -318,6 +358,7 @@ function Desk({ token }: { token: string }) {
   const openUsage = useCallback(() => {
     history.pushState(null, '', '/usage')
     setSelected(null)
+    setAgentRoute(null)
     setHistoryRoute(null)
     setUsageOpen(true)
     setWelcomeOpen(false)
@@ -328,6 +369,7 @@ function Desk({ token }: { token: string }) {
     setAutoWelcome(false)
     history.pushState(null, '', '/welcome')
     setSelected(null)
+    setAgentRoute(null)
     setHistoryRoute(null)
     setUsageOpen(false)
     setWelcomeOpen(true)
@@ -405,6 +447,11 @@ function Desk({ token }: { token: string }) {
             onSelect={select}
             onStartManager={() => store.startManager()}
             onSetup={openWelcome}
+            subagents={agentList}
+            currentAgent={agentRoute}
+            onOpenAgent={(id) => {
+              if (selected) openAgent(selected, id)
+            }}
             stats={viewPrefs.stats ? statsFeed : null}
             prefs={prefs}
             permission={permission}
@@ -517,6 +564,21 @@ function Desk({ token }: { token: string }) {
               ) : (
                 <HistoryList load={loadConversations} owners={owners} onOpen={openHistory} />
               )
+            ) : selected && agentRoute ? (
+              <SubagentPage
+                key={`${selected}/${agentRoute}`}
+                sessionId={selected}
+                session={session}
+                agentId={agentRoute}
+                agents={agentList}
+                readTranscript={readAgentTranscript}
+                onBack={() => {
+                  select(selected)
+                }}
+                onOpenAgent={(id) => {
+                  openAgent(selected, id)
+                }}
+              />
             ) : selected ? (
               data.sessions ? (
                 <SessionView
@@ -541,8 +603,10 @@ function Desk({ token }: { token: string }) {
                   groups={amGroups}
                   act={act}
                   seenMark={session?.agentSessionId ? seen[session.agentSessionId] : undefined}
-                  readAgents={readAgents}
-                  readAgentTranscript={readAgentTranscript}
+                  agents={agentList}
+                  onOpenAgent={(id) => {
+                    openAgent(selected, id)
+                  }}
                   readChanges={readChanges}
                   conflicts={selected ? (conflicts[selected] ?? []) : []}
                   sessions={sessions}

@@ -96,6 +96,11 @@ export function Overview({ sessions, acks, seen, load, onOpen }: Props) {
                 )}
                 {sum?.lastReply && <span className="card-reply">{plainText(sum.lastReply)}</span>}
                 {sum?.lastPrompt && <span className="muted card-prompt">You: {sum.lastPrompt}</span>}
+                {sum?.activeAgents ? (
+                  <span className="card-agents">
+                    ◐ {sum.activeAgents} subagent{sum.activeAgents === 1 ? '' : 's'} active
+                  </span>
+                ) : null}
                 <span className="card-foot muted">
                   {sum?.contextTokens ? (
                     <span>
