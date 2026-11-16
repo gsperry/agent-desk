@@ -1,3 +1,5 @@
+import { utimesSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { port, token } from '../playwright.config'
 
@@ -39,17 +41,39 @@ test('subagents are listed with status and their transcripts open', async ({ pag
   await expect(rows.first()).toContainText('auditor')
   await expect(rows.first()).toContainText('running')
   await expect(rows.nth(1)).toContainText('completed')
+  // A subagent opens as its own page, with a way back to its session.
   await rows.nth(1).click()
-  await expect(panel).toContainText('Row 1 implemented and tested.')
-  await panel.getByRole('button', { name: '← All agents' }).click()
-  await expect(rows).toHaveCount(2)
+  const view = page.getByRole('main', { name: 'Subagent' })
+  await expect(view).toContainText('Row 1 implemented and tested.')
+  await expect(view.locator('.agent-status')).toHaveText('completed')
+  await expect(page).toHaveURL(/\/s\/a0000010\/agents\/[^/]+$/)
+  // The session's subagents are nested under it in the sidebar, the open one marked.
+  const nested = page.getByRole('navigation', { name: 'Sessions' }).getByRole('list', { name: 'Subagents' })
+  await expect(nested.getByRole('button')).toHaveCount(2)
+  await expect(nested.locator('[aria-current="page"]')).toHaveCount(1)
+  await view.getByRole('button', { name: /‹/ }).click()
+  await expect(page).toHaveURL(/\/s\/a0000010$/)
+  await page.goBack()
+  await expect(page.getByRole('main', { name: 'Subagent' })).toContainText('Row 1 implemented and tested.')
+})
+
+test('a subagent page opens straight from its address, and a running one shows its live row', async ({ page }) => {
+  await open(page, '/s/a0000010')
+  const nested = page.getByRole('navigation', { name: 'Sessions' }).getByRole('list', { name: 'Subagents' })
+  await nested.getByRole('button').filter({ hasText: 'running' }).click()
+  const view = page.getByRole('main', { name: 'Subagent' })
+  await expect(view.locator('.agent-status')).toHaveText('running')
+  await expect(view.getByRole('status', { name: 'Agent activity' })).toBeVisible()
+  const url = page.url()
+  await page.goto(`${url}#t=${token}`)
+  await expect(page.getByRole('main', { name: 'Subagent' }).locator('.agent-status')).toHaveText('running')
 })
 
 test('an Agent tool call links to its subagent', async ({ page }) => {
   await open(page, '/s/a0000010')
   await expect(page.getByRole('button', { name: /Agents/ })).toBeVisible()
   await page.locator('.tool').filter({ hasText: 'Execute row 1' }).getByRole('button', { name: 'View transcript' }).click()
-  await expect(page.getByRole('complementary', { name: 'Subagents' })).toContainText('Row 1 implemented and tested.')
+  await expect(page.getByRole('main', { name: 'Subagent' })).toContainText('Row 1 implemented and tested.')
 })
 
 test('new activity shows a dot and a divider', async ({ page }) => {
@@ -75,5 +99,17 @@ test('a subagent report folds to one line, opens on click, and links to its tran
   await report.getByRole('button', { name: /Report from/ }).click()
   await expect(report.getByText('Details are in the pull request.')).toBeVisible()
   await report.getByRole('button', { name: 'View transcript' }).click()
-  await expect(page.getByRole('complementary', { name: 'Subagents' })).toBeVisible()
+  await expect(page.getByRole('main', { name: 'Subagent' })).toBeVisible()
+})
+
+test('an overview card counts the subagents working now', async ({ page }) => {
+  // A subagent counts as active when its transcript changed in the last 90 s.
+  const dir = join(import.meta.dirname, '..', '.e2e-fixtures', 'claude', 'projects', '-home-dev-src-orch', conv, 'subagents')
+  const now = new Date()
+  const old = new Date(now.getTime() - 10 * 60_000)
+  utimesSync(join(dir, 'agent-aaa1.jsonl'), now, now)
+  utimesSync(join(dir, 'agent-bbb2.jsonl'), old, old)
+  await open(page, '/')
+  const card = page.locator('.card').filter({ has: page.locator('.card-name', { hasText: /^orchestrator$/ }) })
+  await expect(card.locator('.card-agents')).toHaveText('◐ 1 subagent active')
 })

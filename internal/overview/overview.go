@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gsperry/agent-desk/internal/agents"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/locate"
 	"github.com/gsperry/agent-desk/internal/transcript"
@@ -26,7 +27,14 @@ type Summary struct {
 	ContextTokens float64 `json:"contextTokens,omitempty"`
 	Model         string  `json:"model,omitempty"`
 	Updated       string  `json:"updated,omitempty"`
+	// ActiveAgents counts subagents that wrote to their transcripts in
+	// the last 90 seconds.
+	ActiveAgents int `json:"activeAgents,omitempty"`
 }
+
+// activeWindow is how recently a subagent must have written to count as
+// active.
+const activeWindow = 90 * time.Second
 
 type Sessions interface {
 	State() hub.State
@@ -62,6 +70,9 @@ func (o *Overview) Summaries(ctx context.Context) map[string]Summary {
 			continue
 		}
 		if sum, err := o.summary(path); err == nil {
+			// Subagents write to their own files, so this is counted fresh
+			// rather than cached with the parent's transcript.
+			sum.ActiveAgents = agents.Active(path, activeWindow, time.Now())
 			out[s.ID] = sum
 		}
 	}

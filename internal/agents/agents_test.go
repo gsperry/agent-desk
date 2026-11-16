@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gsperry/agent-desk/internal/transcript"
 )
@@ -114,5 +115,35 @@ func TestListAndTranscript(t *testing.T) {
 	none, err := List(filepath.Join(t.TempDir(), "other.jsonl"), nil)
 	if err != nil || len(none) != 0 {
 		t.Fatalf("no subagents: %v %v", none, err)
+	}
+}
+
+func TestActive(t *testing.T) {
+	conv := filepath.Join(t.TempDir(), "c1.jsonl")
+	dir := Dir(conv)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for name, age := range map[string]time.Duration{
+		"agent-a.jsonl":     10 * time.Second,
+		"agent-b.jsonl":     80 * time.Second,
+		"agent-c.jsonl":     5 * time.Minute,
+		"agent-a.meta.json": time.Second,
+		"notes.jsonl":       time.Second,
+	} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, now.Add(-age), now.Add(-age)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Active(conv, 90*time.Second, now); got != 2 {
+		t.Errorf("Active = %d, want 2", got)
+	}
+	if got := Active(filepath.Join(t.TempDir(), "none.jsonl"), time.Minute, now); got != 0 {
+		t.Errorf("no subagents = %d", got)
 	}
 }
