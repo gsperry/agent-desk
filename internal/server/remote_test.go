@@ -306,6 +306,8 @@ func TestRouteNeeds(t *testing.T) {
 		"POST /api/manager/start":                          remote.NeedManage,
 		"GET /api/remote":                                  remote.NeedRead,
 		"POST /api/remote":                                 remote.NeedLocal,
+		"POST /api/sessions/{id}/agents/{agent}/message":   remote.NeedReply,
+		"POST /api/sessions/{id}/agents/{agent}/stop":      remote.NeedReply,
 		"GET /api/stats":                                   remote.NeedRead,
 		"GET /api/setup":                                   remote.NeedLocal,
 		"POST /api/setup":                                  remote.NeedLocal,

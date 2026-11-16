@@ -3637,3 +3637,34 @@ mark {
   color: var(--working);
   font-size: 0.82rem;
 }
+
+.subagent-message {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 0.4rem 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.subagent-message textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.subagent-message .form-error,
+.subagent-sent {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.subagent-stop {
+  margin-left: auto;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+}

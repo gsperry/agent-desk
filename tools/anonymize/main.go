@@ -45,6 +45,9 @@ var preserve = regexp.MustCompile(strings.Join([]string{
 	"```[A-Za-z0-9_+-]*",
 	`</?[A-Za-z][A-Za-z0-9_-]*>`,
 	`\[Request interrupted[^\]]*\]`,
+	// A message sent to an agent mid-turn, wrapped by Claude Code.
+	`The user sent a new message while you were working:`,
+	`This is how Claude Code surfaces messages the user sends mid-turn[^\n]*`,
 	// Ordered list markers: CommonMark lets only a list starting at 1
 	// interrupt a paragraph, so scrambling them changes the rendering.
 	`(?m)^[ \t]*\d{1,3}[.)][ \t]`,

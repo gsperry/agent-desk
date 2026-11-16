@@ -198,6 +198,11 @@ type Panes interface {
 	Answer(ctx context.Context, sessionID string, a pane.Answer) error
 	// Interrupt stops a working session's turn, as Esc does.
 	Interrupt(ctx context.Context, sessionID string) error
+	// MessageAgent types a message to one of the session's running
+	// subagents through Claude Code's agent list.
+	MessageAgent(ctx context.Context, sessionID string, t pane.AgentTarget, text string) error
+	// StopAgent stops one of the session's running subagents.
+	StopAgent(ctx context.Context, sessionID string, t pane.AgentTarget) error
 }
 
 type TranscriptSource interface {
@@ -281,6 +286,8 @@ func (s *Server) routes() {
 	s.route("POST /api/sessions/{id}/interrupt", remote.NeedReply, s.interrupt)
 	s.route("GET /api/sessions/{id}/agents", remote.NeedRead, s.listAgents)
 	s.route("GET /api/sessions/{id}/agents/{agent}/transcript", remote.NeedRead, s.agentTranscript)
+	s.route("POST /api/sessions/{id}/agents/{agent}/message", remote.NeedReply, s.messageAgent)
+	s.route("POST /api/sessions/{id}/agents/{agent}/stop", remote.NeedReply, s.stopAgent)
 	s.route("GET /api/sessions/{id}/changes", remote.NeedRead, s.changes)
 	s.route("GET /api/sessions/{id}/commands", remote.NeedRead, s.sessionCommands)
 	s.route("POST /api/paste", remote.NeedLocal, s.paste)
@@ -435,6 +442,69 @@ func (s *Server) applySetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
+}
+
+// messageAgent sends a message to a running subagent, found by id in the
+// session's conversation and reached by its type and description.
+func (s *Server) messageAgent(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSendBody)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON with a text field"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	id, agentID := r.PathValue("id"), r.PathValue("agent")
+	target, ok := s.runningAgent(ctx, w, id, agentID, "take a message")
+	if !ok {
+		return
+	}
+	err := s.cfg.Panes.MessageAgent(ctx, id, target, body.Text)
+	logOutcome("message-agent", id, fmt.Sprintf("agent=%s bytes=%d", agentID, len(body.Text)), "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// stopAgent stops a running subagent through Claude Code's agent list.
+func (s *Server) stopAgent(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	id, agentID := r.PathValue("id"), r.PathValue("agent")
+	target, ok := s.runningAgent(ctx, w, id, agentID, "be stopped")
+	if !ok {
+		return
+	}
+	err := s.cfg.Panes.StopAgent(ctx, id, target)
+	logOutcome("stop-agent", id, "agent="+agentID, "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// runningAgent finds a running subagent of the session by id and names it
+// as Claude Code shows it, or writes why not.
+func (s *Server) runningAgent(ctx context.Context, w http.ResponseWriter, id, agentID, verb string) (pane.AgentTarget, bool) {
+	list, err := s.cfg.Transcripts.Agents(ctx, id)
+	if writeRefusal(w, err) {
+		return pane.AgentTarget{}, false
+	}
+	for _, a := range list {
+		if a.ID != agentID {
+			continue
+		}
+		if a.Status != agents.StatusRunning {
+			writeJSON(w, http.StatusConflict, send.Refused{Reason: "agent_finished", Message: "This subagent has " + a.Status + ", so it cannot " + verb + "."})
+			return pane.AgentTarget{}, false
+		}
+		return pane.AgentTarget{Type: a.Type, Description: a.Description}, true
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "this session has no such subagent"})
+	return pane.AgentTarget{}, false
 }
 
 // maxSendBody bounds the request; the sender's own cap is lower.

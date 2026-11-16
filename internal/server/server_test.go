@@ -84,7 +84,10 @@ func (f *fakeTranscripts) Agents(_ context.Context, id string) ([]agents.Agent, 
 	if id == "broken" {
 		return nil, errors.New("boom")
 	}
-	return []agents.Agent{{ID: "aaa", Status: agents.StatusRunning}}, nil
+	return []agents.Agent{
+		{ID: "aaa", Type: "general-purpose", Description: "Pinger", Status: agents.StatusRunning},
+		{ID: "bbb", Type: "general-purpose", Description: "Done one", Status: agents.StatusCompleted},
+	}, nil
 }
 
 func (f *fakeTranscripts) AgentTranscript(_ context.Context, _, agentID string) ([]transcript.Item, error) {
@@ -113,6 +116,10 @@ type fakePanes struct {
 	screen pane.Screen
 	err    error
 	answer pane.Answer
+	// target and message record MessageAgent's arguments.
+	target  pane.AgentTarget
+	message string
+	stopped pane.AgentTarget
 	// interrupted is set when Interrupt is called.
 	interrupted bool
 }
@@ -128,6 +135,16 @@ func (f *fakePanes) Answer(_ context.Context, _ string, a pane.Answer) error {
 
 func (f *fakePanes) Interrupt(context.Context, string) error {
 	f.interrupted = true
+	return f.err
+}
+
+func (f *fakePanes) MessageAgent(_ context.Context, _ string, t pane.AgentTarget, text string) error {
+	f.target, f.message = t, text
+	return f.err
+}
+
+func (f *fakePanes) StopAgent(_ context.Context, _ string, t pane.AgentTarget) error {
+	f.stopped = t
 	return f.err
 }
 
@@ -709,6 +726,77 @@ func TestStatsRoute(t *testing.T) {
 			s.Handler().ServeHTTP(rec, req)
 			if rec.Code != tt.want || (tt.want == 200 && !strings.Contains(rec.Body.String(), `"cores":8`)) {
 				t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestMessageAgentRoute(t *testing.T) {
+	own := "http://127.0.0.1:7317"
+	tests := []struct {
+		name, agent, body, origin string
+		err                       error
+		want                      int
+	}{
+		{"delivered", "aaa", `{"text":"Also say hello."}`, own, nil, 200},
+		{"unknown subagent", "zzz", `{"text":"hi"}`, own, nil, 404},
+		{"finished subagent", "bbb", `{"text":"hi"}`, own, nil, 409},
+		{"refused by the screen", "aaa", `{"text":"hi"}`, own, &send.Refused{Reason: "no_agent_list", Message: "no list"}, 409},
+		{"no origin", "aaa", `{"text":"hi"}`, "", nil, 403},
+		{"bad body", "aaa", `{`, own, nil, 400},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &fakePanes{err: tt.err}
+			s := newTestServer(t, Config{Panes: p})
+			req := httptest.NewRequest("POST", "/api/sessions/a1/agents/"+tt.agent+"/message", strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tt.want, rec.Body.String())
+			}
+			if tt.name == "delivered" && (p.target != (pane.AgentTarget{Type: "general-purpose", Description: "Pinger"}) || p.message != "Also say hello.") {
+				t.Fatalf("target %+v message %q", p.target, p.message)
+			}
+		})
+	}
+}
+
+func TestStopAgentRoute(t *testing.T) {
+	own := "http://127.0.0.1:7317"
+	tests := []struct {
+		name, agent, origin string
+		err                 error
+		want                int
+	}{
+		{"stopped", "aaa", own, nil, 200},
+		{"unknown subagent", "zzz", own, nil, 404},
+		{"finished subagent", "bbb", own, nil, 409},
+		{"refused by the screen", "aaa", own, &send.Refused{Reason: "agent_not_listed", Message: "gone"}, 409},
+		{"no origin", "aaa", "", nil, 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &fakePanes{err: tt.err}
+			s := newTestServer(t, Config{Panes: p})
+			req := httptest.NewRequest("POST", "/api/sessions/a1/agents/"+tt.agent+"/stop", nil)
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tt.want, rec.Body.String())
+			}
+			if tt.name == "stopped" && p.stopped.Description != "Pinger" {
+				t.Fatalf("stopped %+v", p.stopped)
 			}
 		})
 	}

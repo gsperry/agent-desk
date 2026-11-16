@@ -260,6 +260,10 @@ func (p *Parser) user(base Item, r record, line []byte) []Item {
 	return items
 }
 
+// midTurn is Claude Code's wrapper around a message the user sent while
+// the agent was working.
+var midTurn = regexp.MustCompile(`(?s)^The user sent a new message while you were working:\n(.*?)(?:\n\nThis is how Claude Code surfaces messages the user sends mid-turn.*)?$`)
+
 var (
 	preamblePattern = regexp.MustCompile(`(?s)\A(.*?agent-manager rename "<name>".*?Then do the task:)\s*(.*)\z`)
 	deferredPattern = regexp.MustCompile(`(?s)\A.*agent-manager rename "<name>".*Then continue\.\s*\z`)
@@ -377,6 +381,14 @@ func (p *Parser) classifyUserText(base Item, r record, text string) Item {
 		case "local-command-caveat", "system-reminder", "ide_opened_file", "ide_selection", "user-prompt-submit-hook":
 			return notice(m[1], m[2])
 		}
+	}
+	// A message sent while the agent worked, such as one to a running
+	// subagent, arrives wrapped in Claude Code's note about it. It is the
+	// user's own words, so it reads as their prompt.
+	if m := midTurn.FindStringSubmatch(text); m != nil {
+		it.Kind, it.Text = KindUser, strings.TrimSpace(m[1])
+		it.Meta = map[string]any{"source": "mid-turn"}
+		return it
 	}
 	if r.IsMeta {
 		return notice("injected", trimmed)

@@ -16,8 +16,10 @@ import (
 // AllowedKeys are the only keys Agent Desk sends to an agent's pane. Left
 // and Right move between the questions of a multi-question prompt, and are
 // sent only by a step answer. C-u clears a question's text field before a
-// new answer is typed into it, and is sent only by a text answer.
-var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true, "C-u": true}
+// new answer is typed into it, and is sent only by a text answer. x stops
+// the subagent selected in Claude Code's agent list, and is sent only by
+// StopAgent once the list's hint offers "x to stop".
+var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true, "C-u": true, "x": true}
 
 // pressKeys are the keys a key answer may press.
 var pressKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true}
