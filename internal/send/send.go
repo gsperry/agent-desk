@@ -20,6 +20,12 @@ type Pane interface {
 	Read(ctx context.Context, id string) (string, error)
 }
 
+// StyledPane also reads the screen with its colors, which tells text the
+// user typed from Claude Code's dim placeholder or suggested prompt.
+type StyledPane interface {
+	ReadStyled(ctx context.Context, id string) (string, error)
+}
+
 // Result is a send that reached agent-manager. Maybe means the paste started
 // before a failure, so the text may be in the pane; the transcript decides.
 type Result struct {
@@ -67,7 +73,7 @@ func (s *Sender) Send(ctx context.Context, id, text string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("could not read the session's screen to check for a dialog, so nothing was sent: %w", err)
 	}
-	if refused := CheckPane(screen); refused != nil {
+	if refused := CheckPane(screen); refused != nil && !s.standIn(ctx, id, refused) {
 		return Result{}, refused
 	}
 	if refused := CheckWaiting(session.Status, screen); refused != nil {
@@ -82,6 +88,18 @@ func (s *Sender) Send(ctx context.Context, id, text string) (Result, error) {
 		return Result{}, err
 	}
 	return Result{Status: StatusSent}, nil
+}
+
+// standIn reports a draft refusal that is only Claude Code's dim stand-in
+// text in the prompt: a placeholder, or a suggested next prompt it shows
+// after some turns. A reply replaces that text, so it is not refused.
+func (s *Sender) standIn(ctx context.Context, id string, refused *Refused) bool {
+	p, ok := s.Pane.(StyledPane)
+	if !ok || refused.Reason != ReasonDraft {
+		return false
+	}
+	styled, err := p.ReadStyled(ctx, id)
+	return err == nil && StandIn(styled)
 }
 
 func (s *Sender) claim(id string) bool {
