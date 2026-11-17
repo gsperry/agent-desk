@@ -129,3 +129,87 @@ func (s *Sender) busy(id string) bool {
 	defer s.mu.Unlock()
 	return s.inFlight[id]
 }
+
+// styledPane also serves the screen with its colors.
+type styledPane struct {
+	fakePane
+	styled string
+}
+
+func (p *styledPane) ReadStyled(context.Context, string) (string, error) { return p.styled, nil }
+
+// The prompt as Claude Code draws it: a no-break space after the ❯, a stand-in
+// in dim (SGR 2), typed text in the normal color with the cursor after it.
+const (
+	rule        = "────────────────────────────────────────────────────────────────────────"
+	dimPrompt   = "\x1b[39m❯\u00a0\x1b[2mRun the tests and fix what fails\x1b[0m"
+	typedPrompt = "\x1b[39m❯\u00a0Run the tests and fix what fails\x1b[7m \x1b[0m"
+	mixedPrompt = "\x1b[39m❯\u00a0Run \x1b[2mthe tests\x1b[0m"
+)
+
+func screenWith(prompt string) string {
+	return "⏺ Done.\n" + rule + "\n" + prompt + "\n" + rule + "\n  ⏸ manual mode on · ? for shortcuts\n"
+}
+
+func TestStandIn(t *testing.T) {
+	tests := []struct {
+		name   string
+		styled string
+		want   bool
+	}{
+		{"a suggested prompt in dim", screenWith(dimPrompt), true},
+		{"text the user typed", screenWith(typedPrompt), false},
+		{"part typed, part dim", screenWith(mixedPrompt), false},
+		{"an empty prompt", screenWith("\x1b[39m❯\u00a0\x1b[7m \x1b[0m"), false},
+		{"no prompt box", "just output\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StandIn(tt.styled); got != tt.want {
+				t.Errorf("StandIn = %v, want %v", got, tt.want)
+			}
+		})
+	}
+	// The placeholder recorded from Claude Code 2.1.325 counts as a stand-in.
+	placeholder := screenWith("\x1b[39m❯\u00a0\x1b[2mMessage @general-purpose…\x1b[0m")
+	if !StandIn(placeholder) {
+		t.Error("placeholder not seen as a stand-in")
+	}
+}
+
+func TestSendThroughStandIn(t *testing.T) {
+	plain := screenWith("❯\u00a0Run the tests and fix what fails")
+	tests := []struct {
+		name   string
+		styled string
+		typed  bool
+	}{
+		{"a suggested prompt does not block a reply", screenWith(dimPrompt), true},
+		{"text the user typed still does", screenWith(typedPrompt), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pane := &styledPane{fakePane: fakePane{screen: plain}, styled: tt.styled}
+			s, _ := newSender("finished", &pane.fakePane)
+			s.Pane = pane
+			_, err := s.Send(context.Background(), "s1", "hi")
+			var refused *Refused
+			if tt.typed {
+				if err != nil || len(pane.typed) != 1 {
+					t.Fatalf("err = %v typed = %q", err, pane.typed)
+				}
+				return
+			}
+			if !errors.As(err, &refused) || refused.Reason != ReasonDraft || len(pane.typed) != 0 {
+				t.Fatalf("err = %v typed = %q", err, pane.typed)
+			}
+		})
+	}
+	// A pane that cannot read colors keeps refusing, as before.
+	pane := &fakePane{screen: plain}
+	s, _ := newSender("finished", pane)
+	var refused *Refused
+	if _, err := s.Send(context.Background(), "s1", "hi"); !errors.As(err, &refused) || refused.Reason != ReasonDraft {
+		t.Fatalf("plain pane err = %v", err)
+	}
+}

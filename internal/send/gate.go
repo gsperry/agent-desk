@@ -188,3 +188,80 @@ func isDraft(line string) bool {
 	rest, ok := strings.CutPrefix(strings.TrimLeftFunc(line, unicode.IsSpace), "❯")
 	return ok && strings.TrimFunc(rest, unicode.IsSpace) != ""
 }
+
+// sgrSeq is one color or style escape sequence.
+var sgrSeq = regexp.MustCompile("\x1b\\[([0-9;:]*)m")
+
+// StandIn reports a composer whose only text is drawn dim, in the styled
+// screen (agent-manager read --styled): Claude Code's placeholder or a
+// suggested next prompt, which typing replaces. CheckPane, reading the
+// plain screen, cannot tell those from text the user typed, which Claude
+// Code draws in the normal color.
+func StandIn(styled string) bool {
+	var lines []string
+	for _, l := range strings.Split(styled, "\n") {
+		if strings.TrimSpace(sgrSeq.ReplaceAllString(l, "")) != "" {
+			lines = append(lines, l)
+		}
+	}
+	var rules []int
+	for i, l := range lines {
+		if isRule(sgrSeq.ReplaceAllString(l, "")) {
+			rules = append(rules, i)
+		}
+	}
+	if len(rules) < 2 {
+		return false
+	}
+	found := false
+	for _, l := range lines[rules[len(rules)-2]+1 : rules[len(rules)-1]] {
+		if !isDraft(sgrSeq.ReplaceAllString(l, "")) {
+			continue
+		}
+		if !dimAfterMarker(l) {
+			return false
+		}
+		found = true
+	}
+	return found
+}
+
+// dimAfterMarker reports whether every visible character after the
+// prompt's ❯ is drawn dim (SGR 2, until 22 or a reset).
+func dimAfterMarker(line string) bool {
+	dim, seenMarker, seenText := false, false, false
+	last := 0
+	check := func(text string) bool {
+		for _, r := range text {
+			if !seenMarker {
+				if r == '❯' {
+					seenMarker = true
+				}
+				continue
+			}
+			if unicode.IsSpace(r) {
+				continue
+			}
+			seenText = true
+			if !dim {
+				return false
+			}
+		}
+		return true
+	}
+	for _, m := range sgrSeq.FindAllStringSubmatchIndex(line, -1) {
+		if !check(line[last:m[0]]) {
+			return false
+		}
+		for _, c := range strings.Split(line[m[2]:m[3]], ";") {
+			switch c {
+			case "2":
+				dim = true
+			case "22", "0", "":
+				dim = false
+			}
+		}
+		last = m[1]
+	}
+	return check(line[last:]) && seenText
+}
