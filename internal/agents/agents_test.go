@@ -3,6 +3,7 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,61 @@ func TestStatuses(t *testing.T) {
 	}
 	if _, ok := got["bg-running"]; ok {
 		t.Errorf("bg-running has a status: %q", got["bg-running"])
+	}
+}
+
+// taskNote is a notification naming the subagent by task id, with the
+// tool call id it carries (a resumed subagent's differs from its first).
+func taskNote(task, toolUse, status, summary string) string {
+	body := `<task-notification>\n<task-id>` + task + `</task-id>\n`
+	if toolUse != "" {
+		body += `<tool-use-id>` + toolUse + `</tool-use-id>\n`
+	}
+	if status != "" {
+		body += `<status>` + status + `</status>\n`
+	}
+	body += `<summary>` + summary + `</summary>\n</task-notification>`
+	return `{"type":"user","uuid":"n-` + task + toolUse + status + `","origin":{"kind":"task-notification"},"message":{"content":"` + body + `"}}`
+}
+
+// send is the parent's SendMessage to an agent, and Claude Code's answer.
+func send(id, to, answer string, isError bool) []string {
+	e := "false"
+	if isError {
+		e = "true"
+	}
+	return []string{
+		`{"type":"assistant","uuid":"s-` + id + `","message":{"id":"m-` + id + `","content":[{"type":"tool_use","id":"` + id + `","name":"SendMessage","input":{"to":"` + to + `","message":"more"}}]}}`,
+		`{"type":"user","uuid":"sr-` + id + `","message":{"content":[{"type":"tool_result","tool_use_id":"` + id + `","is_error":` + e + `,"content":` + strconv.Quote(answer) + `}]}}`,
+	}
+}
+
+func TestStatusesFollowResumes(t *testing.T) {
+	toolUse := map[string]string{"agentA": "callA"}
+	resumed := `{"success":true,"message":"Resuming agent agentA","resumedAgentId":"agentA"}`
+	queued := `{"success":true,"message":"Message queued for delivery to agentA at its next tool round"}`
+	finished := taskNote("agentA", "callA", "completed", "Agent finished")
+	tests := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{"finished", []string{call("callA", true), result("callA", true, false), finished}, StatusCompleted},
+		{"resumed by the parent's SendMessage", append([]string{call("callA", true), result("callA", true, false), finished}, send("s1", "agentA", resumed, false)...), StatusRunning},
+		{"finished again, notified by task id with another tool call id", append(append([]string{call("callA", true), result("callA", true, false), finished}, send("s1", "agentA", resumed, false)...), taskNote("agentA", "toolu_other", "completed", "Agent finished")), StatusCompleted},
+		{"finished again, notified by task id alone", append(append([]string{call("callA", true), result("callA", true, false), finished}, send("s1", "agentA", resumed, false)...), taskNote("agentA", "", "completed", "Agent finished")), StatusCompleted},
+		{"woken by the user from its view", []string{call("callA", true), result("callA", true, false), finished, taskNote("agentA", "", "", `Agent \"x\" was resumed by the user`)}, StatusRunning},
+		{"a message queued to a running agent changes nothing", append([]string{call("callA", true), result("callA", true, false)}, send("s1", "agentA", queued, false)...), ""},
+		{"a failed SendMessage does not resume it", append([]string{call("callA", true), result("callA", true, false), finished}, send("s1", "agentA", resumed, true)...), StatusCompleted},
+		{"a SendMessage to another agent does not resume it", append([]string{call("callA", true), result("callA", true, false), finished}, send("s1", "agentB", strings.ReplaceAll(resumed, "agentA", "agentB"), false)...), StatusCompleted},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := statusesOf(parse(t, tt.lines...), toolUse)["callA"]
+			if got != tt.want {
+				t.Errorf("status = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
