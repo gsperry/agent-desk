@@ -85,8 +85,8 @@ func List(conversationPath string, parent []transcript.Item) ([]Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	statuses := Statuses(parent)
-	agents := make([]Agent, 0, len(files))
+	metas := map[string]meta{}
+	toolUse := map[string]string{}
 	for _, f := range files {
 		id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "agent-"), ".meta.json")
 		if !validID.MatchString(id) {
@@ -97,6 +97,17 @@ func List(conversationPath string, parent []transcript.Item) ([]Agent, error) {
 		if err != nil || json.Unmarshal(data, &m) != nil {
 			continue
 		}
+		metas[f] = m
+		toolUse[id] = m.ToolUseID
+	}
+	statuses := statusesOf(parent, toolUse)
+	agents := make([]Agent, 0, len(metas))
+	for _, f := range files {
+		m, ok := metas[f]
+		if !ok {
+			continue
+		}
+		id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "agent-"), ".meta.json")
 		a := Agent{ID: id, ToolUseID: m.ToolUseID, Type: m.AgentType, Description: m.Description, Depth: m.SpawnDepth, Model: m.PickedEffortModel}
 		a.Status = statuses[m.ToolUseID]
 		if a.Status == "" {
@@ -116,16 +127,40 @@ func List(conversationPath string, parent []transcript.Item) ([]Agent, error) {
 var (
 	toolUseTag = regexp.MustCompile(`<tool-use-id>\s*([^<\s]+)\s*</tool-use-id>`)
 	statusTag  = regexp.MustCompile(`<status>\s*([^<\s]+)\s*</status>`)
+	taskIDTag  = regexp.MustCompile(`<task-id>\s*([^<\s]+)\s*</task-id>`)
+	// resumedNote is the notification Claude Code sends when the user wakes
+	// a finished subagent with a message from its view.
+	resumedNote = regexp.MustCompile(`(?i)was resumed|is running again`)
 )
 
 // Statuses maps a parent tool call id to its subagent's outcome: from
 // task notifications for background agents, and from the tool result for
 // foreground ones. A call with neither is still running.
 func Statuses(parent []transcript.Item) map[string]string {
+	return statusesOf(parent, nil)
+}
+
+// statusesOf is Statuses, also following resumptions, which name the
+// subagent by its agent id; toolUse maps an agent id to the tool call that
+// started it. A finished subagent runs again when the parent's SendMessage
+// resumes it ("Resuming agent …") or the user wakes it from its view, until
+// a later notification reports it again.
+func statusesOf(parent []transcript.Item, toolUse map[string]string) map[string]string {
 	out := map[string]string{}
 	agentCalls := map[string]bool{}
+	// sends maps a SendMessage call to the agent it addresses.
+	sends := map[string]string{}
 	for _, it := range parent {
 		switch {
+		case it.Kind == transcript.KindToolUse && it.Tool != nil && it.Tool.Name == "SendMessage":
+			if to := sendTarget(it.Tool.Input); to != "" {
+				sends[it.Tool.ID] = to
+			}
+		case it.Kind == transcript.KindToolResult && it.Result != nil && sends[it.Result.ToolUseID] != "":
+			call, ok := toolUse[sends[it.Result.ToolUseID]]
+			if ok && !it.Result.IsError && (strings.Contains(it.Result.Content, "resumedAgentId") || strings.Contains(it.Result.Content, "Resuming agent")) {
+				out[call] = StatusRunning
+			}
 		case it.Kind == transcript.KindToolUse && it.Tool != nil && (it.Tool.Name == "Agent" || it.Tool.Name == "Task"):
 			agentCalls[it.Tool.ID] = true
 		case it.Kind == transcript.KindToolResult && it.Result != nil && agentCalls[it.Result.ToolUseID]:
@@ -138,14 +173,42 @@ func Statuses(parent []transcript.Item) map[string]string {
 				out[it.Result.ToolUseID] = StatusCompleted
 			}
 		case it.Kind == transcript.KindNotice && it.Label == "task-notification":
-			id := toolUseTag.FindStringSubmatch(it.Text)
+			// The task id is the subagent's agent id, the same in every
+			// notification. A resumed subagent's notifications carry another
+			// tool call id than the one that started it, so the task id
+			// decides when it names a known subagent.
 			st := statusTag.FindStringSubmatch(it.Text)
-			if id != nil && st != nil {
-				out[id[1]] = normalize(st[1])
+			call := ""
+			if task := taskIDTag.FindStringSubmatch(it.Text); task != nil {
+				call = toolUse[task[1]]
+			}
+			if call == "" {
+				if id := toolUseTag.FindStringSubmatch(it.Text); id != nil {
+					call = id[1]
+				}
+			}
+			switch {
+			case call == "":
+			case st != nil:
+				out[call] = normalize(st[1])
+			case resumedNote.MatchString(it.Text):
+				out[call] = StatusRunning
 			}
 		}
 	}
 	return out
+}
+
+// sendTarget is the agent a SendMessage call addresses.
+func sendTarget(input any) string {
+	var in struct {
+		To string `json:"to"`
+	}
+	data, err := json.Marshal(input)
+	if err != nil || json.Unmarshal(data, &in) != nil {
+		return ""
+	}
+	return in.To
 }
 
 func normalize(s string) string {
