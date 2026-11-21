@@ -121,6 +121,65 @@ func TestStatusesFollowResumes(t *testing.T) {
 	}
 }
 
+// stamped adds a timestamp to a record.
+func stamped(line, at string) string {
+	return strings.Replace(line, `{"type":`, `{"timestamp":"`+at+`","type":`, 1)
+}
+
+// stop is the parent's TaskStop on a task, and Claude Code's answer.
+func stop(id, task, answer string, isError bool) []string {
+	e := "false"
+	if isError {
+		e = "true"
+	}
+	return []string{
+		`{"type":"assistant","uuid":"t-` + id + `","message":{"id":"m-` + id + `","content":[{"type":"tool_use","id":"` + id + `","name":"TaskStop","input":{"task_id":"` + task + `"}}]}}`,
+		`{"type":"user","uuid":"tr-` + id + `","message":{"content":[{"type":"tool_result","tool_use_id":"` + id + `","is_error":` + e + `,"content":` + strconv.Quote(answer) + `}]}}`,
+	}
+}
+
+func TestStatusesInTimeOrder(t *testing.T) {
+	toolUse := map[string]string{"agentA": "callA"}
+	resumed := taskNote("agentA", "", "", `Agent \"x\" was resumed by the user`)
+	completed := taskNote("agentA", "", "completed", "Agent is waiting on its own background work")
+	stopped := `{"message":"Successfully stopped task: agentA (x)","task_id":"agentA","task_type":"local_agent"}`
+	base := []string{call("callA", true), result("callA", true, false)}
+	cat := func(parts ...[]string) []string {
+		var out []string
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	tests := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		// Claude Code wrote the resume, the completion, then a copy of the
+		// earlier resume: the copy does not undo the completion.
+		{"a late copy of an earlier resume", cat(base, []string{
+			stamped(resumed, "2026-11-16T00:26:35.000Z"),
+			stamped(completed, "2026-11-16T00:26:50.000Z"),
+			stamped(resumed, "2026-11-16T00:26:35.000Z"),
+		}), StatusCompleted},
+		{"a resume after the completion still counts", cat(base, []string{
+			stamped(completed, "2026-11-16T00:26:50.000Z"),
+			stamped(resumed, "2026-11-16T00:30:00.000Z"),
+		}), StatusRunning},
+		{"stopped by the parent's TaskStop", cat(base, []string{stamped(completed, "2026-11-16T00:26:50.000Z")}, stop("t1", "agentA", stopped, false)), StatusStopped},
+		{"a TaskStop that failed", cat(base, []string{stamped(completed, "2026-11-16T00:26:50.000Z")}, stop("t1", "agentA", "No task found", true)), StatusCompleted},
+		{"a TaskStop on a shell", cat(base, stop("t1", "bash-42", `{"message":"Successfully stopped task: bash-42"}`, false)), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := statusesOf(parse(t, tt.lines...), toolUse)["callA"]; got != tt.want {
+				t.Errorf("status = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
