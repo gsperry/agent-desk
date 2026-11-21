@@ -147,19 +147,46 @@ func Statuses(parent []transcript.Item) map[string]string {
 // a later notification reports it again.
 func statusesOf(parent []transcript.Item, toolUse map[string]string) map[string]string {
 	out := map[string]string{}
+	// at is when each subagent's status last changed. Claude Code can
+	// write a copy of an earlier event after a later one (a "resumed"
+	// notice after the "completed" that followed it), so an event older
+	// than the status it would replace is skipped.
+	at := map[string]time.Time{}
+	set := func(call, status, when string) {
+		t, err := time.Parse(time.RFC3339Nano, when)
+		if err == nil {
+			if last, ok := at[call]; ok && t.Before(last) {
+				return
+			}
+			at[call] = t
+		}
+		out[call] = status
+	}
 	agentCalls := map[string]bool{}
-	// sends maps a SendMessage call to the agent it addresses.
+	// sends maps a SendMessage call to the agent it addresses, and stops a
+	// TaskStop call to the task it ends.
 	sends := map[string]string{}
+	stops := map[string]string{}
 	for _, it := range parent {
 		switch {
 		case it.Kind == transcript.KindToolUse && it.Tool != nil && it.Tool.Name == "SendMessage":
-			if to := sendTarget(it.Tool.Input); to != "" {
+			if to := inputField(it.Tool.Input, "to"); to != "" {
 				sends[it.Tool.ID] = to
+			}
+		case it.Kind == transcript.KindToolUse && it.Tool != nil && it.Tool.Name == "TaskStop":
+			if task := inputField(it.Tool.Input, "task_id"); task != "" {
+				stops[it.Tool.ID] = task
 			}
 		case it.Kind == transcript.KindToolResult && it.Result != nil && sends[it.Result.ToolUseID] != "":
 			call, ok := toolUse[sends[it.Result.ToolUseID]]
 			if ok && !it.Result.IsError && (strings.Contains(it.Result.Content, "resumedAgentId") || strings.Contains(it.Result.Content, "Resuming agent")) {
-				out[call] = StatusRunning
+				set(call, StatusRunning, it.Time)
+			}
+		case it.Kind == transcript.KindToolResult && it.Result != nil && stops[it.Result.ToolUseID] != "":
+			// The parent's TaskStop on a subagent ("Successfully stopped
+			// task: …"); a task id that is a shell names no subagent.
+			if call, ok := toolUse[stops[it.Result.ToolUseID]]; ok && !it.Result.IsError && strings.Contains(it.Result.Content, "stopped") {
+				set(call, StatusStopped, it.Time)
 			}
 		case it.Kind == transcript.KindToolUse && it.Tool != nil && (it.Tool.Name == "Agent" || it.Tool.Name == "Task"):
 			agentCalls[it.Tool.ID] = true
@@ -168,9 +195,9 @@ func statusesOf(parent []transcript.Item, toolUse map[string]string) map[string]
 				continue
 			}
 			if it.Result.IsError {
-				out[it.Result.ToolUseID] = StatusFailed
+				set(it.Result.ToolUseID, StatusFailed, it.Time)
 			} else {
-				out[it.Result.ToolUseID] = StatusCompleted
+				set(it.Result.ToolUseID, StatusCompleted, it.Time)
 			}
 		case it.Kind == transcript.KindNotice && it.Label == "task-notification":
 			// The task id is the subagent's agent id, the same in every
@@ -190,25 +217,26 @@ func statusesOf(parent []transcript.Item, toolUse map[string]string) map[string]
 			switch {
 			case call == "":
 			case st != nil:
-				out[call] = normalize(st[1])
+				set(call, normalize(st[1]), it.Time)
 			case resumedNote.MatchString(it.Text):
-				out[call] = StatusRunning
+				set(call, StatusRunning, it.Time)
 			}
 		}
 	}
 	return out
 }
 
-// sendTarget is the agent a SendMessage call addresses.
-func sendTarget(input any) string {
-	var in struct {
-		To string `json:"to"`
-	}
+// inputField is one string field of a tool call's input, such as the
+// agent a SendMessage addresses ("to") or the task a TaskStop ends
+// ("task_id").
+func inputField(input any, name string) string {
+	var in map[string]any
 	data, err := json.Marshal(input)
 	if err != nil || json.Unmarshal(data, &in) != nil {
 		return ""
 	}
-	return in.To
+	v, _ := in[name].(string)
+	return v
 }
 
 func normalize(s string) string {
