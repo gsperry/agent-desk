@@ -82,6 +82,9 @@ type Settings struct {
 	CloudflareAUD string `json:"cloudflareAud"`
 	// CloudflareEmails are the Access emails allowed in.
 	CloudflareEmails []string `json:"cloudflareEmails"`
+	// SpeakRemote lets remote devices use read aloud, which spends the
+	// owner's text-to-speech credits. Off unless turned on at the desk.
+	SpeakRemote bool `json:"speakRemote"`
 }
 
 // The proxies remote clients can come through.

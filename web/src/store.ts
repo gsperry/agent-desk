@@ -8,7 +8,7 @@ import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { defaultNotifier, type Notifier, type Permission } from './notify'
 import { statAlerts, type Level } from './model/stats'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
-import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SystemStats, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SpeechStatus, SystemStats, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -362,6 +362,31 @@ export class Store {
       const res = await apiFetch(this.token, '/api/spawn-options')
       const data = (await res.json().catch(() => ({}))) as SpawnOptions & SendRefusal
       return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async speechStatus(): Promise<SpeechStatus> {
+    try {
+      const res = await apiFetch(this.token, '/api/speak')
+      return res.ok ? ((await res.json()) as SpeechStatus) : { available: false }
+    } catch {
+      return { available: false }
+    }
+  }
+
+  // speak asks the server to read text aloud and returns the MP3 audio.
+  async speak(text: string): Promise<{ audio?: Blob; error?: string }> {
+    try {
+      const res = await apiFetch(this.token, '/api/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      if (res.ok) return { audio: await res.blob() }
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      return { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }

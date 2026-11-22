@@ -8,6 +8,7 @@ import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 import { desktopInvoke } from '../notify'
 import { StartAtLogin } from './StartAtLogin'
+import type { SpeechStatus } from '../types'
 
 interface Props {
   prefs: ViewPrefs
@@ -23,6 +24,8 @@ interface Props {
   loadRemote: () => Promise<{ data?: RemoteSettings; status?: RemoteStatus; available: boolean; error?: string }>
   saveRemote: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; status?: RemoteStatus; error?: string }>
   onOpenWelcome: () => void
+  // speech is read aloud's status on the desk.
+  speech: SpeechStatus | null
   onClose: () => void
 }
 
@@ -55,7 +58,7 @@ const openClosed: [Open, string][] = [
   ['open', 'Expanded'],
 ]
 
-export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onOpenWelcome, onClose }: Props) {
+export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onOpenWelcome, speech, onClose }: Props) {
   const onDesk = !useRemote().remote
   // The desktop app's own settings, present only inside it.
   const desktop = onDesk ? desktopInvoke() : undefined
@@ -367,6 +370,25 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             Add rule
           </button>
         </Section>
+        <Section title="Read aloud">
+            {speech?.available ? (
+              <p className="muted setting-note">
+                Replies have a 🔊 button that reads them with {speech.provider === 'elevenlabs' ? 'ElevenLabs' : speech.provider}
+                {speech.voice ? ` (voice ${speech.voice})` : ''}. Each press sends that reply's text, without its code, to the service, and uses your credits. Nothing is read on its own.
+              </p>
+            ) : (
+              <>
+                <p className="muted setting-note">
+                  Off. To read replies aloud with ElevenLabs, put your API key in <code>tts.json</code> in Agent Desk's config folder (<code>~/Library/Application Support/agent-desk/</code> on macOS, <code>~/.config/agent-desk/</code> on Linux), readable only by you:
+                </p>
+                <pre className="setting-code">{'{"provider": "elevenlabs", "apiKey": "…", "voiceId": "…"}'}</pre>
+                <p className="muted setting-note">
+                  Then <code>chmod 600</code> it and reopen Settings. Agent Desk never asks for the key here and never sends it to this page. Each press of 🔊 sends one reply's text, without code, to ElevenLabs and uses your credits.
+                </p>
+                {speech?.problem && <p className="form-error">{speech.problem}</p>}
+              </>
+            )}
+          </Section>
         <Section title="Catch-up summaries">
           <p className="muted setting-note">
             Adds a “Catch me up” button to sessions. It runs your own Claude Code CLI (<code>claude -p</code>) on what happened since you last looked, with no tools.{' '}
@@ -416,7 +438,7 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
           </ul>
         </Section>
             <Section title="Remote access">
-              <RemoteAccess load={loadRemote} save={saveRemote} />
+              <RemoteAccess load={loadRemote} save={saveRemote} speech={speech?.available ? (speech.provider === 'elevenlabs' ? 'ElevenLabs' : speech.provider) : undefined} />
             </Section>
           </>
         )}

@@ -14,6 +14,9 @@ export interface RemoteSettings {
   cloudflareTeam?: string
   cloudflareAud?: string
   cloudflareEmails?: string[]
+  // speakRemote lets remote devices use read aloud, spending the owner's
+  // text-to-speech credits.
+  speakRemote?: boolean
 }
 
 export interface RemoteStatus {
@@ -25,6 +28,8 @@ export interface RemoteStatus {
 interface Props {
   load: () => Promise<{ data?: RemoteSettings; status?: RemoteStatus; available: boolean; error?: string }>
   save: (s: RemoteSettings) => Promise<{ data?: RemoteSettings; status?: RemoteStatus; error?: string }>
+  // speech names the text-to-speech service set up on the desk, if any.
+  speech?: string
 }
 
 const levels: RemoteLevel[] = ['answer', 'reply', 'manage']
@@ -40,7 +45,7 @@ const splitList = (s: string) => s.split(/[\s,]+/).filter(Boolean)
 
 // RemoteAccess edits the remote access settings. It is shown only on the
 // desk; the server refuses changes from a remote device.
-export function RemoteAccess({ load, save }: Props) {
+export function RemoteAccess({ load, save, speech }: Props) {
   const [form, setForm] = useState<RemoteSettings | null>(null)
   const [logins, setLogins] = useState('')
   const [emails, setEmails] = useState('')
@@ -123,6 +128,18 @@ export function RemoteAccess({ load, save }: Props) {
           </label>
         ))}
         <p className="muted setting-note">Settings, rules, catch-up summaries, opening files and pasting images stay on the desk at every level.</p>
+        {speech && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={form.speakRemote === true}
+              onChange={(e) => {
+                setForm({ ...form, speakRemote: e.target.checked })
+              }}
+            />{' '}
+            Remote devices may use read aloud <span className="muted">It uses your {speech} credits; needs Reply or above.</span>
+          </label>
+        )}
       </fieldset>
       <fieldset className="remote-levels">
         <legend>Reach through</legend>

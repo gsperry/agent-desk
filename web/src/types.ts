@@ -301,3 +301,12 @@ export interface SystemStats {
   swap: { total: number; used: number }
   disks: { mount: string; total: number; free: number }[]
 }
+
+// SpeechStatus is GET /api/speak: whether read aloud is available here,
+// and through which service. It never carries the key.
+export interface SpeechStatus {
+  available: boolean
+  provider?: string
+  voice?: string
+  problem?: string
+}
