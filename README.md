@@ -164,6 +164,10 @@ Whichever proxy you use, choose what remote devices may do: **Read and answer** 
 
 Off by default. Settings → Catch-up summaries adds a "Catch me up" button to sessions: it runs your own Claude Code CLI (`claude -p`) on what happened since you last looked, with no tools, no MCP servers and nothing saved, and shows the summary with the tokens and cost it used. **Each summary spends tokens on your Claude Code provider**, about $0.002 of fixed overhead on the default `haiku` model plus the excerpt. Nothing runs until you press the button; repeating the same request is answered from cache.
 
+## Voice input (Mac app)
+
+The Mac app has a mic button in reply boxes. Press it, speak, and press it again: the words appear in the box for you to check and send; nothing is sent on its own. Speech is turned into text on your Mac by Apple's speech recognizer with on-device recognition required, so no audio leaves it and no service is called. macOS asks for microphone and speech recognition access the first time. If on-device dictation is not installed for your language, add it in System Settings → Keyboard → Dictation. Settings → Voice input hides the button. Browsers and remote devices do not get it; their own keyboard dictation works in any reply box.
+
 ## Read aloud
 
 Optional, off unless you set it up. Replies get a 🔊 button that reads them with ElevenLabs. Put your API key in `tts.json` in Agent Desk's config folder (`~/Library/Application Support/agent-desk/` on macOS, `~/.config/agent-desk/` on Linux) and make it readable only by you:

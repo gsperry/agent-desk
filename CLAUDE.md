@@ -73,7 +73,8 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `web/src/model`: pure view-model logic, covered by Vitest
 - `web/src/render`, `web/src/components`: React views
 - `web/embed.go` embeds `web/dist`.
-- `desktop`: Tauri 2 macOS shell. Runs the bundled server through the login shell, opens its 127.0.0.1 address, grants the page only `notify`, `set_badge` (dock and menu-bar count) and `autostart_get`/`autostart_set` (start at login).
+- `desktop`: Tauri 2 macOS shell. Runs the bundled server through the login shell, opens its 127.0.0.1 address, grants the page only `notify`, `set_badge` (dock and menu-bar count), `autostart_get`/`autostart_set` (start at login) and `dictate_start`/`dictate_stop` (voice input).
+- `desktop/dictate`: `agent-desk-dictate`, the app's Swift helper for voice input: Apple's speech recognizer with on-device recognition required, started by the mic button and stopped by it; JSON lines of text to the app, no audio kept or sent.
 
 ## Conventions
 

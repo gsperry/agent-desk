@@ -11,6 +11,8 @@ export interface ViewPrefs {
   width: Width
   // stats shows the computer's load, memory, swap and disk in the sidebar.
   stats: boolean
+  // dictation shows the mic button in the Mac app.
+  dictation: boolean
   collapse: {
     edits: EditsOpen
     bash: Open
@@ -26,6 +28,7 @@ export const defaultViewPrefs: ViewPrefs = {
   fontSize: 15,
   width: 'full',
   stats: true,
+  dictation: true,
   collapse: { edits: 'auto', bash: 'closed', read: 'closed', agents: 'closed', other: 'closed', thinking: 'closed' },
 }
 
@@ -64,6 +67,7 @@ export function sanitize(raw: unknown): ViewPrefs {
     fontSize: Math.min(fontSizes.max, Math.max(fontSizes.min, size)),
     width: r.v === savedVersion ? oneOf(r.width, ['narrow', 'medium', 'wide', 'full'] as const, d.width) : d.width,
     stats: typeof r.stats === 'boolean' ? r.stats : d.stats,
+    dictation: typeof r.dictation === 'boolean' ? r.dictation : d.dictation,
     collapse: {
       edits: oneOf(c.edits, ['open', 'closed', 'auto'] as const, d.collapse.edits),
       bash: oneOf(c.bash, open, d.collapse.bash),

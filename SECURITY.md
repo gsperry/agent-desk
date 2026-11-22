@@ -41,6 +41,10 @@ Known limits:
 
 Out of scope: an attacker who already runs code as your user account. That account can drive agent-manager directly.
 
+## Voice input
+
+Only in the Mac app on the desk. The page can start and stop the bundled `agent-desk-dictate` helper and nothing else; the helper runs only between two presses of the mic button (or until 30 seconds without speech), uses Apple's speech recognizer with on-device recognition required, so audio is never sent to Apple or anyone else, keeps no audio, and passes back only the text heard. macOS asks for microphone and speech recognition access the first time, under the app's name.
+
 ## Read aloud
 
 Off unless `tts.json` in Agent Desk's config folder holds an ElevenLabs key the owner put there; the file is refused unless only its owner can read it. The key is read by the server only, sent only in the request to `https://api.elevenlabs.io`, and never returned to the page, a remote device or the log. Each request carries one reply's text without its code, is made only when someone presses that reply's Read aloud button, follows no redirects, and is limited to 20 a minute.

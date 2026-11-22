@@ -4,6 +4,8 @@ import { loadDraft, saveDraft } from '../model/drafts'
 import { completion, slashQuery, suggest, type Suggestion } from '../model/autocomplete'
 import { expandSnippet, slashSnippet, type Snippet } from '../model/snippets'
 import { useSnippets } from '../snippets-context'
+import { useDictation } from '../dictate'
+import { MicButton } from './MicButton'
 import type { SessionView, SlashCommand } from '../types'
 
 const mac = /Mac|iPhone|iPad/.test(navigator.userAgent)
@@ -30,6 +32,7 @@ export function Composer({ session, connected, insideSession, asking, onSend, pa
   const [text, setText] = useState(() => loadDraft(localStorage, session.id))
   const area = useRef<HTMLTextAreaElement>(null)
   const blocked = blockedReason(session, connected, insideSession, asking)
+  const dictation = useDictation(text, setText, area)
   const snippets = useSnippets()
   const [menu, setMenu] = useState(false)
   const vars = { session: session.name, branch: session.branch, project: session.project.name, directory: session.directory }
@@ -131,6 +134,7 @@ export function Composer({ session, connected, insideSession, asking, onSend, pa
 
   const send = () => {
     if (blocked || text.trim() === '') return
+    dictation.interrupt()
     onSend(text)
     setText('')
     saveDraft(localStorage, session.id, '')
@@ -141,6 +145,7 @@ export function Composer({ session, connected, insideSession, asking, onSend, pa
       {blocked && <p className="composer-blocked">{blocked}</p>}
       {attaching && <p className="composer-blocked muted">Attaching image…</p>}
       {pasteError && <p className="composer-blocked">{pasteError}</p>}
+      {dictation.error && <p className="composer-blocked">{dictation.error}</p>}
       {suggestions.length > 0 && (
         <ul id="slash-menu" className="slash-menu" role="listbox" aria-label="Commands">
           {suggestions.map((s, i) => (
@@ -167,11 +172,18 @@ export function Composer({ session, connected, insideSession, asking, onSend, pa
           ref={area}
           value={text}
           rows={1}
-          placeholder={session.status === 'waiting' && asking !== false ? 'Answer the question above first' : `Reply to ${session.name}`}
+          placeholder={
+            dictation.phase === 'listening'
+              ? 'Listening…'
+              : session.status === 'waiting' && asking !== false
+                ? 'Answer the question above first'
+                : `Reply to ${session.name}`
+          }
           aria-label={`Reply to ${session.name}`}
           aria-controls={suggestions.length > 0 ? 'slash-menu' : undefined}
           aria-autocomplete="list"
           onChange={(e) => {
+            dictation.interrupt()
             setText(e.target.value)
             setCaret(e.target.selectionStart)
             setActive(0)
@@ -250,6 +262,7 @@ export function Composer({ session, connected, insideSession, asking, onSend, pa
             </ul>
           )}
         </div>
+        {dictation.available && <MicButton phase={dictation.phase} onToggle={dictation.toggle} />}
         <button type="button" className="send" onClick={send} disabled={blocked !== null || text.trim() === ''}>
           Send
         </button>

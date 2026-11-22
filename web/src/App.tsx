@@ -35,6 +35,7 @@ import type { RemoteSettings } from './components/RemoteAccess'
 import { ViewPrefsContext } from './viewprefs-context'
 import { desktopInvoke, setBadge } from './notify'
 import { SpeakContext, player } from './speech'
+import { DictateContext, desktopDictate } from './dictate'
 
 const token = takeToken()
 
@@ -139,6 +140,9 @@ function Desk({ token }: { token: string }) {
       live = false
     }
   }, [store, settingsOpen])
+  // Voice input exists only in the Mac app, on the desk.
+  const bridge = useMemo(() => (remoteInfo.remote ? null : desktopDictate()), [remoteInfo.remote])
+  const dictate = viewPrefs.dictation ? bridge : null
   const speakFetch = useMemo(() => (speech?.available ? (text: string) => store.speak(text) : null), [speech, store])
   useEffect(() => () => {
     player.stop()
@@ -450,6 +454,7 @@ function Desk({ token }: { token: string }) {
   return (
     <ViewPrefsContext.Provider value={viewPrefs}>
     <SpeakContext.Provider value={speakFetch}>
+    <DictateContext.Provider value={dictate}>
     <SnippetsContext.Provider value={snippets}>
         <div className={mainActive ? 'desk show-main' : 'desk show-nav'}>
           <Sidebar
@@ -738,6 +743,7 @@ function Desk({ token }: { token: string }) {
           )}
         </div>
     </SnippetsContext.Provider>
+    </DictateContext.Provider>
     </SpeakContext.Provider>
     </ViewPrefsContext.Provider>
   )

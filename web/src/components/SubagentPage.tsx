@@ -7,6 +7,8 @@ import type { Item, SessionView, SubAgent } from '../types'
 import { LiveActivity } from './LiveActivity'
 import { Transcript } from './Transcript'
 import { ConfirmDialog } from './Dialog'
+import { MicButton } from './MicButton'
+import { useDictation } from '../dictate'
 
 interface Props {
   sessionId: string
@@ -163,9 +165,11 @@ function MessageBox({ type, send, onSent }: { type: string; send: (text: string)
   const [note, setNote] = useState<{ error: boolean; text: string } | null>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const [touch] = useState(isTouch)
+  const dictation = useDictation(text, setText, box)
   const submit = () => {
     const t = text.trim()
     if (!t || busy) return
+    dictation.interrupt()
     setBusy(true)
     setNote(null)
     void send(t).then((err) => {
@@ -191,10 +195,11 @@ function MessageBox({ type, send, onSent }: { type: string; send: (text: string)
         ref={box}
         rows={2}
         aria-label={`Message the subagent`}
-        placeholder={`Message @${agentType(type).name}…`}
+        placeholder={dictation.phase === 'listening' ? 'Listening…' : `Message @${agentType(type).name}…`}
         value={text}
         disabled={busy}
         onChange={(e) => {
+          dictation.interrupt()
           setText(e.target.value)
         }}
         onKeyDown={(e) => {
@@ -208,10 +213,12 @@ function MessageBox({ type, send, onSent }: { type: string; send: (text: string)
           }
         }}
       />
+      {dictation.available && <MicButton phase={dictation.phase} onToggle={dictation.toggle} />}
       <button type="submit" className="send" disabled={busy || !text.trim()}>
         {busy ? 'Sending…' : 'Send'}
       </button>
       {note && <p className={note.error ? 'form-error' : 'muted subagent-sent'}>{note.text}</p>}
+      {dictation.error && <p className="form-error">{dictation.error}</p>}
     </form>
   )
 }
