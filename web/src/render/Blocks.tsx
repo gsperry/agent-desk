@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { pinKey } from '../model/pins'
 import { riskyCommand } from '../model/filter'
 import { bashFiles } from '../model/diff'
@@ -8,6 +8,7 @@ import { formatDuration, type Block, type Step } from '../model/transcript'
 import { useAgentLinks } from '../agents-context'
 import { usePins } from '../pins-context'
 import { useViewPrefs } from '../viewprefs-context'
+import { player, useSpeak } from '../speech'
 import type { Item } from '../types'
 import { Markdown } from './Markdown'
 import { ToolCall } from './ToolCall'
@@ -63,6 +64,50 @@ function PinButton({ item }: { item: Item }) {
     >
       📌
     </button>
+  )
+}
+
+// SpeakButton reads a reply aloud with the text-to-speech service the
+// owner configured; it shows only while one is available here.
+function SpeakButton({ item }: { item: Item }) {
+  const speak = useSpeak()
+  const st = useSyncExternalStore(player.subscribe, player.get)
+  const key = item.uuid ?? `seq-${String(item.seq)}`
+  const mine = st.key === key
+  const busy = mine && st.phase !== null
+  useEffect(() => {
+    if (!busy) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') player.stop()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [busy])
+  if (!speak || !item.text?.trim()) return null
+  const label = mine && st.phase === 'loading' ? 'Preparing audio…' : mine && st.phase === 'playing' ? 'Stop reading' : 'Read aloud (uses your text-to-speech credits)'
+  return (
+    <>
+      <button
+        type="button"
+        className={['speak-button', busy && 'active', mine && st.error && 'failed'].filter(Boolean).join(' ')}
+        aria-label={mine && st.phase ? 'Stop reading' : 'Read aloud'}
+        aria-pressed={busy}
+        title={label}
+        onClick={() => {
+          if (busy) player.stop()
+          else player.play(key, item.text ?? '', speak)
+        }}
+      >
+        {mine && st.phase === 'loading' ? '…' : busy ? '■' : '🔊'}
+      </button>
+      {mine && st.error && (
+        <p className="speak-error" role="status">
+          {st.error}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -319,6 +364,7 @@ function StepView({ step, live }: { step: Step; live: boolean }) {
       return (
         <div className="pinnable" data-pin={pinKey(step.item) ?? undefined}>
           <PinButton item={step.item} />
+          <SpeakButton item={step.item} />
           <Markdown text={step.item.text ?? ''} />
         </div>
       )

@@ -28,12 +28,13 @@ import { loadSummaries, saveSummaries, type SummarySettings } from './model/summ
 import { directorySuggestions, resumeDefaults, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
-import type { Answer, Conversation, Project, SessionAction, SpawnRequest, SubAgent } from './types'
+import type { Answer, Conversation, Project, SessionAction, SpawnRequest, SpeechStatus, SubAgent } from './types'
 import { SnippetsContext } from './snippets-context'
 import { RemoteContext, localInfo, useRemote, type RemoteInfo, type RemoteLevel } from './remote-context'
 import type { RemoteSettings } from './components/RemoteAccess'
 import { ViewPrefsContext } from './viewprefs-context'
 import { desktopInvoke, setBadge } from './notify'
+import { SpeakContext, player } from './speech'
 
 const token = takeToken()
 
@@ -125,6 +126,23 @@ function Desk({ token }: { token: string }) {
   // fields the reader never changed.
   const loadedPrefs = useRef(viewPrefs)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Read aloud's status, read again whenever Settings closes, since
+  // tts.json may have just been set up.
+  const [speech, setSpeech] = useState<SpeechStatus | null>(null)
+  useEffect(() => {
+    if (settingsOpen) return
+    let live = true
+    void store.speechStatus().then((st) => {
+      if (live) setSpeech(st)
+    })
+    return () => {
+      live = false
+    }
+  }, [store, settingsOpen])
+  const speakFetch = useMemo(() => (speech?.available ? (text: string) => store.speak(text) : null), [speech, store])
+  useEffect(() => () => {
+    player.stop()
+  }, [])
   const [snippets, setSnippets] = useState<Snippet[]>(() => loadSnippets(localStorage))
   useEffect(() => {
     saveSnippets(localStorage, snippets)
@@ -431,6 +449,7 @@ function Desk({ token }: { token: string }) {
   const desktop = remoteInfo.remote ? undefined : desktopInvoke()
   return (
     <ViewPrefsContext.Provider value={viewPrefs}>
+    <SpeakContext.Provider value={speakFetch}>
     <SnippetsContext.Provider value={snippets}>
         <div className={mainActive ? 'desk show-main' : 'desk show-nav'}>
           <Sidebar
@@ -701,6 +720,7 @@ function Desk({ token }: { token: string }) {
                 setSettingsOpen(false)
                 openWelcome()
               }}
+              speech={speech}
               onClose={() => {
                 setSettingsOpen(false)
               }}
@@ -718,6 +738,7 @@ function Desk({ token }: { token: string }) {
           )}
         </div>
     </SnippetsContext.Provider>
+    </SpeakContext.Provider>
     </ViewPrefsContext.Provider>
   )
 }

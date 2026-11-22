@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +19,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/commands"
 	"github.com/gsperry/agent-desk/internal/hub"
 	"github.com/gsperry/agent-desk/internal/remote"
+	"github.com/gsperry/agent-desk/internal/tts"
 )
 
 type fakeRemote struct {
@@ -308,6 +311,8 @@ func TestRouteNeeds(t *testing.T) {
 		"POST /api/remote":                                 remote.NeedLocal,
 		"POST /api/sessions/{id}/agents/{agent}/message":   remote.NeedReply,
 		"POST /api/sessions/{id}/agents/{agent}/stop":      remote.NeedReply,
+		"GET /api/speak":                                   remote.NeedRead,
+		"POST /api/speak":                                  remote.NeedReply,
 		"GET /api/stats":                                   remote.NeedRead,
 		"GET /api/setup":                                   remote.NeedLocal,
 		"POST /api/setup":                                  remote.NeedLocal,
@@ -525,4 +530,86 @@ func TestForwardedHostIgnoredUnderCloudflare(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
+}
+
+// fakeSpeech answers with a little audio and records what it read.
+type fakeSpeech struct {
+	status tts.Status
+	err    error
+	text   string
+}
+
+func (f *fakeSpeech) Status() tts.Status { return f.status }
+func (f *fakeSpeech) Speak(_ context.Context, text string) ([]byte, error) {
+	f.text = text
+	return []byte("ID3audio"), f.err
+}
+
+func TestSpeakRoutes(t *testing.T) {
+	ready := tts.Status{Available: true, Provider: "elevenlabs", Voice: "abc123"}
+	t.Run("on the desk", func(t *testing.T) {
+		sp := &fakeSpeech{status: ready}
+		s := newTestServer(t, Config{Speech: sp})
+		req := httptest.NewRequest("POST", "/api/speak", strings.NewReader(`{"text":"All tests pass."}`))
+		req.Host = "127.0.0.1:7317"
+		req.Header.Set("Origin", "http://127.0.0.1:7317")
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || rec.Header().Get("Content-Type") != "audio/mpeg" || rec.Body.String() != "ID3audio" || sp.text != "All tests pass." {
+			t.Fatalf("status %d type %q body %q text %q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String(), sp.text)
+		}
+		// Without an Origin, as from another site, it is refused.
+		req.Header.Del("Origin")
+		rec = httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 403 {
+			t.Fatalf("no origin: %d", rec.Code)
+		}
+	})
+	t.Run("not set up", func(t *testing.T) {
+		s := newTestServer(t, Config{Speech: &fakeSpeech{err: tts.ErrNotConfigured}})
+		req := httptest.NewRequest("POST", "/api/speak", strings.NewReader(`{"text":"hi"}`))
+		req.Host = "127.0.0.1:7317"
+		req.Header.Set("Origin", "http://127.0.0.1:7317")
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 404 {
+			t.Fatalf("status %d", rec.Code)
+		}
+	})
+	for _, allowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("remote, allowed=%v", allowed), func(t *testing.T) {
+			rc := remoteOn(remote.LevelReply)
+			rc.cur.SpeakRemote = allowed
+			sp := &fakeSpeech{status: ready}
+			s := newTestServer(t, Config{Remote: rc, Speech: sp})
+			status := doRemote(t, s, remoteReq{"GET", "/api/speak", "", remoteHost, "", "dev@example.com"})
+			var st tts.Status
+			_ = json.Unmarshal(status.Body.Bytes(), &st)
+			if st.Available != allowed || st.Voice != "" {
+				t.Fatalf("remote status = %+v", st)
+			}
+			rec := doRemote(t, s, remoteReq{"POST", "/api/speak", `{"text":"hi"}`, remoteHost, "https://" + remoteHost, "dev@example.com"})
+			want := 403
+			if allowed {
+				want = 200
+			}
+			if rec.Code != want {
+				t.Fatalf("remote speak: %d, want %d (%s)", rec.Code, want, rec.Body.String())
+			}
+		})
+	}
+	t.Run("absent", func(t *testing.T) {
+		s := newTestServer(t, Config{})
+		req := httptest.NewRequest("GET", "/api/speak", nil)
+		req.Host = "127.0.0.1:7317"
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || strings.Contains(rec.Body.String(), "true") {
+			t.Fatalf("status %d %s", rec.Code, rec.Body.String())
+		}
+	})
 }

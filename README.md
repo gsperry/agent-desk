@@ -164,6 +164,17 @@ Whichever proxy you use, choose what remote devices may do: **Read and answer** 
 
 Off by default. Settings → Catch-up summaries adds a "Catch me up" button to sessions: it runs your own Claude Code CLI (`claude -p`) on what happened since you last looked, with no tools, no MCP servers and nothing saved, and shows the summary with the tokens and cost it used. **Each summary spends tokens on your Claude Code provider**, about $0.002 of fixed overhead on the default `haiku` model plus the excerpt. Nothing runs until you press the button; repeating the same request is answered from cache.
 
+## Read aloud
+
+Optional, off unless you set it up. Replies get a 🔊 button that reads them with ElevenLabs. Put your API key in `tts.json` in Agent Desk's config folder (`~/Library/Application Support/agent-desk/` on macOS, `~/.config/agent-desk/` on Linux) and make it readable only by you:
+
+```sh
+printf '{"provider": "elevenlabs", "apiKey": "YOUR_KEY", "voiceId": "OPTIONAL_VOICE_ID"}\n' > tts.json
+chmod 600 tts.json
+```
+
+Agent Desk refuses the file if others can read it, never asks for the key in its UI, and never sends it to the page or logs it. Each press sends that one reply's text, without its code, to ElevenLabs and uses your credits; nothing is read on its own, at most 20 requests a minute go out, and a reply played again comes from memory. Without the file there is no button. Remote devices get it only if you turn on "Remote devices may use read aloud" in Remote access, on the desk. `model` in the file picks the ElevenLabs model (`eleven_multilingual_v2` by default).
+
 ## Rules
 
 Settings → Rules: when a session matching a name, project or group reaches a status (waits for you, finishes a turn, hits an error, goes idle), notify you, suggest a reply, or both. A suggested reply appears above the composer with Send, Edit and Dismiss, and is only sent when you press Send. It goes away when the session's status moves on. Rules run while an Agent Desk tab is open.
@@ -203,7 +214,7 @@ go run ./tools/parsecheck ~/.claude/projects/*/*.jsonl
 - Listens on 127.0.0.1 only.
 - A random token is generated at startup and required on every API request and WebSocket. It travels in the URL fragment, which never reaches the server, and the page moves it into session storage.
 - Every request must name the server's own host, which blocks DNS rebinding. State-changing requests and WebSocket upgrades must come from the app's own origin.
-- No telemetry and no network calls beyond localhost. Agent Desk never calls a model API and never asks for an API key. The optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.
+- No telemetry, and no network calls beyond localhost except two you opt into: Cloudflare's signing keys while remote access through Cloudflare is on, and read aloud once you set up ElevenLabs (below). Agent Desk never calls a model API and never asks for an API key. The optional catch-up summaries, off by default, run your own Claude Code CLI only when you press the button.
 - Read-only toward Claude Code's data: nothing is written under `~/.claude`.
 
 Report security problems privately; see [SECURITY.md](SECURITY.md).

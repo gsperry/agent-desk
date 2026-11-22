@@ -46,6 +46,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/setup"
 	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/sysstat"
+	"github.com/gsperry/agent-desk/internal/tts"
 	"github.com/gsperry/agent-desk/internal/usage"
 	"github.com/gsperry/agent-desk/web"
 )
@@ -179,6 +180,7 @@ func run(o options) error {
 		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
 		Setup:       &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
 		Stats:       statsSource(o.fixtures, sampler),
+		Speech:      speechSource(o.fixtures, remoteStore.Path),
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
@@ -297,6 +299,18 @@ func statsSource(fixtures string, live *sysstat.Sampler) server.StatsSource {
 		return fixtureStats{path: filepath.Join(fixtures, "stats.json"), live: live}
 	}
 	return live
+}
+
+// speechSource reads replies aloud with the provider in tts.json, next to
+// remote.json in Agent Desk's config folder. In fixture mode a stand-in
+// answers with silence, turned on by <fixtures>/tts.json, and makes no
+// network call.
+func speechSource(fixtures, remotePath string) server.SpeechSource {
+	path := filepath.Join(filepath.Dir(remotePath), "tts.json")
+	if fixtures != "" {
+		return &tts.Fixture{Marker: path}
+	}
+	return &tts.Speaker{Path: path}
 }
 
 // lookPath finds a program on PATH; in fixture mode every program is found.

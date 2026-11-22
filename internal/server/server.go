@@ -42,6 +42,7 @@ import (
 	"github.com/gsperry/agent-desk/internal/summary"
 	"github.com/gsperry/agent-desk/internal/sysstat"
 	"github.com/gsperry/agent-desk/internal/transcript"
+	"github.com/gsperry/agent-desk/internal/tts"
 	"github.com/gsperry/agent-desk/internal/usage"
 )
 
@@ -102,6 +103,9 @@ type Config struct {
 	// Setup checks the programs Agent Desk needs and changes the CLIs
 	// agent-manager offers, for the welcome screen. Nil leaves it out.
 	Setup SetupSource
+	// Speech reads replies aloud through the text-to-speech service the
+	// user configured. Nil leaves it out.
+	Speech SpeechSource
 	// Demo is set by agent-desk --demo: the sessions are made up.
 	Demo bool
 	// Stats is the computer's load, memory, swap and free disk space. Nil
@@ -110,6 +114,11 @@ type Config struct {
 	// RemoteHTTPOrigin also accepts an http:// origin for the remote host.
 	// Only fixture mode sets it, for browser tests without TLS.
 	RemoteHTTPOrigin bool
+}
+
+type SpeechSource interface {
+	Status() tts.Status
+	Speak(ctx context.Context, text string) ([]byte, error)
 }
 
 type StatsSource interface {
@@ -306,6 +315,8 @@ func (s *Server) routes() {
 	s.route("GET /api/search", remote.NeedRead, s.search)
 	s.route("POST /api/open", remote.NeedLocal, s.open)
 	s.route("POST /api/manager/start", remote.NeedManage, s.startManager)
+	s.route("GET /api/speak", remote.NeedRead, s.speakStatus)
+	s.route("POST /api/speak", remote.NeedReply, s.speak)
 	s.route("GET /api/stats", remote.NeedRead, s.stats)
 	s.route("GET /api/setup", remote.NeedLocal, s.setupReport)
 	s.route("POST /api/setup", remote.NeedLocal, s.applySetup)
@@ -341,7 +352,7 @@ func securityHeaders(w http.ResponseWriter) {
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Frame-Options", "DENY")
-	h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'")
+	h.Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'")
 }
 
 // RemoteHandler serves remote clients. It is mounted on its own listener
@@ -405,6 +416,71 @@ func (s *Server) startManager(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Sessions.Trigger()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// speakAllowed reports whether this request may use read aloud: always on
+// the desk, and from a remote device only when the owner allowed it.
+func (s *Server) speakAllowed(r *http.Request) bool {
+	if s.cfg.Speech == nil {
+		return false
+	}
+	if c, ok := remoteFrom(r.Context()); ok {
+		return c.settings.SpeakRemote
+	}
+	return true
+}
+
+func (s *Server) speakStatus(w http.ResponseWriter, r *http.Request) {
+	if !s.speakAllowed(r) {
+		writeJSON(w, http.StatusOK, tts.Status{})
+		return
+	}
+	st := s.cfg.Speech.Status()
+	if _, ok := remoteFrom(r.Context()); ok {
+		// A remote device learns only whether it may use read aloud.
+		st = tts.Status{Available: st.Available, Provider: st.Provider}
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+// maxSpeakBody bounds the text sent to be read; tts trims it further.
+const maxSpeakBody = 256 << 10
+
+// speak reads text aloud, answering with MP3 audio. It costs the owner's
+// credits, so it needs a state-changing request, and from a remote device
+// the owner's permission.
+func (s *Server) speak(w http.ResponseWriter, r *http.Request) {
+	if !s.speakAllowed(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "read aloud is not available here"})
+		return
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if !decode(w, r, maxSpeakBody, &body) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 100*time.Second)
+	defer cancel()
+	audio, err := s.cfg.Speech.Speak(ctx, body.Text)
+	if err != nil {
+		log.Printf("speak chars=%d error=%q", len(body.Text), err.Error())
+		status := http.StatusBadGateway
+		switch {
+		case errors.Is(err, tts.ErrNotConfigured):
+			status = http.StatusNotFound
+		case errors.Is(err, tts.ErrBusy):
+			status = http.StatusTooManyRequests
+		case errors.Is(err, tts.ErrEmpty):
+			status = http.StatusUnprocessableEntity
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	log.Printf("speak chars=%d bytes=%d", len(body.Text), len(audio))
+	w.Header().Set("Content-Type", "audio/mpeg")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(audio)
 }
 
 func (s *Server) stats(w http.ResponseWriter, _ *http.Request) {
