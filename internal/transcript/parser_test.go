@@ -365,6 +365,33 @@ func TestSessionOwnerIsBookkeeping(t *testing.T) {
 	}
 }
 
+func TestPastedContentIsUnwrapped(t *testing.T) {
+	tests := []struct {
+		name   string
+		text   string
+		want   string
+		pasted bool
+	}{
+		{"alone", "\n\n<pasted_content id=\"ab12\">\n1. Yes\n2. No\n3. Later\n</pasted_content id=\"ab12\">\n", "1. Yes\n2. No\n3. Later", true},
+		{"after typed words", "Use these:\n\n<pasted_content id=\"ab12\">\none\ntwo\n</pasted_content id=\"ab12\">\n", "Use these:\n\none\ntwo", true},
+		{"two pastes", "<pasted_content id=\"a1\">\nfirst\n</pasted_content id=\"a1\">\nand\n<pasted_content id=\"b2\">\nsecond\n</pasted_content id=\"b2\">\n", "first\nand\nsecond", true},
+		{"unclosed stays as written", "<pasted_content id=\"a1\">\nno end", "<pasted_content id=\"a1\">\nno end", false},
+		{"plain prompt untouched", "  keep my spacing\n", "  keep my spacing\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line, _ := json.Marshal(map[string]any{"type": "user", "uuid": "u-" + tt.name, "promptSource": "typed", "message": map[string]any{"content": tt.text}})
+			got := NewParser().Line(line)
+			if len(got) != 1 || got[0].Kind != KindUser || got[0].Text != tt.want {
+				t.Fatalf("items = %+v, want one user item with text %q", got, tt.want)
+			}
+			if pasted, _ := got[0].Meta["pasted"].(bool); pasted != tt.pasted || got[0].Meta["source"] != "typed" {
+				t.Fatalf("meta = %v, want pasted=%v and source typed", got[0].Meta, tt.pasted)
+			}
+		})
+	}
+}
+
 func TestVersionStutterIsDeduped(t *testing.T) {
 	p := NewParser()
 	a := p.Line([]byte(`{"type":"assistant","uuid":"x1","message":{"id":"msg_s","content":[{"type":"text","text":"hello"}]}}`))
@@ -471,6 +498,14 @@ func TestSamples(t *testing.T) {
 				it := items[0]
 				if it.Kind != KindUser || it.Meta["source"] != "mid-turn" || strings.Contains(it.Text, "while you were working") || strings.Contains(it.Text, "This is how") || it.Text == "" {
 					t.Fatalf("mid-turn = %s %v %q", it.Kind, it.Meta, it.Text)
+				}
+				return
+			}
+			if filepath.Base(path) == "pasted-content.jsonl" {
+				// The pasted words as typed, without Claude Code's tags.
+				it := items[0]
+				if it.Kind != KindUser || it.Meta["pasted"] != true || strings.Contains(it.Text, "pasted_content") || !strings.HasPrefix(it.Text, "1. ") || strings.HasSuffix(it.Text, "\n") {
+					t.Fatalf("pasted = %s %v %q", it.Kind, it.Meta, it.Text)
 				}
 				return
 			}
