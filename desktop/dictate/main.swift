@@ -47,6 +47,13 @@ func joined(_ a: String, _ b: String) -> String {
 
 // heard returns the whole text so far for a new transcription.
 func heard(_ text: String) -> String {
+    // The final result after stopping can leave off the last sentence it had
+    // not finished. A text that is only a shorter start of the last one
+    // (ignoring closing punctuation) never replaces it.
+    let core = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    if text.count < last.count && !core.isEmpty && last.hasPrefix(core) {
+        return joined(kept, last)
+    }
     // A transcription that is suddenly much shorter and not a start of the
     // last one began afresh; a revision keeps about the same length.
     if last.count >= 8 && text.count * 2 < last.count && !last.hasPrefix(text) {
