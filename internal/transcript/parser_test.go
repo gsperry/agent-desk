@@ -352,6 +352,19 @@ func TestClone(t *testing.T) {
 	}
 }
 
+func TestSessionOwnerIsBookkeeping(t *testing.T) {
+	p := NewParser()
+	// Made-up ids: the record carries account and organization identifiers.
+	got := p.Line([]byte(`{"type":"session-owner","accountUuid":"00000000-0000-4000-8000-000000000001","organizationUuid":"00000000-0000-4000-8000-000000000002","sessionId":"00000000-0000-4000-8000-000000000003"}`))
+	if len(got) != 0 {
+		t.Fatalf("session-owner produced items: %v", got)
+	}
+	st := p.Stats()
+	if st.Skipped["session-owner"] != 1 || st.Raw != 0 {
+		t.Fatalf("stats = %+v", st)
+	}
+}
+
 func TestVersionStutterIsDeduped(t *testing.T) {
 	p := NewParser()
 	a := p.Line([]byte(`{"type":"assistant","uuid":"x1","message":{"id":"msg_s","content":[{"type":"text","text":"hello"}]}}`))
