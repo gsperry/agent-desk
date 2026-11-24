@@ -102,6 +102,8 @@ func TestRemoteAdmission(t *testing.T) {
 		{"spawn refused at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "dev@example.com"}, 403},
 		{"spawn at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions", `{"directory":"/tmp"}`, remoteHost, origin, "dev@example.com"}, 200},
 		{"action at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/action", `{"action":"kill"}`, remoteHost, origin, "dev@example.com"}, 200},
+		{"rename refused at reply", remoteOn(remote.LevelReply), remoteReq{"POST", "/api/sessions/a1/action", `{"action":"rename","name":"x"}`, remoteHost, origin, "dev@example.com"}, 403},
+		{"rename at manage", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/action", `{"action":"rename","name":"x"}`, remoteHost, origin, "dev@example.com"}, 200},
 		{"paste never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/paste", "png", remoteHost, origin, "dev@example.com"}, 403},
 		{"open never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/open", `{"path":"x"}`, remoteHost, origin, "dev@example.com"}, 403},
 		{"summary never remote", remoteOn(remote.LevelManage), remoteReq{"POST", "/api/sessions/a1/summary", `{"since":1,"model":"haiku"}`, remoteHost, origin, "dev@example.com"}, 403},

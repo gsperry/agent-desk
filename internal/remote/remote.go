@@ -30,7 +30,7 @@ const (
 	LevelAnswer Level = "answer"
 	// LevelReply also sends replies through the normal reply gate.
 	LevelReply Level = "reply"
-	// LevelManage also starts, stops, revives, archives and moves sessions.
+	// LevelManage also starts, stops, revives, archives, renames and moves sessions.
 	LevelManage Level = "manage"
 )
 

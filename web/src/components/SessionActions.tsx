@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GroupView, SessionAction, SessionView } from '../types'
-import { ConfirmDialog } from './Dialog'
+import { ConfirmDialog, RenameDialog } from './Dialog'
 
 interface Props {
   session: SessionView
@@ -18,6 +18,7 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmStop, setConfirmStop] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const [open, setOpen] = useState(false)
   const menu = useRef<HTMLDivElement>(null)
 
@@ -41,7 +42,10 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
     void act(session.id, a).then((err) => {
       setBusy(false)
       setError(err)
-      if (!err) setConfirmStop(false)
+      if (!err) {
+        setConfirmStop(false)
+        setRenaming(false)
+      }
     })
   }
 
@@ -93,6 +97,20 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
               role="menuitem"
               disabled={busy}
               onClick={() => {
+                setOpen(false)
+                setError(null)
+                setRenaming(true)
+              }}
+            >
+              Rename…
+            </button>
+          )}
+          {manage && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={busy}
+              onClick={() => {
                 run({ action: session.archived ? 'restore' : 'archive' })
               }}
             >
@@ -132,13 +150,27 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
             </button>
           )}
           {manage && (
-            <p className="muted actions-note" title="Rename, delete, restart and fork have no agent-manager command yet; use its TUI (r, d, R, f).">
+            <p className="muted actions-note" title="Delete, restart and fork have no agent-manager command yet; use its TUI (d, R, f).">
               More in agent-manager
             </p>
           )}
         </div>
       )}
-      {error && !confirmStop && <span className="form-error">{error}</span>}
+      {error && !confirmStop && !renaming && <span className="form-error">{error}</span>}
+      {renaming && (
+        <RenameDialog
+          current={session.name}
+          busy={busy}
+          error={error}
+          onRename={(name) => {
+            run({ action: 'rename', name })
+          }}
+          onClose={() => {
+            setRenaming(false)
+            setError(null)
+          }}
+        />
+      )}
       {confirmStop && (
         <ConfirmDialog
           title={`Stop ${session.name}?`}

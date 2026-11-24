@@ -2,6 +2,7 @@ package am
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -29,6 +30,7 @@ func TestManageArgs(t *testing.T) {
 		{"revive", func(c *CLI) error { return c.Revive(context.Background(), "a1") }, "agent-manager|revive|--json|--|a1"},
 		{"archive", func(c *CLI) error { return c.Archive(context.Background(), "a1", false) }, "agent-manager|archive|--json|--|a1"},
 		{"restore", func(c *CLI) error { return c.Archive(context.Background(), "a1", true) }, "agent-manager|archive|--json|--restore|--|a1"},
+		{"rename", func(c *CLI) error { return c.Rename(context.Background(), "a1", "-shop checkout") }, "agent-manager|rename-session|--json|--|a1|-shop checkout"},
 		{"move to root", func(c *CLI) error { return c.Move(context.Background(), "a1", "") }, "agent-manager|move|--json|--|a1|"},
 		{"create group", func(c *CLI) error { return c.CreateGroup(context.Background(), "backend/api", "/src/api") }, "agent-manager|create-group|--json|--directory=/src/api|--|backend/api"},
 		{"delete group", func(c *CLI) error { return c.DeleteGroup(context.Background(), "-weird") }, "agent-manager|delete-group|--json|--|-weird"},
@@ -44,6 +46,20 @@ func TestManageArgs(t *testing.T) {
 				t.Fatalf("args = %q\nwant   %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRenameOlderAgentManager(t *testing.T) {
+	for _, msg := range []string{"agent-manager: unknown command \"rename-session\"", "Unknown subcommand rename-session"} {
+		r := &fakeRunner{err: errors.New(msg)}
+		if err := (&CLI{Runner: r, Bin: "agent-manager"}).Rename(context.Background(), "a1", "x"); !errors.Is(err, ErrRenameUnsupported) {
+			t.Errorf("%q: err = %v, want ErrRenameUnsupported", msg, err)
+		}
+	}
+	// Anything else, such as the refusal inside a pane, passes through as agent-manager said it.
+	refusal := errors.New("agent-manager: renaming is for the user's rename key on another machine")
+	if err := (&CLI{Runner: &fakeRunner{err: refusal}, Bin: "agent-manager"}).Rename(context.Background(), "a1", "x"); !errors.Is(err, refusal) {
+		t.Errorf("err = %v, want the refusal unchanged", err)
 	}
 }
 
