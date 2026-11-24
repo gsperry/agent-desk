@@ -21,6 +21,9 @@ var skipped = map[string]bool{
 	"api-request": true, "api-request-blob": true, "api-request-shape": true,
 	"queue-operation": true, "file-history-snapshot": true, "file-history-delta": true,
 	"atis-latch": true, "tools-used": true, "last-prompt": true,
+	// session-owner names the account and organization a session belongs to,
+	// written when a session is moved to another machine. No reading value.
+	"session-owner": true,
 }
 
 // metaFields maps metadata record types to the fields the header reads.
