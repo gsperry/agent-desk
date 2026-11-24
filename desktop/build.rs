@@ -7,6 +7,8 @@ fn main() {
             "set_badge",
             "autostart_get",
             "autostart_set",
+            "dictate_start",
+            "dictate_stop",
         ]),
     ))
     .expect("tauri build");

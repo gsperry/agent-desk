@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Agent Desk listens only after you press its mic button, until you press it again, to type what you say into a reply.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Agent Desk turns what you say into text on this Mac, with on-device recognition, so no audio leaves it.</string>
+</dict>
+</plist>

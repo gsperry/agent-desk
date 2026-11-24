@@ -7,6 +7,7 @@ import { RemoteAccess, type RemoteSettings, type RemoteStatus } from './RemoteAc
 import type { Template } from '../model/templates'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 import { desktopInvoke } from '../notify'
+import { desktopDictate } from '../dictate'
 import { StartAtLogin } from './StartAtLogin'
 import type { SpeechStatus } from '../types'
 
@@ -370,6 +371,23 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
             Add rule
           </button>
         </Section>
+        {desktopDictate() !== null && (
+          <Section title="Voice input">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={prefs.dictation}
+                onChange={(e) => {
+                  set({ dictation: e.target.checked })
+                }}
+              />{' '}
+              Show the mic button in reply boxes
+            </label>
+            <p className="muted setting-note">
+              Press the mic, speak, and press it again; the words appear in the box for you to check and send. Speech is turned into text on this Mac with Apple's on-device recognition, so no audio leaves it. macOS asks for microphone and speech recognition access the first time. If on-device dictation is missing for your language, add it in System Settings › Keyboard › Dictation.
+            </p>
+          </Section>
+        )}
         <Section title="Read aloud">
             {speech?.available ? (
               <p className="muted setting-note">

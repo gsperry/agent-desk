@@ -2479,6 +2479,40 @@ mark {
   padding: 0.55rem 0.7rem;
 }
 
+.mic-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.7rem;
+}
+
+.mic-button.starting,
+.mic-button.listening {
+  border-color: var(--accent);
+  background: var(--accent-fill);
+  color: #fff;
+}
+
+.mic-button.listening svg {
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-button.listening svg {
+    animation: none;
+  }
+}
+
+.subagent-message:has(.mic-button) {
+  grid-template-columns: 1fr auto auto;
+}
+
 .snippet-menu {
   position: absolute;
   right: 0;

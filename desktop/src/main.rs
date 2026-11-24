@@ -7,14 +7,17 @@
 // back. The page may call the commands granted in capabilities/page.json:
 // notify (a native notification, which the web view cannot show; clicking
 // it opens the session it is about), set_badge (the dock badge and the
-// menu-bar count) and autostart_get/autostart_set (start at login).
+// menu-bar count), autostart_get/autostart_set (start at login) and
+// dictate_start/dictate_stop (voice input, recognized on this Mac by the
+// bundled agent-desk-dictate helper).
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::NewWindowResponse;
@@ -110,6 +113,109 @@ fn autostart_set(app: AppHandle, enabled: bool) -> Result<bool, String> {
     }
     .map_err(|e| e.to_string())?;
     launch.is_enabled().map_err(|e| e.to_string())
+}
+
+/// Dictation is the running dictation helper, if any, with a count that
+/// tells a finished helper's reader whether it is still the current one.
+#[derive(Default)]
+struct Dictation(Mutex<(u64, Option<(Child, ChildStdin)>)>);
+
+/// DICTATION_EVENTS are the message types the helper may pass to the page.
+const DICTATION_EVENTS: [&str; 4] = ["ready", "text", "error", "done"];
+
+/// dictation_event checks one line from the helper: a JSON object of a
+/// known type, with text and message bounded. Anything else is dropped.
+fn dictation_event(line: &str) -> Option<serde_json::Value> {
+    let mut v: serde_json::Value = serde_json::from_str(line).ok()?;
+    let obj = v.as_object_mut()?;
+    let kind = obj.get("type")?.as_str()?;
+    if !DICTATION_EVENTS.contains(&kind) {
+        return None;
+    }
+    obj.retain(|k, _| matches!(k.as_str(), "type" | "text" | "final" | "message"));
+    for key in ["text", "message"] {
+        if let Some(serde_json::Value::String(s)) = obj.get_mut(key) {
+            if s.chars().count() > 10_000 {
+                *s = s.chars().take(10_000).collect();
+            }
+        }
+    }
+    Some(v)
+}
+
+/// stop_dictation asks the running helper to stop; it sends its last words
+/// and exits on its own.
+fn stop_dictation(state: &Dictation) {
+    if let Some((mut child, mut stdin)) = state.0.lock().unwrap().1.take() {
+        let _ = stdin.write_all(b"stop\n");
+        drop(stdin);
+        // Reap it once it exits, so it does not linger as a zombie.
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+    }
+}
+
+/// dictate_start starts listening, stopping any earlier run, and sends the
+/// helper's messages to the page through events: ready, text (the words so
+/// far), error and done. Audio stays on this Mac: the helper requires
+/// on-device recognition.
+#[tauri::command]
+fn dictate_start(app: AppHandle, events: Channel<serde_json::Value>) -> Result<(), String> {
+    let state = app.state::<Dictation>();
+    stop_dictation(&state);
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let helper = exe
+        .parent()
+        .ok_or("no app directory")?
+        .join("agent-desk-dictate");
+    let mut cmd = Command::new(&helper);
+    cmd.env_clear();
+    for key in ["HOME", "USER", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE"] {
+        if let Some(v) = std::env::var_os(key) {
+            cmd.env(key, v);
+        }
+    }
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("could not start dictation: {e}"))?;
+    let stdout = child.stdout.take().ok_or("no dictation output")?;
+    let stdin = child.stdin.take().ok_or("no dictation input")?;
+    let run = {
+        let mut guard = state.0.lock().unwrap();
+        guard.0 += 1;
+        guard.1 = Some((child, stdin));
+        guard.0
+    };
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let mut done = false;
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(event) = dictation_event(&line) {
+                done |= event["type"] == "done";
+                let _ = events.send(event);
+            }
+        }
+        if !done {
+            let _ = events.send(serde_json::json!({"type": "done"}));
+        }
+        let state = handle.state::<Dictation>();
+        let mut guard = state.0.lock().unwrap();
+        if guard.0 == run {
+            if let Some((mut child, _)) = guard.1.take() {
+                let _ = child.wait();
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn dictate_stop(app: AppHandle) {
+    stop_dictation(&app.state::<Dictation>());
 }
 
 /// show brings the window forward, unhiding it if it was closed.
@@ -295,6 +401,7 @@ fn main() {
         )
         .manage(Server(Mutex::new(None)))
         .manage(Notified::default())
+        .manage(Dictation::default())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .macos_launcher(MacosLauncher::LaunchAgent)
@@ -305,7 +412,9 @@ fn main() {
             notify,
             set_badge,
             autostart_get,
-            autostart_set
+            autostart_set,
+            dictate_start,
+            dictate_stop
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -372,10 +481,37 @@ fn main() {
     app.run(|handle, event| match event {
         RunEvent::Reopen { .. } => show(handle),
         RunEvent::Exit => {
+            stop_dictation(&handle.state::<Dictation>());
             if let Some(mut child) = handle.state::<Server>().0.lock().unwrap().take() {
                 let _ = child.kill();
             }
         }
         _ => {}
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dictation_events() {
+        let ok =
+            dictation_event(r#"{"type":"text","text":"hello","final":false,"extra":1}"#).unwrap();
+        assert_eq!(
+            ok,
+            serde_json::json!({"type":"text","text":"hello","final":false})
+        );
+        assert!(dictation_event(r#"{"type":"eval","text":"x"}"#).is_none());
+        assert!(dictation_event("not json").is_none());
+        assert!(dictation_event(r#"["type"]"#).is_none());
+        let long = format!(r#"{{"type":"text","text":"{}"}}"#, "a".repeat(20_000));
+        assert_eq!(
+            dictation_event(&long).unwrap()["text"]
+                .as_str()
+                .unwrap()
+                .len(),
+            10_000
+        );
+    }
 }

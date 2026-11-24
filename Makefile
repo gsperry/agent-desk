@@ -38,8 +38,15 @@ screenshot: build
 # Rust and the Tauri CLI: cargo install tauri-cli --version "^2").
 desktop: build
 	mkdir -p desktop/binaries
-	cp $(BIN) desktop/binaries/agent-desk-$$(rustc -vV | sed -n 's/^host: //p')
+	host=$$(rustc -vV | sed -n 's/^host: //p'); \
+	  cp $(BIN) desktop/binaries/agent-desk-$$host && \
+	  $(SWIFTC) -target $${host%%-*}-apple-macos13 -o desktop/binaries/agent-desk-dictate-$$host $(DICTATE)
 	cd desktop && cargo tauri build
+
+# DICTATE builds agent-desk-dictate, the app's on-device speech helper,
+# with its usage strings embedded for when it runs on its own.
+SWIFTC := swiftc -O
+DICTATE := -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker desktop/dictate/Info.plist desktop/dictate/main.swift
 
 # Releases go to dist/. APP_VERSION is VERSION without its "v" when VERSION
 # is a release tag (v1.2.3), else 0.0.0; the app bundle needs a plain
@@ -73,6 +80,9 @@ desktop-universal: web
 	cp bin/agent-desk-darwin-arm64 desktop/binaries/agent-desk-aarch64-apple-darwin
 	cp bin/agent-desk-darwin-amd64 desktop/binaries/agent-desk-x86_64-apple-darwin
 	lipo -create -output desktop/binaries/agent-desk-universal-apple-darwin bin/agent-desk-darwin-arm64 bin/agent-desk-darwin-amd64
+	$(SWIFTC) -target arm64-apple-macos13 -o desktop/binaries/agent-desk-dictate-aarch64-apple-darwin $(DICTATE)
+	$(SWIFTC) -target x86_64-apple-macos13 -o desktop/binaries/agent-desk-dictate-x86_64-apple-darwin $(DICTATE)
+	lipo -create -output desktop/binaries/agent-desk-dictate-universal-apple-darwin desktop/binaries/agent-desk-dictate-aarch64-apple-darwin desktop/binaries/agent-desk-dictate-x86_64-apple-darwin
 	cd desktop && cargo tauri build --target universal-apple-darwin --bundles app --config '{"version":"$(APP_VERSION)"}'
 	ditto -c -k --keepParent "$(APP_BUNDLE)" "$(DIST)/Agent-Desk_$(APP_VERSION)_macos.zip"
 
