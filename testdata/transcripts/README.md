@@ -10,6 +10,7 @@ Real Claude Code transcripts, anonymized with `go run ./tools/anonymize`. Struct
 | `bash-edit-diff.jsonl` | 2.1.322 | 2 | A Bash call that changed three files: its result carries `bashEditDiff` with per-file hunks |
 | `peer-handback.jsonl` | 2.1.319 | 1 | A background subagent's report delivered as a peer message: `origin.kind` is `peer` with `handback`, `handbackReportText`, `name` and `senderTaskId` |
 | `mid-turn-message.jsonl` | 2.1.325 | 1 | A message typed to a running subagent: a meta user record wrapping the text in Claude Code's "sent a new message while you were working" note |
+| `pasted-content.jsonl` | 2.1.331 | 1 | A multi-line reply typed into the pane: the text arrives wrapped in `<pasted_content id="…">…</pasted_content id="…">`; made-up words |
 | `edge-cases.jsonl` | n/a | 12 | Hand-written malformed and unknown records |
 
 Add a sample when Claude Code introduces a record shape the parser does not know, and record its version here.

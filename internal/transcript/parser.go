@@ -274,6 +274,10 @@ var (
 	commandArgs     = regexp.MustCompile(`(?s)<command-args>(.*?)</command-args>`)
 	tagged          = regexp.MustCompile(`(?s)\A\s*<([a-z][a-z0-9_-]*)>(.*?)(?:</[a-z][a-z0-9_-]*>)?\s*\z`)
 	reminder        = regexp.MustCompile(`(?s)<system-reminder>(.*?)</system-reminder>`)
+	// pastedContent is how Claude Code records a multi-line paste in a
+	// prompt: the pasted text between tags that repeat an id. Go has no
+	// back-references, so the closing tag is matched on its shape alone.
+	pastedContent = regexp.MustCompile(`(?s)<pasted_content id="[^"]*">\n?(.*?)\n?</pasted_content id="[^"]*">`)
 )
 
 // userText classifies one piece of user text. Reminders embedded in a
@@ -389,21 +393,45 @@ func (p *Parser) classifyUserText(base Item, r record, text string) Item {
 	// subagent, arrives wrapped in Claude Code's note about it. It is the
 	// user's own words, so it reads as their prompt.
 	if m := midTurn.FindStringSubmatch(text); m != nil {
-		it.Kind, it.Text = KindUser, strings.TrimSpace(m[1])
+		it.Kind = KindUser
+		it.Text, _ = unwrapPasted(strings.TrimSpace(m[1]))
 		it.Meta = map[string]any{"source": "mid-turn"}
 		return it
 	}
 	if r.IsMeta {
 		return notice("injected", trimmed)
 	}
-	it.Kind, it.Text = KindUser, text
-	if m := preamblePattern.FindStringSubmatch(text); m != nil {
+	it.Kind = KindUser
+	body, pasted := unwrapPasted(text)
+	it.Text = body
+	if m := preamblePattern.FindStringSubmatch(body); m != nil {
 		it.Preamble, it.Text = m[1], m[2]
 	}
-	if r.PromptSource != "" {
-		it.Meta = map[string]any{"source": r.PromptSource}
+	if r.PromptSource != "" || pasted {
+		it.Meta = map[string]any{}
+		if r.PromptSource != "" {
+			it.Meta["source"] = r.PromptSource
+		}
+		if pasted {
+			it.Meta["pasted"] = true
+		}
 	}
 	return it
+}
+
+// unwrapPasted takes the paste tags out of a prompt, leaving the pasted
+// words where they were typed, so the text reads, and compares with what
+// was sent, as the user wrote it. The blank lines Claude Code adds around
+// the tags go with them. It reports whether anything was unwrapped.
+func unwrapPasted(text string) (string, bool) {
+	if !strings.Contains(text, "<pasted_content ") {
+		return text, false
+	}
+	out := pastedContent.ReplaceAllString(text, "$1")
+	if out == text {
+		return text, false
+	}
+	return strings.TrimSpace(out), true
 }
 
 func (p *Parser) assistant(base Item, r record, line []byte) []Item {
