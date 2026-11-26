@@ -92,12 +92,17 @@ func Parse(screen string) *Dialog {
 		}
 	}
 	footerText := ""
+	bare := false
 	if footer >= 0 {
 		footerText = strings.TrimSpace(lines[footer])
 	} else if reviewScreen(lines) {
 		// Claude Code's last step of a multi-question prompt has no
 		// footer; the options end the screen.
 		footer = len(lines)
+	} else if menuScreen(lines) {
+		// Some dialogs, such as the one that exits plan mode, draw no
+		// footer either.
+		footer, bare = len(lines), true
 	} else {
 		return nil
 	}
@@ -108,9 +113,17 @@ func Parse(screen string) *Dialog {
 		first = markedOptions(lines, top, footer, d)
 	}
 	if first < 0 {
+		if bare {
+			return nil
+		}
 		return d
 	}
 	d.Question = question(lines, gaps, top, first, screenWidth(lines))
+	if submitOption.MatchString(lines[first]) && (first == 0 || !reviewPrompt.MatchString(strings.TrimSpace(lines[first-1]))) {
+		// Claude Code left the prompt line out; what is above the options
+		// is the list of answers, not the question.
+		d.Question = "Ready to submit your answers?"
+	}
 	d.Steps = steps(lines, top, first)
 	typedField(d)
 	return d
@@ -153,9 +166,53 @@ func typedField(d *Dialog) {
 // with several questions.
 var reviewPrompt = regexp.MustCompile(`^Ready to submit your answers\?$`)
 
+// submitOption and cancelOption are the two options that end a review
+// step, whatever else the screen shows above them.
+var (
+	submitOption = regexp.MustCompile(`^\s*(?:❯\s*)?1\.\s+Submit answers\s*$`)
+	cancelOption = regexp.MustCompile(`^\s*(?:❯\s*)?2\.\s+Cancel\s*$`)
+)
+
+// endOfMenu is where a screen's content ends, below any closing rules.
+func endOfMenu(lines []string) int {
+	end := len(lines)
+	for end > 0 && isRule(lines[end-1]) {
+		end--
+	}
+	return end
+}
+
+// menuScreen reports a menu that ends the screen with no footer: numbered
+// options, one under the ❯ cursor, at the bottom. The prompt box never ends
+// that way, so a cursor on a numbered row is a menu being asked.
+func menuScreen(lines []string) bool {
+	end := endOfMenu(lines)
+	count, cursor := 0, false
+	for i := end - 1; i >= max(end-2*footerLines, 0); i-- {
+		m := numbered.FindStringSubmatch(lines[i])
+		if m == nil {
+			// An option's description sits indented under it.
+			if count > 0 && strings.HasPrefix(lines[i], "       ") {
+				continue
+			}
+			break
+		}
+		count++
+		cursor = cursor || m[2] != ""
+		if atoi(m[3]) == 1 {
+			break
+		}
+	}
+	return count >= 2 && cursor
+}
+
 // reviewScreen reports a review step: the prompt line just above the
-// numbered options that end the screen.
+// numbered options that end the screen, or, when Claude Code leaves that
+// line out, Submit answers and Cancel as the last two options.
 func reviewScreen(lines []string) bool {
+	if end := endOfMenu(lines); end >= 2 && cancelOption.MatchString(lines[end-1]) && submitOption.MatchString(lines[end-2]) {
+		return true
+	}
 	for i := len(lines) - 1; i >= max(len(lines)-footerLines, 0); i-- {
 		l := strings.TrimSpace(lines[i])
 		if reviewPrompt.MatchString(l) {
