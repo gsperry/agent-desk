@@ -276,6 +276,16 @@ func (f Fixture) Archive(_ context.Context, id string, restore bool) error {
 	})
 }
 
+func (f Fixture) Rename(_ context.Context, id, name string) error {
+	return f.update(func(snap *Snapshot) error {
+		s, err := f.session(snap, id)
+		if err == nil {
+			s.Name = name
+		}
+		return err
+	})
+}
+
 func (f Fixture) Move(_ context.Context, id, group string) error {
 	return f.update(func(snap *Snapshot) error {
 		s, err := f.session(snap, id)

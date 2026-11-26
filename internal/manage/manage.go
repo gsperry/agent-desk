@@ -22,6 +22,7 @@ type Backend interface {
 	Kill(ctx context.Context, id string) error
 	Revive(ctx context.Context, id string) error
 	Archive(ctx context.Context, id string, restore bool) error
+	Rename(ctx context.Context, id, name string) error
 	Move(ctx context.Context, id, group string) error
 	CreateGroup(ctx context.Context, path, directory string) error
 	DeleteGroup(ctx context.Context, path string) error
@@ -186,6 +187,8 @@ func hasGroup(groups []hub.GroupView, path string) bool {
 type Action struct {
 	Action string `json:"action"`
 	Group  string `json:"group"`
+	// Name is the new name for a rename.
+	Name string `json:"name"`
 }
 
 func (m *Manager) Act(ctx context.Context, id string, a Action) error {
@@ -221,6 +224,17 @@ func (m *Manager) Act(ctx context.Context, id string, a Action) error {
 			return refuse("%s is not archived.", s.Name)
 		}
 		err = m.Backend.Archive(ctx, id, true)
+	case "rename":
+		name := strings.TrimSpace(a.Name)
+		switch {
+		case name == "":
+			return refuse("The name cannot be empty.")
+		case len(name) > maxName || strings.ContainsFunc(name, unicode.IsControl):
+			return refuse("The name must be at most %d characters with no control characters.", maxName)
+		case name == s.Name:
+			return refuse("%s already has that name.", s.Name)
+		}
+		err = m.Backend.Rename(ctx, id, name)
 	case "move":
 		if a.Group != "" && !hasGroup(st.Groups, a.Group) {
 			return refuse("Group %q does not exist.", a.Group)

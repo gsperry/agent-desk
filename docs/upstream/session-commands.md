@@ -1,5 +1,7 @@
 # feat(cli): rename, delete, restart, fork and models for scripts
 
+> Status: `rename-session <session-id> "<name>"` shipped in agent-manager 0.50 and `delete` in 0.49; Agent Desk uses rename. Restart, fork and models are still open.
+
 ## Problem
 
 `spawn`, `kill`, `revive`, `archive` and `move` run with no caller, so a script or a GUI can manage sessions. Four row actions the TUI offers have no such command, and the spawn form's model list has no way out of the binary:

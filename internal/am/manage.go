@@ -3,6 +3,7 @@ package am
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -77,6 +78,33 @@ func (c *CLI) Archive(ctx context.Context, id string, restore bool) error {
 	}
 	_, err := c.run(ctx, append(args, "--", id)...)
 	return err
+}
+
+// ErrRenameUnsupported is an agent-manager too old for rename-session,
+// which arrived in 0.50.
+var ErrRenameUnsupported = errors.New("renaming needs agent-manager 0.50 or newer: update it with brew upgrade agent-manager, or agent-manager update")
+
+// Rename gives a session a new name through rename-session, which acts
+// from outside a pane and is refused inside one. agent-manager does the
+// work, a worktree session's branch included.
+func (c *CLI) Rename(ctx context.Context, id, name string) error {
+	_, err := c.run(ctx, "rename-session", "--json", "--", id, name)
+	if err != nil && unknownCommand(err.Error()) {
+		return ErrRenameUnsupported
+	}
+	return err
+}
+
+// unknownCommand reads an older agent-manager's answer to a subcommand it
+// does not have.
+func unknownCommand(msg string) bool {
+	msg = strings.ToLower(msg)
+	for _, w := range []string{"unknown command", "unknown subcommand", "no such command", "not a command"} {
+		if strings.Contains(msg, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // Move files a session under group; an empty group is the root.

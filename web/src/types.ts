@@ -172,7 +172,10 @@ export interface SpawnRequest {
   resume?: string
 }
 
-export type SessionAction = { action: 'kill' | 'revive' | 'archive' | 'restore' } | { action: 'move'; group: string }
+export type SessionAction =
+  | { action: 'kill' | 'revive' | 'archive' | 'restore' }
+  | { action: 'move'; group: string }
+  | { action: 'rename'; name: string }
 
 export interface SubAgent {
   id: string

@@ -127,10 +127,10 @@ While an agent works, a row above the composer shows how long the turn has run, 
 ## Managing sessions
 
 - **New session:** ＋ in the sidebar header, or the ＋ on a project or group heading to prefill its directory and group. Pick the directory, name (or let the agent name itself), CLI, group, worktree, first prompt, and optionally model and effort.
-- **Stop, archive, restore, move, export:** the ⋯ menu in the session header; Revive is a button on a stopped session. Stop asks first, since it ends the agent's process; the session stays listed and Revive resumes the same conversation. To stop only the current turn, use Interrupt while it works.
+- **Stop, archive, restore, rename, move, export:** the ⋯ menu in the session header; Revive is a button on a stopped session. Stop asks first, since it ends the agent's process; the session stays listed and Revive resumes the same conversation. To stop only the current turn, use Interrupt while it works.
 - **Groups:** "New group" in the sidebar footer; × on a group heading deletes it, moving its sessions to the root.
 
-Rename, delete, restart with a fresh context, and fork have no agent-manager command yet, so they stay in agent-manager's TUI (`r`, `d`, `R`, `f`). See [docs/upstream/session-commands.md](docs/upstream/session-commands.md).
+Rename asks agent-manager (`rename-session`, in 0.50 and newer), which also renames a worktree session's branch. It works from the Mac app and from `agent-desk` run outside an agent-manager terminal; agent-manager refuses it inside one. Delete, restart with a fresh context, and fork stay in agent-manager's TUI (`d`, `R`, `f`) for now. See [docs/upstream/session-commands.md](docs/upstream/session-commands.md).
 
 ## Answering prompts
 

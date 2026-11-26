@@ -615,6 +615,12 @@ func TestLifecycleRoutes(t *testing.T) {
 				t.Fatalf("action %s %+v", f.id, f.action)
 			}
 		}},
+		{"rename", "POST", "/api/sessions/a1/action", `{"action":"rename","name":"shop checkout"}`, own, nil, 200, func(t *testing.T, f *fakeLifecycle) {
+			if f.id != "a1" || f.action != (manage.Action{Action: "rename", Name: "shop checkout"}) {
+				t.Fatalf("rename %s %+v", f.id, f.action)
+			}
+		}},
+		{"rename refused", "POST", "/api/sessions/a1/action", `{"action":"rename","name":""}`, own, &send.Refused{Reason: "invalid", Message: "The name cannot be empty."}, 409, nil},
 		{"action failed", "POST", "/api/sessions/a1/action", `{"action":"kill"}`, own, errors.New("tmux gone"), 502, nil},
 		{"create group", "POST", "/api/groups", `{"path":"ops","directory":"/srv"}`, own, nil, 200, func(t *testing.T, f *fakeLifecycle) {
 			if f.group != (manage.Group{Path: "ops", Directory: "/srv"}) {

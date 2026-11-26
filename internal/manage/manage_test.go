@@ -45,6 +45,10 @@ func (b *backend) Archive(_ context.Context, id string, restore bool) error {
 	}
 	return nil
 }
+func (b *backend) Rename(_ context.Context, id, name string) error {
+	b.calls = append(b.calls, "rename "+id+" "+name)
+	return nil
+}
 func (b *backend) Move(_ context.Context, id, group string) error {
 	b.calls = append(b.calls, "move "+id+" "+group)
 	return nil
@@ -163,8 +167,15 @@ func TestAct(t *testing.T) {
 		{"live", Action{Action: "move", Group: "web"}, "move live web", ""},
 		{"live", Action{Action: "move", Group: ""}, "", reasonInvalid},
 		{"live", Action{Action: "move", Group: "nope"}, "", reasonInvalid},
+		{"live", Action{Action: "rename", Name: "  shop checkout  "}, "rename live shop checkout", ""},
+		{"old", Action{Action: "rename", Name: "-looks-like-a-flag"}, "rename old -looks-like-a-flag", ""},
+		{"live", Action{Action: "rename", Name: "live"}, "", reasonInvalid},
+		{"live", Action{Action: "rename", Name: "   "}, "", reasonInvalid},
+		{"live", Action{Action: "rename", Name: "two\nlines"}, "", reasonInvalid},
+		{"live", Action{Action: "rename", Name: strings.Repeat("n", maxName+1)}, "", reasonInvalid},
 		{"live", Action{Action: "delete"}, "", reasonInvalid},
 		{"ghost", Action{Action: "kill"}, "", send.ReasonUnknownSession},
+		{"ghost", Action{Action: "rename", Name: "x"}, "", send.ReasonUnknownSession},
 	}
 	for _, tt := range tests {
 		b.calls = nil
