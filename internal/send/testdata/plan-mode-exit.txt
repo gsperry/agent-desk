@@ -1,0 +1,13 @@
+  The plan is written and the checks pass.
+
+  Cost: three subagents, about as much as this session so far. The next
+  step gets its own go-ahead after you review the first results.
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+  ──────────────────────────────────────────────────────────────────────────────
+   Exit plan mode?
+
+   Claude wants to exit plan mode
+
+   ❯ 1. Yes, and use auto mode
+     2. No

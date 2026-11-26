@@ -108,6 +108,21 @@ func TestParse(t *testing.T) {
 			question: "Ready to submit your answers?",
 		},
 		{
+			// A newer Claude Code leaves out "Ready to submit your answers?"
+			// and draws each answer under a bar.
+			file:     "askq-review-no-prompt.txt",
+			labels:   []string{"Submit answers", "Cancel"},
+			selected: 0,
+			question: "Ready to submit your answers?",
+		},
+		{
+			// The plan-mode exit dialog draws no footer.
+			file:     "plan-mode-exit.txt",
+			labels:   []string{"Yes, and use auto mode", "No"},
+			selected: 0,
+			question: "Exit plan mode?\n\nClaude wants to exit plan mode",
+		},
+		{
 			file:     "auto-mode-dialog.txt",
 			labels:   []string{"Yes", "Not now", "Don't show again"},
 			selected: 0,
@@ -149,6 +164,25 @@ func TestParseNoDialog(t *testing.T) {
 	}
 	if Parse("") != nil {
 		t.Error("empty screen")
+	}
+}
+
+// A numbered list with no cursor, or one that does not end the screen, is
+// not a menu being asked: the footerless fallback must not turn the
+// assistant's own lists into dialogs.
+func TestParseFooterlessIsNarrow(t *testing.T) {
+	tests := []struct {
+		name   string
+		screen string
+	}{
+		{"list without a cursor", "Here are the steps:\n  1. Install it\n  2. Run it\n"},
+		{"list above the prompt box", "  1. Install it\n  2. Run it\n──────────────────────────\n❯ \n──────────────────────────\n  ? for shortcuts\n"},
+		{"cursor on a lone option", "Pick:\n ❯ 1. Only one\n"},
+	}
+	for _, tt := range tests {
+		if d := Parse(tt.screen); d != nil {
+			t.Errorf("%s: unexpected dialog %+v", tt.name, d)
+		}
 	}
 }
 

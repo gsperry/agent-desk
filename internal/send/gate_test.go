@@ -89,6 +89,9 @@ func TestCheckPane(t *testing.T) {
 		{"ask-question.txt", ReasonDialog},
 		{"auto-mode-dialog.txt", ReasonDialog},
 		{"agent-quotes-dialog.txt", ""},
+		// Dialogs that draw no footer still stop a reply.
+		{"plan-mode-exit.txt", ReasonDialog},
+		{"askq-review-no-prompt.txt", ReasonDialog},
 		// The agent list under the prompt does not stop a reply to main...
 		{"agents-main.txt", ""},
 		// ...but a screen showing a subagent would send the reply to it.

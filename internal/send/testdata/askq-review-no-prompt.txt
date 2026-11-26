@@ -1,0 +1,13 @@
+──────────────────────────────────────────────────────────────────────────────────
+←  ☒ First step  ☒ Second step  ✔ Submit  →
+
+Review your answers
+
+ │ ● First: how should the key be handled? (Needs your decision: it
+ │   changes the format.)
+   → A: leave it out (Recommended)
+ │ ● Second: the build tool is missing. How should I restore it?
+   → I'll install it (Recommended)
+
+❯ 1. Submit answers
+  2. Cancel

@@ -131,6 +131,34 @@ var (
 // words sits higher up.
 const footerLines = 8
 
+// menuOption is a numbered option, with the ❯ cursor when it holds it.
+var menuOption = regexp.MustCompile(`^\s*(❯)?\s*\d{1,2}\.\s+\S`)
+
+// endsInMenu reports a menu with no footer, such as the dialog that exits
+// plan mode: the last lines of the screen, below any closing rules, are
+// numbered options and the ❯ cursor is on one. The prompt box never ends
+// that way.
+func endsInMenu(lines []string) bool {
+	end := len(lines)
+	for end > 0 && isRule(lines[end-1]) {
+		end--
+	}
+	count, cursor := 0, false
+	for i := end - 1; i >= max(end-2*footerLines, 0); i-- {
+		m := menuOption.FindStringSubmatch(lines[i])
+		if m == nil {
+			// An option's description sits indented under it.
+			if count > 0 && strings.HasPrefix(lines[i], "       ") {
+				continue
+			}
+			break
+		}
+		count++
+		cursor = cursor || m[1] != ""
+	}
+	return count >= 2 && cursor
+}
+
 // subagentBox is the prompt while the screen shows a subagent: Claude Code
 // puts a no-break space after the ❯.
 var subagentBox = regexp.MustCompile(`^❯[\s\x{00a0}]+Message @\S+…$`)
@@ -148,6 +176,9 @@ func CheckPane(screen string) *Refused {
 		if dialogFooter.MatchString(l) {
 			return &Refused{ReasonDialog, "The session is showing a dialog. Text sent now would pick an option. Answer it in agent-manager."}
 		}
+	}
+	if endsInMenu(lines) {
+		return &Refused{ReasonDialog, "The session is showing a dialog. Text sent now would pick an option. Answer it in agent-manager."}
 	}
 	// The composer sits between the last two horizontal rules.
 	var rules []int
