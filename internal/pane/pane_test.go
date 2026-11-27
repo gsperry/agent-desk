@@ -1,11 +1,14 @@
 package pane
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/gsperry/agent-desk/internal/hub"
 )
 
 func read(t *testing.T, name string) string {
@@ -303,6 +306,48 @@ func TestMultiSelect(t *testing.T) {
 // Screens from a probe session on Claude Code 2.1.322: Enter ticks a box
 // ([✔]) and leaves the cursor; the cursor on Next is drawn at the margin;
 // answered questions are ☒ in the tab bar.
+// The only question of a prompt, taking several answers, ends in Submit
+// where a question that is followed by others ends in Next. A Claude Code
+// 2.1.332 screen, in neutral words: the question sits behind a bar, and the
+// Submit row used to be read as the description of "Type something".
+func TestMultiSelectSingleQuestion(t *testing.T) {
+	d := Parse(read(t, "askq-multi-submit.txt"))
+	if d == nil || !d.Multi || len(d.Options) != 6 {
+		t.Fatalf("dialog = %+v", d)
+	}
+	wantQ := "Which of these should we do about the list order? Agent-manager keeps a manual order, set with its reorder keys, but the list ignores it and re-sorts by status, which is why rows jump."
+	if d.Question != wantQ {
+		t.Fatalf("question = %q", d.Question)
+	}
+	submit := d.Options[4]
+	if !submit.Next || submit.Label != "Submit" || submit.Selected {
+		t.Fatalf("submit row = %+v", submit)
+	}
+	free := d.Options[3]
+	if !free.Free || free.Label != "Type something" || free.Description != "" {
+		t.Fatalf("free row = %+v", free)
+	}
+	if d.Options[5].Label != "Chat about this" || d.Options[0].Checked == nil || *d.Options[0].Checked {
+		t.Fatalf("options = %+v", d.Options)
+	}
+	if !reflect.DeepEqual(d.Steps, []Step{{Label: "Ordering"}, {Label: "Submit", Submit: true}}) {
+		t.Fatalf("steps = %+v", d.Steps)
+	}
+	// Choosing Submit moves down to its row and presses Enter.
+	keys := &recordKeys{}
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+		Reader:   fakeReader{screen: read(t, "askq-multi-submit.txt")},
+		Keys:     keys,
+	}
+	if err := a.Answer(context.Background(), "s1", Answer{Action: "choose", Index: 4, Label: "Submit"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"Down", "Down", "Down", "Down", "Enter"}; !reflect.DeepEqual(keys.got, want) {
+		t.Fatalf("keys = %v, want %v", keys.got, want)
+	}
+}
+
 func TestMultiSelectProbe(t *testing.T) {
 	initial := Parse(read(t, "askq-multi-initial.txt"))
 	if initial == nil || !initial.Multi || len(initial.Options) != 6 || !initial.Options[4].Next || initial.Options[5].Label != "Chat about this" {

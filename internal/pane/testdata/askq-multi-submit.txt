@@ -1,0 +1,25 @@
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Sonnet 5.5 · Example provider
+ ▝▝   ▝▝   /tmp/project
+
+❯ This is a UI test. Call the AskUserQuestion tool exactly once, with one question.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Ordering  ✔ Submit  →
+
+│ Which of these should we do about the list order? Agent-manager keeps a manual order, set with its
+│ reorder keys, but the list ignores it and re-sorts by status, which is why rows jump.
+
+❯ 1. [ ] Follow the manual order (Recommended)
+         Rows appear in the order you set, and stay put when a status changes. A session that
+         needs you still shows by its bold name and its status icon.
+  2. [ ] Keep needs-you first as an option
+         A setting for the order. Which one is the default is your call.
+  3. [ ] Collapsible groups
+         Click a group heading to fold it away, remembered between visits.
+  4. [ ] Type something
+     Submit
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
