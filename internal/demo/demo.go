@@ -72,7 +72,7 @@ func (c *conv) prompt(text string, gap float64) {
 func (c *conv) reply(text string, ctx, out int, gap float64) {
 	c.tick(gap)
 	c.lines = append(c.lines, record{
-		"type": "assistant", "uuid": c.uuid(), "timestamp": ts(c.t),
+		"type": "assistant", "uuid": c.uuid(), "timestamp": ts(c.t), "effort": "high",
 		"message": record{
 			"id": "msg_" + c.uuid(), "model": c.model, "role": "assistant",
 			"content": []record{{"type": "text", "text": text}},
@@ -98,7 +98,7 @@ func (c *conv) tool(name string, input record, result string, o toolOpts) string
 		id = "toolu_" + strings.ReplaceAll(c.uuid(), "-", "")
 	}
 	c.lines = append(c.lines, record{
-		"type": "assistant", "uuid": c.uuid(), "timestamp": ts(c.t),
+		"type": "assistant", "uuid": c.uuid(), "timestamp": ts(c.t), "effort": "high",
 		"message": record{
 			"id": "msg_" + c.uuid(), "model": c.model, "role": "assistant",
 			"content": []record{{"type": "tool_use", "id": id, "name": name, "input": input}},

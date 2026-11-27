@@ -96,6 +96,7 @@ The checklist is not offered to remote devices.
 - **Since you last looked:** sidebar rows with new activity get a dot, and opening the session shows a divider before what arrived since your last visit.
 - **System stats:** above the sidebar's footer, CPU load, memory, swap and free space on each disk holding your home or a session's directory, refreshed every 5 s. A row turns amber or red past its limit: load above the core count, macOS memory pressure (or little memory left on Linux), swap above a quarter of memory, a disk under 10% or 20 GB free, whichever is smaller (red under 5% or 5 GB). With notifications on, a nearly full disk or critical memory sends one notification until it recovers. Read from the kernel; no command runs. Settings turns the block off.
 - **Context meter:** the session header shows how much context the latest turn used and, once that model has auto-compacted in a transcript Agent Desk has read, how close it is to compacting again.
+- **Model and effort:** the session header shows the model and effort level of the latest turn, such as `opus-5-5 · high`. Claude Code writes both to the transcript, so a version that stops recording the effort shows only the model.
 
 ## Review and steer
 

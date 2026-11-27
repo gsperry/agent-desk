@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Item } from '../types'
-import { contextState, formatTokens, learnThresholds } from './context'
+import { contextState, formatTokens, learnThresholds, modelLabel, modelState } from './context'
 
 let seq = 0
 const turn = (model: string, contextTokens: number): Item => ({ seq: seq++, kind: 'text', text: 'x', meta: { usage: { model, contextTokens, outputTokens: 10 } } })
@@ -30,6 +30,33 @@ describe('contextState', () => {
   it('knows nothing right after a compaction or with no usage', () => {
     expect(contextState([turn('opus', 900_000), compact(960_000)], {})).toBeNull()
     expect(contextState([{ seq: 1, kind: 'user', text: 'hi' }], {})).toBeNull()
+  })
+})
+
+const withEffort = (model: string, effort?: string): Item => ({ seq: seq++, kind: 'text', text: 'x', meta: { usage: { model, contextTokens: 5, outputTokens: 1, ...(effort ? { effort } : {}) } } })
+
+describe('modelState', () => {
+  it('is the model and effort of the latest turn', () => {
+    expect(modelState([withEffort('claude-sonnet-5-5', 'medium'), withEffort('claude-opus-5-5', 'high')])).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+  })
+
+  it('has no effort when the version does not record one', () => {
+    expect(modelState([withEffort('claude-opus-5-5')])).toEqual({ model: 'claude-opus-5-5' })
+  })
+
+  it('skips synthetic records and survives a compaction', () => {
+    expect(modelState([withEffort('claude-opus-5-5', 'high'), compact(900_000), withEffort('<synthetic>')])).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+  })
+
+  it('knows nothing without usage', () => {
+    expect(modelState([{ seq: 0, kind: 'text', text: 'x' }])).toBeNull()
+  })
+})
+
+describe('modelLabel', () => {
+  it('drops the claude- prefix', () => {
+    expect(modelLabel('claude-opus-5-5')).toBe('opus-5-5')
+    expect(modelLabel('gpt-x')).toBe('gpt-x')
   })
 })
 

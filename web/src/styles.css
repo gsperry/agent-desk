@@ -2037,6 +2037,12 @@ mark {
 
 /* Context meter */
 
+.model-badge {
+  font-size: 0.85em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
 .context-meter {
   display: inline-flex;
   align-items: center;
