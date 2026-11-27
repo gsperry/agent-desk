@@ -264,12 +264,16 @@ function Desk({ token }: { token: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Shortcuts act on the page, so none runs behind an open dialog; the
+      // switcher's own Cmd+K closes it.
+      const dialog = document.querySelector('[role="dialog"]') !== null
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        if (dialog && !switcher) return
         e.preventDefault()
         setSwitcher((open) => !open)
         return
       }
-      if (switcher || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
+      if (dialog || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === '/') {
         e.preventDefault()
         document.getElementById('search-box')?.focus()

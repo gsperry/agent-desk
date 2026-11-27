@@ -1,3 +1,4 @@
+import { useModal } from './useModal'
 import type { ReactNode } from 'react'
 import { defaultSnippets, validName, type Snippet } from '../model/snippets'
 import { newRule, ruleStatuses, type Rule, type RuleStatus } from '../model/rules'
@@ -61,6 +62,7 @@ const openClosed: [Open, string][] = [
 ]
 
 export function Settings({ prefs, onChange, snippets, onSnippets, templates, onTemplates, rules, onRules, summaries, onSummaries, loadRemote, saveRemote, onOpenWelcome, speech, onClose }: Props) {
+  const panel = useModal<HTMLDivElement>()
   const onDesk = !useRemote().remote
   // The desktop app's own settings, present only inside it.
   const desktop = onDesk ? desktopInvoke() : undefined
@@ -76,8 +78,10 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div
+        ref={panel}
         className="settings"
         role="dialog"
+        aria-modal="true"
         aria-label="Settings"
         onMouseDown={(e) => {
           e.stopPropagation()

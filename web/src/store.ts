@@ -309,7 +309,7 @@ export class Store {
         reason = body.reason
       }
     } catch (e) {
-      message = e instanceof Error ? e.message : String(e)
+      message = errorText(e)
     }
     this.updatePending(sessionId, clientId, (p) => ({ ...p, state, message, reason, sentAt: Date.now() }))
     // The transcript may already hold the prompt.
@@ -318,29 +318,42 @@ export class Store {
 
   // screen reads a session's live pane. A refusal comes back as message.
   async screen(sessionId: string): Promise<{ screen?: Screen; message?: string }> {
-    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/pane`)
-    const body = (await res.json().catch(() => ({}))) as Screen & SendRefusal
-    if (res.ok) return { screen: body }
-    return { message: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+    try {
+      const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/pane`)
+      const body = (await res.json().catch(() => ({}))) as Screen & SendRefusal
+      if (res.ok) return { screen: body }
+      return { message: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
+    } catch (e) {
+      return { message: errorText(e) }
+    }
   }
 
   // answer replies to a dialog; it resolves to an error message or null.
   async answer(sessionId: string, answer: Answer): Promise<string | null> {
-    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/answer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(answer),
-    })
-    if (res.ok) return null
-    const body = (await res.json().catch(() => ({}))) as SendRefusal
-    return body.message ?? body.error ?? `HTTP ${String(res.status)}`
+    return this.postAction(`/api/sessions/${encodeURIComponent(sessionId)}/answer`, answer)
   }
 
   async interrupt(sessionId: string): Promise<string | null> {
-    const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/interrupt`, { method: 'POST' })
-    if (res.ok) return null
-    const body = (await res.json().catch(() => ({}))) as SendRefusal
-    return body.message ?? body.error ?? `HTTP ${String(res.status)}`
+    return this.postAction(`/api/sessions/${encodeURIComponent(sessionId)}/interrupt`)
+  }
+
+  // postAction posts and resolves to an error message or null. A
+  // network failure resolves too, so the caller's busy state always ends.
+  private async postAction(path: string, body?: unknown): Promise<string | null> {
+    try {
+      const res = await apiFetch(
+        this.token,
+        path,
+        body === undefined
+          ? { method: 'POST' }
+          : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      )
+      if (res.ok) return null
+      const data = (await res.json().catch(() => ({}))) as SendRefusal
+      return data.message ?? data.error ?? `HTTP ${String(res.status)}`
+    } catch (e) {
+      return errorText(e)
+    }
   }
 
   private async post(path: string, body: unknown): Promise<{ data?: unknown; error?: string }> {
@@ -353,7 +366,7 @@ export class Store {
       const data = (await res.json().catch(() => ({}))) as SendRefusal
       return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -363,7 +376,7 @@ export class Store {
       const data = (await res.json().catch(() => ({}))) as SpawnOptions & SendRefusal
       return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -388,7 +401,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as { error?: string }
       return { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -398,7 +411,7 @@ export class Store {
       const data = (await res.json().catch(() => ({}))) as SetupReport & SendRefusal
       return res.ok ? { data } : { error: data.message ?? data.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -443,7 +456,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as Changes & SendRefusal
       return res.ok ? { data: body } : { error: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -454,7 +467,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string }
       return res.ok ? { path: body.path } : { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -471,7 +484,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as { conversations?: Conversation[]; error?: string }
       return res.ok && body.conversations ? { data: body.conversations } : { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -483,7 +496,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as { screen?: string } & SendRefusal
       return res.ok ? { screen: body.screen ?? '' } : { message: body.message ?? body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { message: e instanceof Error ? e.message : String(e) }
+      return { message: errorText(e) }
     }
   }
 
@@ -496,7 +509,7 @@ export class Store {
       if (!res.ok) return { available: true, error: body.error ?? `HTTP ${String(res.status)}` }
       return { data: body.settings, status: body.status, available: body.available !== false }
     } catch (e) {
-      return { available: true, error: e instanceof Error ? e.message : String(e) }
+      return { available: true, error: errorText(e) }
     }
   }
 
@@ -535,7 +548,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as UsageReport & { error?: string }
       return res.ok ? { data: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -549,7 +562,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as Page & { error?: string }
       return res.ok ? { data: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -595,7 +608,7 @@ export class Store {
       const body = (await res.json().catch(() => ({}))) as SearchResult & { error?: string }
       return res.ok ? { result: body } : { error: body.error ?? `HTTP ${String(res.status)}` }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
+      return { error: errorText(e) }
     }
   }
 
@@ -667,17 +680,14 @@ export class Store {
       const res = await apiFetch(this.token, `/api/sessions/${encodeURIComponent(sessionId)}/transcript?before=${String(first.seq)}&limit=300`)
       if (!res.ok) throw new Error(String(res.status))
       const page = (await res.json()) as Page
-      this.set({ ...this.state, data: prependOlder(this.state.data, page) })
+      this.set({ ...this.state, data: prependOlder(this.state.data, page, first.seq) })
     } catch {
       this.set({ ...this.state, data: setLoadingOlder(this.state.data, sessionId, false) })
     }
   }
 
   async startManager(): Promise<string | null> {
-    const res = await apiFetch(this.token, '/api/manager/start', { method: 'POST' })
-    if (res.ok) return null
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? `HTTP ${String(res.status)}`
+    return this.postAction('/api/manager/start')
   }
 
   getState = () => this.state
@@ -695,4 +705,8 @@ export class Store {
 
 export function useStore(store: Store): StoreState {
   return useSyncExternalStore(store.subscribe, store.getState)
+}
+
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }

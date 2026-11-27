@@ -316,7 +316,8 @@ function connTitle(c: ConnectionState): string {
 function Banners({ state, conn, onStartManager, onSetup }: Pick<Props, 'state' | 'conn' | 'onStartManager' | 'onSetup'>) {
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const { remote } = useRemote()
+  const remoteInfo = useRemote()
+  const { remote } = remoteInfo
   const banners = []
   if (conn.kind === 'open' && conn.demo) {
     banners.push(
@@ -364,9 +365,11 @@ function Banners({ state, conn, onStartManager, onSetup }: Pick<Props, 'state' |
     banners.push(
       <div key="awake" className="banner warn">
         agent-manager is not running, so statuses are frozen.
-        <button type="button" className="banner-button" onClick={start} disabled={starting}>
-          {starting ? 'Starting…' : 'Start headless manager'}
-        </button>
+        {can(remoteInfo, 'manage') && (
+          <button type="button" className="banner-button" onClick={start} disabled={starting}>
+            {starting ? 'Starting…' : 'Start headless manager'}
+          </button>
+        )}
         {startError && <span className="banner-detail">{startError}</span>}
       </div>,
     )
