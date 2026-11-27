@@ -163,6 +163,19 @@ func TestPrepare(t *testing.T) {
 		{"Before\n```\ncode\n```\nAfter", "Before\n\nCode omitted.\n\nAfter"},
 		{"| a | b |\n|---|---|\n| 1 | 2 |\nText", "Text"},
 		{"```\nunclosed code", "Code omitted."},
+		// Every form of code block stays on the desk.
+		{"Run:\n~~~bash\nexport API_KEY=sk-secret\n~~~\nDone.", "Run:\n\nCode omitted.\n\nDone."},
+		{"Run:\n\n    export API_KEY=sk-secret\n    make\n\nDone.", "Run:\n\nCode omitted.\n\nDone."},
+		{"Run:\n<pre>export API_KEY=sk-secret</pre>\nDone.", "Run:\n\nCode omitted.\n\nDone."},
+		{"1. Step one\n   ```sh\n   rm -rf build\n   ```\n2. Step two", "Step one\n\nCode omitted.\n\nStep two"},
+		{"````\n```\nnested\n```\n````\nAfter", "Code omitted.\n\nAfter"},
+		// Inline code is read only when it is one plain word.
+		{"Fixed the `parser` in `internal/transcript/parser.go`; set `API_KEY=sk-123` first.", "Fixed the parser in; set first."},
+		{"Run `go test ./...` and `make lint`.", "Run and."},
+		{"The `Ünïcode` word and `v2` tag.", "The Ünïcode word and tag."},
+		// A nested list and a list's continuation lines are not code.
+		{"- Top\n\n    - Nested item\n- Next", "Top\n\nNested item\nNext"},
+		{"1. First\n\n    More about the first.\n2. Second", "First\n\nMore about the first.\nSecond"},
 	}
 	for _, tt := range tests {
 		if got := Prepare(tt.in); got != tt.want {

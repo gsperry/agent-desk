@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/coder/websocket"
 
@@ -92,8 +93,18 @@ func (s *Server) requireRemote(need remote.Need, next http.HandlerFunc) http.Han
 }
 
 // remoteOriginAllowed accepts the remote host's own HTTPS origin, and no
-// origin only on reads that are not WebSocket upgrades.
+// origin only on reads that are not WebSocket upgrades. A request a browser
+// marks as sent from another site is refused, apart from following a link
+// to a page: the proxy vouches for the device, not for the page that sent
+// the request, so another site's page could otherwise make the device's
+// browser call the API.
 func remoteOriginAllowed(r *http.Request, host string, allowHTTP bool) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		if r.Header.Get("Sec-Fetch-Mode") != "navigate" || strings.HasPrefix(r.URL.Path, "/api/") {
+			return false
+		}
+	}
 	origin := r.Header.Get("Origin")
 	if origin != "" {
 		return origin == "https://"+host || (allowHTTP && origin == "http://"+host)

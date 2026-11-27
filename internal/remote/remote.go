@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Level is what a remote client may do. Each level includes the ones
@@ -284,6 +285,9 @@ func clone(s Settings) Settings {
 type Identity struct {
 	User string `json:"user"`
 	Via  string `json:"via"`
+	// Expires is when the proxy's proof of identity runs out: a Cloudflare
+	// Access token's expiry. Zero when the proxy gives none.
+	Expires time.Time `json:"-"`
 }
 
 // TailscaleHeader is the login `tailscale serve` adds to requests from
@@ -301,6 +305,7 @@ var cloudflareHeaders = []string{"Cf-Ray", "Cf-Connecting-Ip", AccessHeader}
 // user allowed are let in.
 func Identify(r *http.Request, s Settings, v Verifier) (Identity, bool) {
 	var user string
+	var expires time.Time
 	switch s.Proxy() {
 	case ViaTailscale:
 		// Requests that came through Cloudflare's edge never count as
@@ -324,12 +329,12 @@ func Identify(r *http.Request, s Settings, v Verifier) (Identity, bool) {
 		if err != nil {
 			return Identity{}, false
 		}
-		user = email
+		user, expires = email, TokenExpiry(values[0])
 	default:
 		return Identity{}, false
 	}
 	if user == "" || !s.Allowed(user) {
 		return Identity{}, false
 	}
-	return Identity{User: user, Via: s.Proxy()}, true
+	return Identity{User: user, Via: s.Proxy(), Expires: expires}, true
 }

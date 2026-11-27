@@ -432,7 +432,9 @@ func (s *Server) speakAllowed(r *http.Request) bool {
 		return false
 	}
 	if c, ok := remoteFrom(r.Context()); ok {
-		return c.settings.SpeakRemote
+		// Speaking is a reply-level route, so a device below that level
+		// is not offered it either.
+		return c.settings.SpeakRemote && c.settings.Level.Allows(remote.NeedReply)
 	}
 	return true
 }
@@ -481,7 +483,19 @@ func (s *Server) speak(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, tts.ErrEmpty):
 			status = http.StatusUnprocessableEntity
 		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		msg := err.Error()
+		if _, ok := remoteFrom(r.Context()); ok {
+			// The detail can name a local path; the desk's log has it.
+			msg = map[int]string{
+				http.StatusNotFound:            "Read aloud is not set up on the desk.",
+				http.StatusTooManyRequests:     "Read aloud is busy. Try again in a minute.",
+				http.StatusUnprocessableEntity: "There is no text to read.",
+			}[status]
+			if msg == "" {
+				msg = "Read aloud failed. The desk's log has the details."
+			}
+		}
+		writeJSON(w, status, map[string]string{"error": msg})
 		return
 	}
 	log.Printf("speak chars=%d bytes=%d", len(body.Text), len(audio))

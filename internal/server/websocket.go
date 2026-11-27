@@ -12,6 +12,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/gsperry/agent-desk/internal/hub"
+	"github.com/gsperry/agent-desk/internal/remote"
 )
 
 // maxSubscriptions bounds the transcripts one connection can follow.
@@ -64,6 +65,15 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	if c, ok := remoteFrom(r.Context()); ok && !c.id.Expires.IsZero() {
+		// The Access token was checked once, at the upgrade. When it runs
+		// out the socket closes, and the page reconnects with a fresh one,
+		// so access revoked in Cloudflare ends with the token.
+		expiry := time.AfterFunc(time.Until(c.id.Expires.Add(remote.Leeway)), func() {
+			conn.Close(websocket.StatusPolicyViolation, "sign-in expired")
+		})
+		defer expiry.Stop()
+	}
 
 	incoming := make(chan clientMessage)
 	go func() {

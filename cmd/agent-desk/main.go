@@ -195,7 +195,7 @@ func run(o options) error {
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	remoteAccess.handler = s.RemoteHandler()
 	remoteAccess.onChange = s.DropRemote
 	if o.demo {
@@ -498,7 +498,7 @@ func (r *remoteListener) apply(s remote.Settings) error {
 		}
 		return err
 	}
-	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second}
+	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	if !r.tcp {
 		r.srv.ConnContext = func(ctx context.Context, _ net.Conn) context.Context { return server.OnSocket(ctx) }
 	}
