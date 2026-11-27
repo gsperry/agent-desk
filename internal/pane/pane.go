@@ -69,9 +69,11 @@ var (
 	// one: choosing it declines the question and returns to the prompt.
 	freeLabel = regexp.MustCompile(`^Type something`)
 	checkbox  = regexp.MustCompile(`^\[(.)\]\s+(.+)$`)
-	nextLine  = regexp.MustCompile(`^\s*(❯)?\s*Next\s*$`)
-	stepItem  = regexp.MustCompile(`^([☐☒✔])\s+(.+)$`)
-	gap       = regexp.MustCompile(`\s{2,}`)
+	// nextLine is the unnumbered row that ends a several-answer question: Next
+	// when more questions follow, Submit when it is the only or last one.
+	nextLine = regexp.MustCompile(`^\s*(❯)?\s*(Next|Submit)\s*$`)
+	stepItem = regexp.MustCompile(`^([☐☒✔])\s+(.+)$`)
+	gap      = regexp.MustCompile(`\s{2,}`)
 )
 
 // footerLines is how far up from the bottom the footer is looked for, the
@@ -229,6 +231,13 @@ func reviewScreen(lines []string) bool {
 	return false
 }
 
+// nextOption is the row that moves a several-answer question on, labelled as
+// the screen labels it.
+func nextOption(line string) Option {
+	m := nextLine.FindStringSubmatch(line)
+	return Option{Label: m[2], Next: true, Selected: m[1] != ""}
+}
+
 // numberedOptions walks up from the footer collecting "N. label" lines down
 // to 1, skipping descriptions and separators between them. It returns the
 // line of option 1, or -1.
@@ -281,13 +290,13 @@ func numberedOptions(lines []string, top, footer int, d *Dialog) int {
 	}
 	for i := len(opts) - 1; i >= 0; i-- {
 		if next >= 0 && lineOf[i] > next {
-			d.Options = append(d.Options, Option{Label: "Next", Next: true, Selected: nextLine.FindStringSubmatch(lines[next])[1] != ""})
+			d.Options = append(d.Options, nextOption(lines[next]))
 			next = -1
 		}
 		d.Options = append(d.Options, opts[i])
 	}
 	if next >= 0 {
-		d.Options = append(d.Options, Option{Label: "Next", Next: true, Selected: nextLine.FindStringSubmatch(lines[next])[1] != ""})
+		d.Options = append(d.Options, nextOption(lines[next]))
 	}
 	for i := range d.Options {
 		d.Options[i].Index = i

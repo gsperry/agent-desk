@@ -3760,6 +3760,31 @@ mark {
   white-space: pre-wrap;
 }
 
+/* Error screen */
+
+.crash {
+  max-width: 44rem;
+  margin: 12vh auto 0;
+  padding: 0 1.2rem;
+}
+
+.crash-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+.crash-detail {
+  max-height: 40vh;
+  overflow: auto;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  white-space: pre-wrap;
+
 /* Model and effort dialog */
 
 .model-choices {
