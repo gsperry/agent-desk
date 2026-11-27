@@ -120,6 +120,9 @@ type fakePanes struct {
 	target  pane.AgentTarget
 	message string
 	stopped pane.AgentTarget
+	// modelFor and modelSet record ModelOptions and SetModel's arguments.
+	modelFor string
+	modelSet [2]string
 	// interrupted is set when Interrupt is called.
 	interrupted bool
 }
@@ -141,6 +144,16 @@ func (f *fakePanes) Interrupt(context.Context, string) error {
 func (f *fakePanes) MessageAgent(_ context.Context, _ string, t pane.AgentTarget, text string) error {
 	f.target, f.message = t, text
 	return f.err
+}
+
+func (f *fakePanes) ModelOptions(_ context.Context, id string) (pane.ModelOptions, error) {
+	f.modelFor = id
+	return pane.ModelOptions{Models: []pane.ModelChoice{{Label: "Opus 5.5", Efforts: []string{"Low", "High"}}}}, f.err
+}
+
+func (f *fakePanes) SetModel(_ context.Context, id, model, effort string) (pane.ModelResult, error) {
+	f.modelFor, f.modelSet = id, [2]string{model, effort}
+	return pane.ModelResult{Applied: "Set model to " + model}, f.err
 }
 
 func (f *fakePanes) StopAgent(_ context.Context, _ string, t pane.AgentTarget) error {
@@ -768,6 +781,53 @@ func TestMessageAgentRoute(t *testing.T) {
 			}
 			if tt.name == "delivered" && (p.target != (pane.AgentTarget{Type: "general-purpose", Description: "Pinger"}) || p.message != "Also say hello.") {
 				t.Fatalf("target %+v message %q", p.target, p.message)
+			}
+		})
+	}
+}
+
+func TestModelRoutes(t *testing.T) {
+	own := "http://127.0.0.1:7317"
+	tests := []struct {
+		name, path, body, origin string
+		err                      error
+		want                     int
+		check                    func(t *testing.T, p *fakePanes, body string)
+	}{
+		{"options", "/api/sessions/a1/model/options", "", own, nil, 200, func(t *testing.T, p *fakePanes, body string) {
+			if p.modelFor != "a1" || !strings.Contains(body, `"label":"Opus 5.5"`) || !strings.Contains(body, `"efforts":["Low","High"]`) {
+				t.Fatalf("for %q body %s", p.modelFor, body)
+			}
+		}},
+		{"options refused", "/api/sessions/a1/model/options", "", own, &send.Refused{Reason: "not_idle", Message: "working"}, 409, nil},
+		{"options without origin", "/api/sessions/a1/model/options", "", "", nil, 403, nil},
+		{"set", "/api/sessions/a1/model", `{"model":"Haiku 5.5","effort":"Low"}`, own, nil, 200, func(t *testing.T, p *fakePanes, body string) {
+			if p.modelFor != "a1" || p.modelSet != [2]string{"Haiku 5.5", "Low"} || !strings.Contains(body, `"applied":"Set model to Haiku 5.5"`) {
+				t.Fatalf("for %q set %v body %s", p.modelFor, p.modelSet, body)
+			}
+		}},
+		{"set refused", "/api/sessions/a1/model", `{"model":"x"}`, own, &send.Refused{Reason: "model_not_offered", Message: "no"}, 409, nil},
+		{"set failed", "/api/sessions/a1/model", `{"model":"x"}`, own, errors.New("tmux gone"), 502, nil},
+		{"set without origin", "/api/sessions/a1/model", `{"model":"x"}`, "", nil, 403, nil},
+		{"set bad body", "/api/sessions/a1/model", `{`, own, nil, 400, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &fakePanes{err: tt.err}
+			s := newTestServer(t, Config{Panes: p})
+			req := httptest.NewRequest("POST", tt.path, strings.NewReader(tt.body))
+			req.Host = "127.0.0.1:7317"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			req.Header.Set("Authorization", "Bearer "+testToken)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tt.want, rec.Body.String())
+			}
+			if tt.check != nil {
+				tt.check(t, p, rec.Body.String())
 			}
 		})
 	}
