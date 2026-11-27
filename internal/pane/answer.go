@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/gsperry/agent-desk/internal/hub"
@@ -18,8 +19,10 @@ import (
 // sent only by a step answer. C-u clears a question's text field before a
 // new answer is typed into it, and is sent only by a text answer. x stops
 // the subagent selected in Claude Code's agent list, and is sent only by
-// StopAgent once the list's hint offers "x to stop".
-var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true, "C-u": true, "x": true}
+// StopAgent once the list's hint offers "x to stop". s applies a model
+// choice to the session only, and is sent only by SetModel once the
+// picker's footer offers "s to use this session only".
+var AllowedKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true, "Left": true, "Right": true, "C-u": true, "x": true, "s": true}
 
 // pressKeys are the keys a key answer may press.
 var pressKeys = map[string]bool{"Up": true, "Down": true, "Enter": true, "Escape": true}
@@ -130,6 +133,9 @@ type Answerer struct {
 	Keys     Keys
 	// Typer enters text answers; nil refuses them.
 	Typer Typer
+	// Pause waits between reads of a changing screen; nil waits for real.
+	// Tests replace it.
+	Pause func(time.Duration)
 }
 
 // screenLines is how much of the screen the live pane shows.

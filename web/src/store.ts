@@ -8,7 +8,7 @@ import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
 import { defaultNotifier, type Notifier, type Permission } from './notify'
 import { statAlerts, type Level } from './model/stats'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
-import type { Answer, CatchUp, Changes, Conversation, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SpeechStatus, SystemStats, SpawnRequest, SubAgent, Summary } from './types'
+import type { Answer, CatchUp, Changes, Conversation, ModelOptions, ModelResult, SlashCommand, Item, Page, UsageReport, Screen, SearchResult, ServerMessage, SessionAction, SessionView, SetupReport, SpawnOptions, SpeechStatus, SystemStats, SpawnRequest, SubAgent, Summary } from './types'
 
 export interface Prefs {
   notify: boolean
@@ -415,6 +415,18 @@ export class Store {
   async act(sessionId: string, action: SessionAction): Promise<string | null> {
     const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/action`, action)
     return r.error ?? null
+  }
+
+  // modelOptions reads what the session's Claude Code model picker offers.
+  async modelOptions(sessionId: string): Promise<{ data?: ModelOptions; error?: string }> {
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/model/options`, {})
+    return { data: r.data as ModelOptions | undefined, error: r.error }
+  }
+
+  // setModel changes the session's model and effort for this session only.
+  async setModel(sessionId: string, model: string, effort: string): Promise<{ data?: ModelResult; error?: string }> {
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/model`, { model, effort })
+    return { data: r.data as ModelResult | undefined, error: r.error }
   }
 
   async createGroup(path: string, directory: string): Promise<string | null> {

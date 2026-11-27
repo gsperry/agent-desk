@@ -212,6 +212,11 @@ type Panes interface {
 	MessageAgent(ctx context.Context, sessionID string, t pane.AgentTarget, text string) error
 	// StopAgent stops one of the session's running subagents.
 	StopAgent(ctx context.Context, sessionID string, t pane.AgentTarget) error
+	// ModelOptions reads the models and effort levels Claude Code's model
+	// picker offers, then closes the picker.
+	ModelOptions(ctx context.Context, sessionID string) (pane.ModelOptions, error)
+	// SetModel changes the session's model and effort for this session only.
+	SetModel(ctx context.Context, sessionID, model, effort string) (pane.ModelResult, error)
 }
 
 type TranscriptSource interface {
@@ -297,6 +302,8 @@ func (s *Server) routes() {
 	s.route("GET /api/sessions/{id}/agents/{agent}/transcript", remote.NeedRead, s.agentTranscript)
 	s.route("POST /api/sessions/{id}/agents/{agent}/message", remote.NeedReply, s.messageAgent)
 	s.route("POST /api/sessions/{id}/agents/{agent}/stop", remote.NeedReply, s.stopAgent)
+	s.route("POST /api/sessions/{id}/model/options", remote.NeedReply, s.modelOptions)
+	s.route("POST /api/sessions/{id}/model", remote.NeedReply, s.setModel)
 	s.route("GET /api/sessions/{id}/changes", remote.NeedRead, s.changes)
 	s.route("GET /api/sessions/{id}/commands", remote.NeedRead, s.sessionCommands)
 	s.route("POST /api/paste", remote.NeedLocal, s.paste)
@@ -560,6 +567,38 @@ func (s *Server) stopAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// modelOptions reads what Claude Code's model picker offers. It is a POST
+// because it types /model into the session and closes the picker again.
+func (s *Server) modelOptions(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	opts, err := s.cfg.Panes.ModelOptions(ctx, r.PathValue("id"))
+	logOutcome("model-options", r.PathValue("id"), "", "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, opts)
+}
+
+// setModel changes a session's model and effort for the session only.
+func (s *Server) setModel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Model  string `json:"model"`
+		Effort string `json:"effort"`
+	}
+	if !decode(w, r, 4096, &body) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	res, err := s.cfg.Panes.SetModel(ctx, r.PathValue("id"), body.Model, body.Effort)
+	logOutcome("set-model", r.PathValue("id"), fmt.Sprintf("model=%q effort=%q", body.Model, body.Effort), "ok", err)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // runningAgent finds a running subagent of the session by id and names it

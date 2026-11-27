@@ -177,6 +177,27 @@ export type SessionAction =
   | { action: 'move'; group: string }
   | { action: 'rename'; name: string }
 
+// ModelChoice is a model Claude Code's picker offers, with the effort levels
+// it takes, lowest first.
+export interface ModelChoice {
+  label: string
+  description?: string
+  current?: boolean
+  efforts: string[]
+  defaultEffort?: string
+}
+
+export interface ModelOptions {
+  models: ModelChoice[]
+}
+
+// ModelResult is what a model change came to: Applied is Claude Code's own
+// words, Pending says it is asking the user to confirm the switch.
+export interface ModelResult {
+  applied?: string
+  pending?: boolean
+}
+
 export interface SubAgent {
   id: string
   toolUseId: string

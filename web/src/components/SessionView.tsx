@@ -8,7 +8,8 @@ import { OpenPathContext, SessionDirContext } from '../session-context'
 import type { Answer, GroupView, Screen, SessionAction } from '../types'
 import { AgentLinksContext } from '../agents-context'
 import { agentCounts } from '../model/agents'
-import type { CatchUp, Changes, SlashCommand, SubAgent } from '../types'
+import type { CatchUp, Changes, ModelOptions, ModelResult, SlashCommand, SubAgent } from '../types'
+import type { ModelControl } from './ModelDialog'
 import { AgentsPanel } from './AgentsPanel'
 import { NotesPanel } from './NotesPanel'
 import { togglePin } from '../model/pins'
@@ -48,6 +49,8 @@ interface Props {
   openPath: (id: string, ref: PathRef) => void
   groups: GroupView[]
   act: (id: string, a: SessionAction) => Promise<string | null>
+  modelOptions: (id: string) => Promise<{ data?: ModelOptions; error?: string }>
+  setModel: (id: string, model: string, effort: string) => Promise<{ data?: ModelResult; error?: string }>
   // seenMark is how far the reader had looked before opening this session.
   seenMark?: { seq: number }
   // agents is this session's subagents, read by the caller; null until
@@ -101,6 +104,21 @@ export function SessionView(props: Props) {
   const agents = useMemo(() => props.agents ?? [], [props.agents])
   const { onOpenAgent } = props
   const isClaude = session?.tool === 'claude'
+  // Changing the model types into the session and drives Claude Code's own
+  // picker, so it is offered for a running Claude Code session; the server
+  // says when the session is busy.
+  const { modelOptions, setModel } = props
+  const sessionRunning = session?.running === true
+  const modelControl = useMemo<ModelControl | undefined>(
+    () =>
+      mayReply && isClaude && sessionRunning
+        ? {
+            options: () => modelOptions(sessionId),
+            apply: (model, effort) => setModel(sessionId, model, effort),
+          }
+        : undefined,
+    [mayReply, isClaude, sessionRunning, modelOptions, setModel, sessionId],
+  )
   const agentLinks = useMemo(() => {
     const byToolUse = new Map(agents.map((a) => [a.toolUseId, a.id]))
     const ids = new Set(agents.map((a) => a.id))
@@ -277,6 +295,7 @@ export function SessionView(props: Props) {
                 groups={props.groups}
                 act={props.act}
                 manage={can(remoteInfo, 'manage')}
+                model={modelControl}
                 onExport={
                   isClaude && session.agentSessionId && d.items.length > 0
                     ? () => {
