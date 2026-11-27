@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { defaultViewPrefs, initiallyOpen, loadViewPrefs, sanitize, saveViewPrefs, toolCategory, type ViewPrefs } from './viewprefs'
 
+describe('order preference', () => {
+  it('defaults to agent-manager order and keeps a valid choice', () => {
+    expect(defaultViewPrefs.order).toBe('manager')
+    expect(sanitize({ order: 'attention' }).order).toBe('attention')
+    expect(sanitize({ order: 'alphabetical' }).order).toBe('manager')
+    expect(sanitize({ theme: 'dark' }).order).toBe('manager')
+  })
+})
+
 describe('sanitize', () => {
   it('defaults everything for junk', () => {
     expect(sanitize(null)).toEqual(defaultViewPrefs)

@@ -5,6 +5,7 @@ import type { SummarySettings } from '../model/summaries'
 import { useRemote } from '../remote-context'
 import { RemoteAccess, type RemoteSettings, type RemoteStatus } from './RemoteAccess'
 import type { Template } from '../model/templates'
+import type { Order } from '../model/sidebar'
 import { fontSizes, type EditsOpen, type Open, type Theme, type ViewPrefs, type Width } from '../model/viewprefs'
 import { desktopInvoke } from '../notify'
 import { desktopDictate } from '../dictate'
@@ -143,6 +144,20 @@ export function Settings({ prefs, onChange, snippets, onSnippets, templates, onT
               set({ width })
             }}
           />
+          <Segmented<Order>
+            label="Session order"
+            value={prefs.order}
+            options={[
+              ['manager', "Agent-manager's"],
+              ['attention', 'Needs you first'],
+            ]}
+            onChange={(order) => {
+              set({ order })
+            }}
+          />
+          <p className="muted setting-note">
+            Agent-manager's order is the one you set there with its reorder keys. It stays put when a status changes, and a session that needs you shows by its bold name and the Needs you filter. Needs you first moves sessions and groups as statuses change.
+          </p>
           <div className="setting">
             <label className="check">
               <input

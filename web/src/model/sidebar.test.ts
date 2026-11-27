@@ -46,6 +46,30 @@ describe('groupSessions', () => {
     expect(total).toBe(want)
   })
 
+  it('keeps agent-manager order when asked, whatever the statuses', () => {
+    const asListed = groupSessions(sessions, { showArchived: false, order: 'manager' })
+    // Projects by where their first session stands; sessions as listed.
+    expect(asListed.map((g) => g.project.name)).toEqual(['beta', 'alpha', 'gamma', 'delta'])
+    expect(asListed[1]?.sessions.map((x) => x.id)).toEqual(['a-working', 'a-finished'])
+    // A status change does not move anything.
+    const changed = sessions.map((x) => (x.id === 'd-dead' ? { ...x, status: 'waiting', running: true } : x))
+    expect(groupSessions(changed, { showArchived: false, order: 'manager' }).map((g) => g.project.name)).toEqual(['beta', 'alpha', 'gamma', 'delta'])
+    // Attention still counts per group, so the badge shows without moving it.
+    expect(groupSessions(changed, { showArchived: false, order: 'manager' })[3]?.attention).toBe(1)
+  })
+
+  it('lists agent-manager groups in its group order before other projects', () => {
+    const inGroup = (id: string, path: string, status: string) => s(id, path, status, { group: path, project: { key: 'group:' + path, name: path, kind: 'group' } })
+    const mixed = [s('r1', 'repo-one', 'idle'), inGroup('o1', 'ops', 'idle'), inGroup('w1', 'web', 'working'), s('r2', 'repo-two', 'idle')]
+    const groups = [{ path: 'web', directory: '' }, { path: 'ops', directory: '' }, { path: 'empty', directory: '' }]
+    const names = groupSessions(mixed, { showArchived: false, order: 'manager', groups }).map((g) => g.project.name)
+    expect(names).toEqual(['web', 'ops', 'empty', 'repo-one', 'repo-two'])
+  })
+
+  it('keeps the old order without an order option', () => {
+    expect(groupSessions(sessions, { showArchived: false }).map((g) => g.project.name)).toEqual(groupSessions(sessions, { showArchived: false, order: 'attention' }).map((g) => g.project.name))
+  })
+
   it('counts only unseen finished sessions and can filter to attention', () => {
     const acks = { 'a-finished': true as const }
     const groups = groupSessions(sessions, { showArchived: false, acks, onlyAttention: true })
