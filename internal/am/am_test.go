@@ -113,6 +113,8 @@ func TestType(t *testing.T) {
 		{"sent", nil, nil},
 		{"maybe sent", &run.ExitError{Name: "agent-manager", Code: 3, Stderr: "prompt may have reached"}, ErrMaybeSent},
 		{"not installed", fmt.Errorf("x: %w", run.ErrNotFound), ErrNotInstalled},
+		{"stopped at its deadline", fmt.Errorf("agent-manager %w after 10s", run.ErrTimeout), ErrMaybeSent},
+		{"cancelled", fmt.Errorf("agent-manager: %w", context.Canceled), ErrMaybeSent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

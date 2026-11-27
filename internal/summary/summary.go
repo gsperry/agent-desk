@@ -145,6 +145,11 @@ func Args(model string) []string {
 		"--no-session-persistence",
 		"--tools=",
 		"--strict-mcp-config",
+		// The user's hooks would run commands on every summary, and slash
+		// commands and skills are not needed. Settings are otherwise kept:
+		// they can carry the user's provider setup.
+		`--settings={"disableAllHooks":true}`,
+		"--disable-slash-commands",
 		// A one-line system prompt in place of Claude Code's default, which
 		// is several thousand tokens a summary does not need.
 		"--system-prompt=" + systemPrompt,

@@ -15,6 +15,28 @@ import (
 	"github.com/gsperry/agent-desk/internal/transcript"
 )
 
+// Write empties its directory, so it refuses one holding anything but an
+// earlier demo.
+func TestWriteLeavesOtherDirectoriesAlone(t *testing.T) {
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(keep, []byte("mine"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(dir, time.Now()); err == nil {
+		t.Fatal("wrote over a directory with other files")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("a file in the directory was removed")
+	}
+	demo := filepath.Join(t.TempDir(), "demo")
+	for i := 0; i < 2; i++ {
+		if err := Write(demo, time.Now()); err != nil {
+			t.Fatalf("write %d over an earlier demo: %v", i, err)
+		}
+	}
+}
+
 func TestWrite(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "demo")
 	if err := Write(dir, time.Now()); err != nil {

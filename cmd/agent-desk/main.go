@@ -187,8 +187,9 @@ func run(o options) error {
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
-			Timeout: 15 * time.Second,
-			Env:     changes.Env(procrun.Environ()),
+			Timeout:   15 * time.Second,
+			Env:       changes.Env(procrun.Environ()),
+			MaxOutput: changes.MaxOutput,
 		}}},
 	})
 	if err != nil {
@@ -326,7 +327,7 @@ func lookPath(fixtures string) func(string) (string, error) {
 
 func newPoller(fixtures string) (*hub.Poller, backend, error) {
 	home, _ := os.UserHomeDir()
-	p := &hub.Poller{Resolver: &grouping.Resolver{Runner: procrun.Exec{Timeout: 3 * time.Second}, Home: home}}
+	p := &hub.Poller{Resolver: &grouping.Resolver{Runner: procrun.Exec{Timeout: 3 * time.Second, Env: changes.Env(procrun.Environ())}, Home: home}}
 	if fixtures != "" {
 		f := am.Fixture{Path: filepath.Join(fixtures, "snapshot.json")}
 		p.Client = f

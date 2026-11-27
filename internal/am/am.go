@@ -130,8 +130,13 @@ func (c *CLI) ProfileVar(ctx context.Context, profile, key string) (string, erro
 func (c *CLI) Type(ctx context.Context, id, text string) error {
 	_, err := c.run(ctx, "type", "--json", "--", id, text)
 	var exitErr *run.ExitError
-	if errors.As(err, &exitErr) && exitErr.Code == exitMaybeSent {
+	switch {
+	case errors.As(err, &exitErr) && exitErr.Code == exitMaybeSent:
 		return fmt.Errorf("%w: %s", ErrMaybeSent, exitErr.Stderr)
+	case errors.Is(err, run.ErrTimeout), errors.Is(err, context.Canceled):
+		// Stopped partway, the paste may already be in the pane; a retry
+		// could send it twice.
+		return fmt.Errorf("%w: %v", ErrMaybeSent, err)
 	}
 	return err
 }

