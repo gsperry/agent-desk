@@ -67,7 +67,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/commands`: slash commands for autocomplete: built-ins generated from the Claude Code binary, custom commands, skills and enabled plugins (read-only)
 - `internal/search`: transcript search (raw-line prefilter, parse candidates only)
 - `internal/open`: open a file in VS Code (`code -g`), existing paths only
-- `internal/pane`: dialog parser, answers (allow-listed keys through `tmux -L agentmgr send-keys`) and the styled screen for the read-only color view
+- `internal/pane`: dialog parser, answers (allow-listed keys through `tmux -L agentmgr send-keys`), the model picker flow (`/model` read and driven with arrow keys, applied with `s` for the session only, never Enter) and the styled screen for the read-only color view
 - `internal/send`: reply gate (status, dialog footer, composer draft, text cleaning) and delivery through `agent-manager type`
 - `internal/server`: HTTP, WebSocket, auth checks
 - `web/src/model`: pure view-model logic, covered by Vitest

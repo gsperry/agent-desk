@@ -420,6 +420,8 @@ function Desk({ token }: { token: string }) {
   const readAgentTranscript = useCallback((id: string, agentId: string) => store.agentTranscript(id, agentId), [store])
   const spawn = useCallback((r: SpawnRequest) => store.spawn(r), [store])
   const act = useCallback((id: string, a: SessionAction) => store.act(id, a), [store])
+  const modelOptions = useCallback((id: string) => store.modelOptions(id), [store])
+  const setModel = useCallback((id: string, model: string, effort: string) => store.setModel(id, model, effort), [store])
   const openSpawn = useCallback((project: Project | null) => {
     setModal({ kind: 'spawn', initial: spawnDefaults(project, '', false) })
   }, [])
@@ -628,6 +630,8 @@ function Desk({ token }: { token: string }) {
                   openPath={openPath}
                   groups={amGroups}
                   act={act}
+                  modelOptions={modelOptions}
+                  setModel={setModel}
                   seenMark={session?.agentSessionId ? seen[session.agentSessionId] : undefined}
                   agents={agentList}
                   onOpenAgent={(id) => {
