@@ -28,15 +28,19 @@ test('the filter shows only sessions that need you', async ({ page }) => {
   await expect(nav(page).getByText('api-orchestrator')).toBeHidden()
 })
 
+// The walk follows the sidebar, which lists agent-manager's order: the lab
+// group first, then the other sessions as agent-manager lists them.
 test('j and k step through sessions that need you', async ({ page }) => {
   await open(page, 'a0000001')
   await expect(page).toHaveTitle('(3) Agent Desk')
   await page.keyboard.press('j')
-  await expect(page).toHaveURL(/\/s\/a0000008$/)
+  await expect(page).toHaveURL(/\/s\/a0000002$/)
   await page.keyboard.press('j')
   await expect(page).toHaveURL(/\/s\/a0000003$/)
+  await page.keyboard.press('j')
+  await expect(page).toHaveURL(/\/s\/a0000008$/)
   await page.keyboard.press('k')
-  await expect(page).toHaveURL(/\/s\/a0000002$/)
+  await expect(page).toHaveURL(/\/s\/a0000003$/)
 })
 
 test('j does nothing while typing in the composer', async ({ page }) => {
@@ -47,7 +51,7 @@ test('j does nothing while typing in the composer', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: /Reply to/ })).toHaveValue('j')
   await page.keyboard.press('Escape')
   await page.keyboard.press('j')
-  await expect(page).toHaveURL(/\/s\/a0000008$/)
+  await expect(page).toHaveURL(/\/s\/a0000002$/)
 })
 
 test('Cmd+K switches sessions by name', async ({ page }) => {
