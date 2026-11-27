@@ -58,7 +58,7 @@ Check every new sample for leaks before committing: grep it for names, hosts and
 - `internal/history`: every conversation on disk (listing cached by size and mtime) and read-only paging
 - `internal/export`: transcript to Markdown
 - `internal/usage`: tokens, time and reported cost by day, model and conversation, followed incrementally per file
-- `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in and on request only
+- `internal/summary`: catch-up summaries through the user's `claude -p`, opt-in (setting kept by the server in an owner-only `summaries.json`, refused while off) and on request only
 - `internal/remote`: remote access levels, settings (owner-only file), the Tailscale identity check and Cloudflare Access token verification
 - `internal/demo`: the made-up sessions behind `agent-desk --demo` and the site's images, and the demo's live behavior (an answered prompt plays out; a reply gets a note)
 - `internal/tts`: optional read aloud through ElevenLabs, from an owner-only `tts.json`; one request per press, code left out, rate-limited, cached; a silent stand-in in fixture mode

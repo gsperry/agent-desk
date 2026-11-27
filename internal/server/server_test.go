@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -939,20 +940,32 @@ func TestConversationRoutes(t *testing.T) {
 }
 
 func TestSummaryRoute(t *testing.T) {
+	on := summary.Settings{Enabled: true, Model: "sonnet"}
 	tests := []struct {
 		name, id, body, origin string
+		settings               *summary.Settings
 		want                   int
 		wantBody               string
 	}{
-		{"summary", "a1", `{"since":7,"model":"haiku"}`, "http://127.0.0.1:7317", 200, `"text":"since 7"`},
-		{"nothing new", "none", `{"since":7,"model":"haiku"}`, "http://127.0.0.1:7317", 409, "nothing_new"},
-		{"bad body", "a1", `nope`, "http://127.0.0.1:7317", 400, "JSON"},
-		{"needs origin", "a1", `{"since":7,"model":"haiku"}`, "", 403, ""},
-		{"wrong origin", "a1", `{"since":7,"model":"haiku"}`, "https://evil.example", 403, ""},
+		{"summary with the saved model", "a1", `{"since":7,"model":"haiku"}`, "http://127.0.0.1:7317", &on, 200, `"model":"sonnet"`},
+		{"nothing new", "none", `{"since":7}`, "http://127.0.0.1:7317", &on, 409, "nothing_new"},
+		{"refused while off", "a1", `{"since":7}`, "http://127.0.0.1:7317", &summary.Settings{Model: "haiku"}, 409, "summaries_off"},
+		{"refused with no settings", "a1", `{"since":7}`, "http://127.0.0.1:7317", nil, 409, "summaries_off"},
+		{"bad body", "a1", `nope`, "http://127.0.0.1:7317", &on, 400, "JSON"},
+		{"needs origin", "a1", `{"since":7}`, "", &on, 403, ""},
+		{"wrong origin", "a1", `{"since":7}`, "https://evil.example", &on, 403, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := newTestServer(t, Config{})
+			cfg := Config{}
+			if tt.settings != nil {
+				st := &summary.SettingsStore{Path: filepath.Join(t.TempDir(), "summaries.json")}
+				if _, err := st.Set(*tt.settings); err != nil {
+					t.Fatal(err)
+				}
+				cfg.SummarySettings = st
+			}
+			s := newTestServer(t, cfg)
 			req := httptest.NewRequest("POST", "/api/sessions/"+tt.id+"/summary", strings.NewReader(tt.body))
 			req.Host = "127.0.0.1:7317"
 			if tt.origin != "" {
@@ -965,6 +978,32 @@ func TestSummaryRoute(t *testing.T) {
 				t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestSummarySettingsRoutes(t *testing.T) {
+	st := &summary.SettingsStore{Path: filepath.Join(t.TempDir(), "summaries.json")}
+	s := newTestServer(t, Config{SummarySettings: st})
+	do := func(method, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/summaries", strings.NewReader(body))
+		req.Host = "127.0.0.1:7317"
+		req.Header.Set("Origin", "http://127.0.0.1:7317")
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := do("GET", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"enabled":false`) || !strings.Contains(rec.Body.String(), `"model":"haiku"`) {
+		t.Fatalf("default: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := do("POST", `{"enabled":true,"model":" sonnet "}`); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"model":"sonnet"`) {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body.String())
+	}
+	if !st.Get().Enabled {
+		t.Fatal("not saved")
+	}
+	if rec := do("POST", `{"enabled":true,"model":"bad model!"}`); rec.Code != 409 {
+		t.Fatalf("bad model: %d %s", rec.Code, rec.Body.String())
 	}
 }
 

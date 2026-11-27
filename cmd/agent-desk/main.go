@@ -177,13 +177,15 @@ func run(o options) error {
 		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
-		Remote:      remoteControl,
-		Demo:        o.demo,
-		Access:      &remote.AccessKeys{},
-		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
-		Setup:       &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
-		Stats:       statsSource(o.fixtures, sampler),
-		Speech:      speechSource(o.fixtures, remoteStore.Path),
+		// Beside remote.json: Agent Desk's config folder, or the fixtures.
+		SummarySettings: &summary.SettingsStore{Path: filepath.Join(filepath.Dir(remoteStore.Path), "summaries.json")},
+		Remote:          remoteControl,
+		Demo:            o.demo,
+		Access:          &remote.AccessKeys{},
+		Commands:        commands.Lister{Root: transcripts.Locator.DefaultRoot},
+		Setup:           &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
+		Stats:           statsSource(o.fixtures, sampler),
+		Speech:          speechSource(o.fixtures, remoteStore.Path),
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{

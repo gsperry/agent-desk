@@ -5,6 +5,7 @@ import { applyMessage, emptyData, prependOlder, setLoadingOlder, type AppData } 
 import { expire, reconcile, type Pending } from './model/pending'
 import { applyRules, loadRules, saveRules, type Rule, type Suggestion } from './model/rules'
 import { baseline, loadSeen, markSeen, saveSeen, type Seen } from './model/seen'
+import { parseSummaries, type SummarySettings } from './model/summaries'
 import { defaultNotifier, type Notifier, type Permission } from './notify'
 import { statAlerts, type Level } from './model/stats'
 import type { RemoteSettings, RemoteStatus } from './components/RemoteAccess'
@@ -535,10 +536,34 @@ export class Store {
   }
 
   // catchUp asks the user's Claude Code CLI for a summary of what happened
-  // after since. It spends tokens, so the UI only offers it when turned on.
-  async catchUp(sessionId: string, since: number, model: string): Promise<{ data?: CatchUp; error?: string }> {
-    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/summary`, { since, model })
+  // after since, with the model in the summary settings. It spends tokens,
+  // so the server refuses it until summaries are turned on; a settings save
+  // still on its way is waited for.
+  async catchUp(sessionId: string, since: number): Promise<{ data?: CatchUp; error?: string }> {
+    await this.summarySaving
+    const r = await this.post(`/api/sessions/${encodeURIComponent(sessionId)}/summary`, { since })
     return { data: r.data as CatchUp | undefined, error: r.error }
+  }
+
+  private summarySaving: Promise<unknown> = Promise.resolve()
+
+  // summarySettings reads whether summaries are on and their model.
+  async summarySettings(): Promise<SummarySettings | null> {
+    try {
+      const res = await apiFetch(this.token, '/api/summaries')
+      return res.ok ? parseSummaries(await res.text()) : null
+    } catch {
+      return null
+    }
+  }
+
+  // saveSummarySettings saves them on the server, which is what allows a
+  // summary.
+  async saveSummarySettings(s: SummarySettings): Promise<string | null> {
+    const saving = this.post('/api/summaries', s)
+    this.summarySaving = saving
+    const r = await saving
+    return r.error ?? null
   }
 
   // usage totals tokens, time and reported cost over the last days days.

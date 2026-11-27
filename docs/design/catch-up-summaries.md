@@ -17,7 +17,7 @@ The hard rules in `CLAUDE.md` say Agent Desk runs only `agent-manager`, `tmux` a
 - Input: the session's items since the "since you last looked" mark, rendered with `internal/export` (prompts and replies, tool calls one line each), capped at about 40k characters, newest kept. Passed on stdin, not argv.
 - Runs only when asked: one click, one summary. Never on a timer, never from a rule.
 - Shows the result with the tokens it used and the model, and caches it by session and transcript size, so asking twice costs nothing.
-- Off by default. Settings has "Allow catch-up summaries (spends tokens on your Claude Code provider)".
+- Off by default. Settings has "Allow catch-up summaries (spends tokens on your Claude Code provider)". The server keeps the setting and the model in `summaries.json` in Agent Desk's config folder (owner-only) and refuses a summary while it is off, whoever asks.
 
 ## Decisions needed
 

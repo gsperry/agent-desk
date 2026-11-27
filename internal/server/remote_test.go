@@ -301,6 +301,8 @@ func TestRouteNeeds(t *testing.T) {
 		"GET /api/conversations/{id}/transcript":           remote.NeedRead,
 		"GET /api/conversations/{id}/export":               remote.NeedRead,
 		"POST /api/sessions/{id}/summary":                  remote.NeedLocal,
+		"GET /api/summaries":                               remote.NeedLocal,
+		"POST /api/summaries":                              remote.NeedLocal,
 		"GET /api/usage":                                   remote.NeedRead,
 		"GET /api/overview":                                remote.NeedRead,
 		"GET /api/spawn-options":                           remote.NeedManage,

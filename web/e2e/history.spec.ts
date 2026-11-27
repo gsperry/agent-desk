@@ -154,6 +154,13 @@ test('catch-up summaries are off by default, and say what they cost when on', as
   const main = page.getByRole('main')
   await expect(main.getByRole('heading', { name: 'reviewer' })).toBeVisible()
   await expect(main.getByRole('button', { name: 'Catch me up' })).toHaveCount(0)
+  // The server refuses a summary while they are off, whoever asks.
+  const refused = await page.request.post(`${base}/api/sessions/a0000011/summary`, {
+    headers: { Authorization: `Bearer ${token}`, Origin: base, 'Content-Type': 'application/json' },
+    data: { since: 0 },
+  })
+  expect(refused.status()).toBe(409)
+  expect(await refused.text()).toContain('summaries_off')
   await page.getByRole('navigation', { name: 'Sessions' }).getByRole('button', { name: 'Settings' }).click()
   const settings = page.getByRole('dialog', { name: 'Settings' })
   await expect(settings).toContainText('Each summary costs tokens on your Claude Code provider.')
