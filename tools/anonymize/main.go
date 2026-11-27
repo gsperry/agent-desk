@@ -1,7 +1,7 @@
 // Command anonymize turns a real Claude Code transcript into a test sample.
 //
-// It keeps every record's structure, keys, ids, timestamps, versions, tool
-// names and the markers the parser classifies by, and replaces every other
+// It keeps every record's structure, keys, ids, timestamps, versions,
+// built-in tool names and the markers the parser classifies by, and replaces every other
 // letter and digit with filler of the same class, so lengths, whitespace,
 // punctuation and markdown survive. JSON numbers are kept. Large request
 // payload records are dropped after the first few, and an optional record
@@ -39,11 +39,22 @@ var keepKeys = map[string]bool{
 	"taskKind": true, "querySource": true, "turnOrigin": true, "origin": true,
 }
 
+// parserTags are the tags the parser and the subagent reader classify by.
+var parserTags = []string{
+	"command-name", "command-message", "command-args",
+	"local-command-stdout", "local-command-stderr", "local-command-caveat",
+	"bash-input", "bash-stdout", "bash-stderr",
+	"system-reminder", "ide_opened_file", "ide_selection", "user-prompt-submit-hook",
+	"task-notification", "task-id", "tool-use-id", "status", "summary", "result", "output-file",
+}
+
 // preserve are spans of text kept verbatim inside replaced strings.
 var preserve = regexp.MustCompile(strings.Join([]string{
 	`(?s)\A.*?agent-manager rename "<name>".*?Then (?:do the task:|continue\.)`,
 	"```[A-Za-z0-9_+-]*",
-	`</?[A-Za-z][A-Za-z0-9_-]*>`,
+	// Only tags the parser reads are kept; any other tag name could be a
+	// word from the conversation, such as a project or product name.
+	`</?(?:` + strings.Join(parserTags, "|") + `)>`,
 	`\[Request interrupted[^\]]*\]`,
 	// A message sent to an agent mid-turn, wrapped by Claude Code.
 	`The user sent a new message while you were working:`,
@@ -117,6 +128,11 @@ func walk(v any, key string, parent map[string]any) any {
 		case keepKeys[key]:
 			return t
 		case key == "name" && parent != nil && (parent["type"] == "tool_use" || parent["input"] != nil):
+			// MCP tool names say which services a user connects; their
+			// shape (mcp__server__tool) is kept, their words are not.
+			if strings.HasPrefix(t, "mcp__") {
+				return "mcp__" + scramble(t[len("mcp__"):])
+			}
 			return t
 		case key == "signature":
 			return "sig"
