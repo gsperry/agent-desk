@@ -122,12 +122,30 @@ func TestConcurrentSendIsRefused(t *testing.T) {
 	}
 }
 
+func TestSharedLockRefusesSend(t *testing.T) {
+	locks := &Locks{}
+	s := &Sender{Sessions: &fakeSessions{}, Pane: &fakePane{}, Locks: locks}
+	if !locks.Claim("a") {
+		t.Fatal("claim")
+	}
+	_, err := s.Send(context.Background(), "a", "hi")
+	var refused *Refused
+	if !errors.As(err, &refused) || refused.Reason != ReasonBusy {
+		t.Fatalf("send while another flow holds the lock: %v", err)
+	}
+	locks.Release("a")
+	if !locks.Claim("a") {
+		t.Fatal("lock not released")
+	}
+}
+
 const idleScreen = "────────────────────────────────────────\n❯ \n────────────────────────────────────────\n"
 
 func (s *Sender) busy(id string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.inFlight[id]
+	l := s.locks()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.held[id]
 }
 
 // styledPane also serves the screen with its colors.

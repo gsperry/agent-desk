@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -39,6 +40,8 @@ type Keys interface {
 
 // TmuxKeys sends keys through agent-manager's tmux server. Every call names
 // the agentmgr socket and pane 0, which agent-manager keeps as the agent.
+// The = makes tmux match the session name exactly: without it, a session
+// that just ended would fall back to another whose name starts the same.
 type TmuxKeys struct {
 	Runner run.Runner
 }
@@ -47,7 +50,7 @@ func (k TmuxKeys) Send(ctx context.Context, id string, keys ...string) error {
 	if err := checkKeys(id, keys); err != nil {
 		return err
 	}
-	args := append([]string{"-L", "agentmgr", "send-keys", "-t", "am_" + id + ".0"}, keys...)
+	args := append([]string{"-L", "agentmgr", "send-keys", "-t", "=am_" + id + ":.0"}, keys...)
 	_, err := k.Runner.Run(ctx, "tmux", args...)
 	return err
 }
@@ -107,6 +110,18 @@ type Answer struct {
 	Label  string `json:"label"`
 	Key    string `json:"key"`
 	Text   string `json:"text,omitempty"`
+	// Fingerprint is the dialog's fingerprint as the user saw it. Answers
+	// that confirm, cancel or type need it to match the screen now.
+	Fingerprint string `json:"fingerprint"`
+}
+
+// sameDialog refuses an answer given for a dialog other than the one on
+// screen.
+func sameDialog(d *Dialog, ans Answer) *send.Refused {
+	if ans.Fingerprint == "" || d.Fingerprint != ans.Fingerprint {
+		return &send.Refused{Reason: reasonChanged, Message: "The question on screen changed. Check it again before answering."}
+	}
+	return nil
 }
 
 // Typer submits text in a session's pane. It is agent-manager type.
@@ -136,6 +151,25 @@ type Answerer struct {
 	// Pause waits between reads of a changing screen; nil waits for real.
 	// Tests replace it.
 	Pause func(time.Duration)
+	// Locks is shared with the reply sender, so only one flow drives a
+	// session's terminal at a time; nil keeps one of its own.
+	Locks *send.Locks
+
+	once sync.Once
+}
+
+// lock takes the session's terminal for one flow. The release must run
+// when the flow ends.
+func (a *Answerer) lock(id string) (func(), *send.Refused) {
+	a.once.Do(func() {
+		if a.Locks == nil {
+			a.Locks = &send.Locks{}
+		}
+	})
+	if !a.Locks.Claim(id) {
+		return nil, send.Busy()
+	}
+	return func() { a.Locks.Release(id) }, nil
 }
 
 // screenLines is how much of the screen the live pane shows.
@@ -174,6 +208,11 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 	if refused := a.check(id); refused != nil {
 		return refused
 	}
+	release, refused := a.lock(id)
+	if refused != nil {
+		return refused
+	}
+	defer release()
 	var keys []string
 	switch ans.Action {
 	case "key":
@@ -186,8 +225,12 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 		if err != nil {
 			return fmt.Errorf("could not read the session's screen, so nothing was pressed: %w", err)
 		}
-		if Parse(text) == nil {
+		d := Parse(text)
+		if d == nil {
 			return &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a question."}
+		}
+		if refused := sameDialog(d, ans); refused != nil {
+			return refused
 		}
 		keys = []string{ans.Key}
 	case "choose":
@@ -201,8 +244,16 @@ func (a *Answerer) Answer(ctx context.Context, id string, ans Answer) error {
 		if d == nil || len(d.Options) == 0 {
 			return &send.Refused{Reason: reasonNoDialog, Message: "The session is no longer showing a choice."}
 		}
+		if refused := sameDialog(d, ans); refused != nil {
+			return refused
+		}
 		if ans.Index < 0 || ans.Index >= len(d.Options) || d.Options[ans.Index].Label != ans.Label {
 			return &send.Refused{Reason: reasonChanged, Message: "The choice on screen changed. Check it again before answering."}
+		}
+		// The arrow keys start from the cursor; a list with none drawn is
+		// not a menu that is asking.
+		if !d.hasCursor() {
+			return &send.Refused{Reason: reasonChanged, Message: "Agent Desk cannot see which option is selected, so nothing was pressed. Answer in the terminal."}
 		}
 		// A typed answer in a question that takes several is ticked and
 		// unticked like the other answers; any other text field takes text.
@@ -297,6 +348,12 @@ func (a *Answerer) answerText(ctx context.Context, id string, ans Answer) error 
 	if err != nil {
 		return err
 	}
+	if refused := sameDialog(d, ans); refused != nil {
+		return refused
+	}
+	if !d.hasCursor() {
+		return &send.Refused{Reason: reasonChanged, Message: "Agent Desk cannot see which option is selected, so nothing was typed. Answer in the terminal."}
+	}
 	if ans.Index < 0 || ans.Index >= len(d.Options) || d.Options[ans.Index].Label != ans.Label || !d.Options[ans.Index].Free {
 		return &send.Refused{Reason: reasonChanged, Message: "The choice on screen changed. Check it again before answering."}
 	}
@@ -385,6 +442,11 @@ func (a *Answerer) Interrupt(ctx context.Context, id string) error {
 	if refused := a.check(id); refused != nil {
 		return refused
 	}
+	release, refused := a.lock(id)
+	if refused != nil {
+		return refused
+	}
+	defer release()
 	for _, s := range a.Sessions.State().Sessions {
 		if s.ID == id && s.Status != "working" {
 			return &send.Refused{Reason: reasonNotBusy, Message: "The session is not working, so there is nothing to interrupt."}

@@ -154,6 +154,9 @@ func run(o options) error {
 		return err
 	}
 	addr := l.Addr().String()
+	// One flow at a time drives a session's terminal: replies and answers
+	// share these.
+	locks := &send.Locks{}
 	s, err := server.New(server.Config{
 		Addr:        addr,
 		Token:       token,
@@ -163,8 +166,8 @@ func run(o options) error {
 		Sessions:    poller,
 		Manager:     client,
 		Transcripts: transcripts,
-		Sender:      &send.Sender{Sessions: poller, Pane: client},
-		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures), Typer: client},
+		Sender:      &send.Sender{Sessions: poller, Pane: client, Locks: locks},
+		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures), Typer: client, Locks: locks},
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},

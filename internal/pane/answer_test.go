@@ -32,6 +32,126 @@ func (r *recordKeys) Send(_ context.Context, _ string, keys ...string) error {
 	return nil
 }
 
+// seen gives an answer the fingerprint of the dialog on screen, as the
+// page does.
+func seen(screen string, ans Answer) Answer {
+	if d := Parse(screen); d != nil && ans.Fingerprint == "" {
+		ans.Fingerprint = d.Fingerprint
+	}
+	return ans
+}
+
+// An answer is refused on a dialog other than the one it was given for,
+// even when the options read the same, as with the next permission prompt.
+func TestAnswerNeedsTheSameDialog(t *testing.T) {
+	perm := read(t, "permission.txt")
+	next := strings.ReplaceAll(perm, "touch /tmp/agentdesk-scratch/probe/perm-test.txt", "rm -rf /tmp/agentdesk-scratch/probe")
+	moved := strings.Replace(strings.Replace(perm, " ❯ 1. Yes", "   1. Yes", 1), "   4. No", " ❯ 4. No", 1)
+	if Parse(perm).Fingerprint == Parse(next).Fingerprint {
+		t.Fatal("different commands share a fingerprint")
+	}
+	if Parse(perm).Fingerprint != Parse(moved).Fingerprint {
+		t.Fatal("moving the cursor changed the fingerprint")
+	}
+	given := seen(perm, Answer{Action: "choose", Index: 0, Label: "Yes"})
+	tests := []struct {
+		name     string
+		screen   string
+		ans      Answer
+		wantKeys []string
+	}{
+		{"same dialog", perm, given, []string{"Enter"}},
+		{"cursor moved", moved, given, []string{"Up", "Up", "Up", "Enter"}},
+		{"next prompt", next, given, nil},
+		{"no fingerprint", perm, Answer{Action: "choose", Index: 0, Label: "Yes"}, nil},
+		{"cancel on the next prompt", next, Answer{Action: "key", Key: "Escape", Fingerprint: given.Fingerprint}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keys := &recordKeys{}
+			a := &Answerer{
+				Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+				Reader:   fakeReader{screen: tt.screen},
+				Keys:     keys,
+			}
+			err := a.Answer(context.Background(), "s1", tt.ans)
+			if tt.wantKeys == nil {
+				var refused *send.Refused
+				if !errors.As(err, &refused) || refused.Reason != reasonChanged || len(keys.got) != 0 {
+					t.Fatalf("err = %v, keys = %v; want a refusal", err, keys.got)
+				}
+				return
+			}
+			if err != nil || !reflect.DeepEqual(keys.got, tt.wantKeys) {
+				t.Fatalf("keys = %v, err = %v; want %v", keys.got, err, tt.wantKeys)
+			}
+		})
+	}
+}
+
+// A numbered list with a footer but no cursor, such as one quoted in an
+// agent's reply, is not answered with arrow keys counted from its top.
+func TestChooseNeedsACursor(t *testing.T) {
+	screen := "⏺ Options:\n\n  1. alpha\n  2. beta\n\nPress Esc to cancel at any time.\n"
+	d := Parse(screen)
+	if d == nil || len(d.Options) != 2 {
+		t.Skipf("screen not read as a dialog: %+v", d)
+	}
+	keys := &recordKeys{}
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+		Reader:   fakeReader{screen: screen},
+		Keys:     keys,
+	}
+	err := a.Answer(context.Background(), "s1", seen(screen, Answer{Action: "choose", Index: 1, Label: "beta"}))
+	var refused *send.Refused
+	if !errors.As(err, &refused) || len(keys.got) != 0 {
+		t.Fatalf("err = %v, keys = %v", err, keys.got)
+	}
+}
+
+// Claude Code's model picker saves the user's default on Enter, so it is
+// never offered or answered as a question.
+func TestPickerIsNotADialog(t *testing.T) {
+	if d := Parse(pickerTop); d != nil {
+		t.Fatalf("picker read as a dialog: %+v", d)
+	}
+	keys := &recordKeys{}
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+		Reader:   fakeReader{screen: pickerTop},
+		Keys:     keys,
+	}
+	for _, ans := range []Answer{{Action: "choose", Index: 0, Label: "Default"}, {Action: "key", Key: "Enter"}} {
+		if err := a.Answer(context.Background(), "s1", ans); err == nil || len(keys.got) != 0 {
+			t.Fatalf("%+v: err = %v, keys = %v", ans, err, keys.got)
+		}
+	}
+}
+
+// One flow at a time drives a session's terminal.
+func TestAnswerWaitsForTheTerminal(t *testing.T) {
+	locks := &send.Locks{}
+	perm := read(t, "permission.txt")
+	keys := &recordKeys{}
+	a := &Answerer{
+		Sessions: &fakeSessions{st: hub.State{Sessions: []hub.SessionView{{ID: "s1", Running: true}}}},
+		Reader:   fakeReader{screen: perm},
+		Keys:     keys,
+		Locks:    locks,
+	}
+	locks.Claim("s1")
+	err := a.Answer(context.Background(), "s1", seen(perm, Answer{Action: "choose", Index: 0, Label: "Yes"}))
+	var refused *send.Refused
+	if !errors.As(err, &refused) || refused.Reason != send.ReasonBusy || len(keys.got) != 0 {
+		t.Fatalf("err = %v, keys = %v", err, keys.got)
+	}
+	locks.Release("s1")
+	if err := a.Answer(context.Background(), "s1", seen(perm, Answer{Action: "choose", Index: 0, Label: "Yes"})); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAnswer(t *testing.T) {
 	perm := read(t, "permission.txt")
 	ask := read(t, "ask-question.txt")
@@ -79,7 +199,7 @@ func TestAnswer(t *testing.T) {
 				Reader:   fakeReader{screen: tt.screen},
 				Keys:     keys,
 			}
-			err := a.Answer(context.Background(), "s1", tt.ans)
+			err := a.Answer(context.Background(), "s1", seen(tt.screen, tt.ans))
 			if tt.reason != "" {
 				var refused *send.Refused
 				if !errors.As(err, &refused) || refused.Reason != tt.reason {
@@ -211,7 +331,7 @@ func TestAnswerText(t *testing.T) {
 			if tt.typer {
 				a.Typer = typer
 			}
-			err := a.Answer(context.Background(), "s1", tt.ans)
+			err := a.Answer(context.Background(), "s1", seen(tt.screens[0], tt.ans))
 			if tt.reason != "" {
 				var refused *send.Refused
 				if !errors.As(err, &refused) || refused.Reason != tt.reason {
@@ -234,7 +354,7 @@ func TestChatAboutThisIsAButton(t *testing.T) {
 		Reader:   fakeReader{screen: read(t, "askq-free-initial.txt")},
 		Keys:     keys,
 	}
-	if err := a.Answer(context.Background(), "s1", Answer{Action: "choose", Index: 3, Label: "Chat about this"}); err != nil {
+	if err := a.Answer(context.Background(), "s1", seen(read(t, "askq-free-initial.txt"), Answer{Action: "choose", Index: 3, Label: "Chat about this"})); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(keys.got, []string{"Down", "Down", "Down", "Enter"}) {
@@ -292,7 +412,7 @@ func TestTmuxKeys(t *testing.T) {
 	if err := (TmuxKeys{Runner: r}).Send(context.Background(), "3486b2c0", "Down", "Enter"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(r.args, " "); got != "tmux -L agentmgr send-keys -t am_3486b2c0.0 Down Enter" {
+	if got := strings.Join(r.args, " "); got != "tmux -L agentmgr send-keys -t =am_3486b2c0:.0 Down Enter" {
 		t.Fatalf("args = %q", got)
 	}
 	tests := []struct {

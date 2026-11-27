@@ -5,6 +5,8 @@
 package pane
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
 	"strings"
 	"unicode"
@@ -20,6 +22,11 @@ type Dialog struct {
 	Multi bool `json:"multi,omitempty"`
 	// Steps are the tabs of a prompt with several questions, in order.
 	Steps []Step `json:"steps,omitempty"`
+	// Fingerprint identifies the dialog as drawn, apart from where its
+	// cursor is. An answer carries the one it was given for, so it never
+	// lands on a different dialog with the same options, such as the next
+	// permission prompt.
+	Fingerprint string `json:"fingerprint"`
 }
 
 // Step is one tab of a prompt with several questions. Done marks a
@@ -63,8 +70,12 @@ type Option struct {
 
 var (
 	footerPattern = regexp.MustCompile(`Enter to (?:confirm|select)|Esc to cancel`)
-	numbered      = regexp.MustCompile(`^(\s*)(❯)?\s*(\d{1,2})\.\s+(.+?)\s*$`)
-	separator     = regexp.MustCompile(`^\s*[─╌━-]{10,}\s*$`)
+	// settingsFooter ends a picker where Enter saves a setting, such as
+	// Claude Code's model picker. It is not a question to answer: Enter
+	// there would change the user's defaults.
+	settingsFooter = regexp.MustCompile(`Enter to save`)
+	numbered       = regexp.MustCompile(`^(\s*)(❯)?\s*(\d{1,2})\.\s+(.+?)\s*$`)
+	separator      = regexp.MustCompile(`^\s*[─╌━-]{10,}\s*$`)
 	// freeLabel is an option that is a text field. "Chat about this" is not
 	// one: choosing it declines the question and returns to the prompt.
 	freeLabel = regexp.MustCompile(`^Type something`)
@@ -97,6 +108,9 @@ func Parse(screen string) *Dialog {
 	bare := false
 	if footer >= 0 {
 		footerText = strings.TrimSpace(lines[footer])
+		if settingsFooter.MatchString(footerText) {
+			return nil
+		}
 	} else if reviewScreen(lines) {
 		// Claude Code's last step of a multi-question prompt has no
 		// footer; the options end the screen.
@@ -118,8 +132,10 @@ func Parse(screen string) *Dialog {
 		if bare {
 			return nil
 		}
+		d.Fingerprint = fingerprint(lines[top:min(footer+1, len(lines))])
 		return d
 	}
+	d.Fingerprint = fingerprint(lines[dialogTop(lines, top, first):min(footer+1, len(lines))])
 	d.Question = question(lines, gaps, top, first, screenWidth(lines))
 	if submitOption.MatchString(lines[first]) && (first == 0 || !reviewPrompt.MatchString(strings.TrimSpace(lines[first-1]))) {
 		// Claude Code left the prompt line out; what is above the options
@@ -129,6 +145,32 @@ func Parse(screen string) *Dialog {
 	d.Steps = steps(lines, top, first)
 	typedField(d)
 	return d
+}
+
+// dialogTop is where the dialog's box starts: the nearest solid rule above
+// its first option, or the scan's top when there is none.
+func dialogTop(lines []string, top, first int) int {
+	for i := first - 1; i >= top; i-- {
+		if solidRule.MatchString(lines[i]) {
+			return i
+		}
+	}
+	return top
+}
+
+var solidRule = regexp.MustCompile(`^\s*─{10,}\s*$`)
+
+// fingerprint hashes a dialog's lines with the cursor taken out, so moving
+// the selection keeps it and any other change, such as a different command
+// to approve or a ticked box, does not.
+func fingerprint(lines []string) string {
+	h := sha256.New()
+	for _, l := range lines {
+		l = strings.TrimRightFunc(strings.ReplaceAll(l, "❯", " "), unicode.IsSpace)
+		h.Write([]byte(l))
+		h.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:12])
 }
 
 // chatOption is the row under a question's text field that declines the
@@ -567,6 +609,16 @@ func (d *Dialog) stepKeys(key string, times int) []string {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+// hasCursor reports a dialog with its selection drawn on an option.
+func (d *Dialog) hasCursor() bool {
+	for _, o := range d.Options {
+		if o.Selected {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Dialog) Moves(index int) []string {

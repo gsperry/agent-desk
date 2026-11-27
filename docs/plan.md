@@ -13,7 +13,7 @@ The default architecture holds: a Go backend with an embedded React/TS frontend,
 | Grouping | `group` path when set. Otherwise the repository: `git rev-parse --git-common-dir` from the session directory, so `<repo>-worktrees/<name>` lands under its repo. Otherwise the directory. | All current sessions sit in root. |
 | Archived sessions | Hidden by default, toggle in the sidebar. | 22 of 29 sessions are archived and dead. |
 | Send | `agent-manager type`, not `send`. Gated: refused on `waiting`, `starting`, `dead`, and on any pane showing a dialog footer. | `send` labels the text as coming from another agent. Unguarded `type` answers or dismisses dialogs. |
-| Live pane | `agent-manager read <id> --json` for text. M4 key buttons use `tmux -L agentmgr send-keys -t am_<id>.0`, the documented fallback. | The CLI has no key-sending command for agents. |
+| Live pane | `agent-manager read <id> --json` for text. M4 key buttons use `tmux -L agentmgr send-keys -t =am_<id>:.0`, the documented fallback. | The CLI has no key-sending command for agents. |
 | Seen / finished | Agent Desk keeps a per-session "seen" mark in browser storage. | `finished` clears to `idle` only in the TUI. |
 | Transcript | Backend parses the full file once on open (skipping `api-request*` cheaply), keeps normalized items in memory, tails by offset. Frontend gets the newest ~300 items and pages backwards. | Files reach 28 MB. |
 | Parser location | Go owns record parsing and tolerance. The frontend owns grouping items into turns and pairing tool calls with results. | One tolerant parser, tested once. The view-model mapping is what Vitest covers. |

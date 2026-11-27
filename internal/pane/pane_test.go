@@ -340,7 +340,7 @@ func TestMultiSelectSingleQuestion(t *testing.T) {
 		Reader:   fakeReader{screen: read(t, "askq-multi-submit.txt")},
 		Keys:     keys,
 	}
-	if err := a.Answer(context.Background(), "s1", Answer{Action: "choose", Index: 4, Label: "Submit"}); err != nil {
+	if err := a.Answer(context.Background(), "s1", seen(read(t, "askq-multi-submit.txt"), Answer{Action: "choose", Index: 4, Label: "Submit"})); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"Down", "Down", "Down", "Down", "Enter"}; !reflect.DeepEqual(keys.got, want) {
