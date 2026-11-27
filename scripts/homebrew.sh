@@ -10,6 +10,9 @@
 set -eu
 version=${1:?usage: scripts/homebrew.sh <version> [SHA256SUMS] [out-dir]}
 case $version in v*) version=${version#v} ;; esac
+case $version in
+*[!0-9.]* | '' | .* | *. | *..*) echo "not a version number: $version" >&2; exit 1 ;;
+esac
 here=$(cd "$(dirname "$0")/.." && pwd)
 sums=${2:-}
 out=${3:-$here/packaging/homebrew/out}
@@ -24,14 +27,28 @@ sha() {
 	[ -n "$value" ] || { echo "no checksum for $1 in $sums" >&2; exit 1; }
 	echo "$value"
 }
+# Each checksum is looked up on its own line: a failure inside a command
+# substitution in sed's arguments would not stop the script, and the
+# formula would get an empty checksum.
+darwin_arm64=$(sha "agent-desk_${version}_darwin_arm64.tar.gz")
+darwin_amd64=$(sha "agent-desk_${version}_darwin_amd64.tar.gz")
+linux_arm64=$(sha "agent-desk_${version}_linux_arm64.tar.gz")
+linux_amd64=$(sha "agent-desk_${version}_linux_amd64.tar.gz")
+macos=$(sha "Agent-Desk_${version}_macos.zip")
+for v in "$darwin_arm64" "$darwin_amd64" "$linux_arm64" "$linux_amd64" "$macos"; do
+	case $v in
+	*[!0-9a-f]*) echo "malformed checksum: $v" >&2; exit 1 ;;
+	esac
+	[ ${#v} -eq 64 ] || { echo "malformed checksum: $v" >&2; exit 1; }
+done
 mkdir -p "$out"
 render() {
 	sed -e "s/@VERSION@/$version/g" \
-		-e "s/@SHA_darwin_arm64@/$(sha "agent-desk_${version}_darwin_arm64.tar.gz")/" \
-		-e "s/@SHA_darwin_amd64@/$(sha "agent-desk_${version}_darwin_amd64.tar.gz")/" \
-		-e "s/@SHA_linux_arm64@/$(sha "agent-desk_${version}_linux_arm64.tar.gz")/" \
-		-e "s/@SHA_linux_amd64@/$(sha "agent-desk_${version}_linux_amd64.tar.gz")/" \
-		-e "s/@SHA_macos@/$(sha "Agent-Desk_${version}_macos.zip")/" \
+		-e "s/@SHA_darwin_arm64@/$darwin_arm64/" \
+		-e "s/@SHA_darwin_amd64@/$darwin_amd64/" \
+		-e "s/@SHA_linux_arm64@/$linux_arm64/" \
+		-e "s/@SHA_linux_amd64@/$linux_amd64/" \
+		-e "s/@SHA_macos@/$macos/" \
 		"$here/packaging/homebrew/$1.in" > "$out/$1"
 }
 render agent-desk.rb

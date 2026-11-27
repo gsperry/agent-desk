@@ -86,9 +86,10 @@ desktop-universal: web
 	cd desktop && cargo tauri build --target universal-apple-darwin --bundles app --config '{"version":"$(APP_VERSION)"}'
 	ditto -c -k --keepParent "$(APP_BUNDLE)" "$(DIST)/Agent-Desk_$(APP_VERSION)_macos.zip"
 
-# checksums writes dist/SHA256SUMS for everything in dist/.
+# checksums writes dist/SHA256SUMS for this version's files in dist/, so
+# files left from an earlier release are not listed.
 checksums:
-	cd $(DIST) && shasum -a 256 *.tar.gz *.zip > SHA256SUMS
+	cd $(DIST) && shasum -a 256 agent-desk_$(APP_VERSION)_*.tar.gz Agent-Desk_$(APP_VERSION)_macos.zip > SHA256SUMS
 
 clean:
 	rm -rf bin tmp web/dist/assets web/dist/index.html

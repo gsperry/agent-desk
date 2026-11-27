@@ -6,7 +6,7 @@ rm -rf .e2e-fixtures
 cp -RL ../testdata/fixtures/desk .e2e-fixtures
 repo=.e2e-fixtures/repo
 mkdir -p "$repo"
-g() { git -C "$repo" -c user.name=fixture -c user.email=fixture@example.com -c init.defaultBranch=main "$@"; }
+g() { git -C "$repo" -c user.name=fixture -c user.email=fixture@example.com -c init.defaultBranch=main -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 g init -q
 printf 'one\ntwo\nthree\n' > "$repo/notes.md"
 g add notes.md

@@ -43,7 +43,7 @@ Out of scope: an attacker who already runs code as your user account. That accou
 
 ## Voice input
 
-Only in the Mac app on the desk. The page can start and stop the bundled `agent-desk-dictate` helper and nothing else; the helper runs only between two presses of the mic button (or until 30 seconds without speech), uses Apple's speech recognizer with on-device recognition required, so audio is never sent to Apple or anyone else, keeps no audio, and passes back only the text heard. macOS asks for microphone and speech recognition access the first time, under the app's name.
+Only in the Mac app on the desk. The page can start and stop the bundled `agent-desk-dictate` helper and nothing else; the helper runs only between two presses of the mic button (or until 30 seconds without speech, the window closes, the page reloads, or five minutes pass), uses Apple's speech recognizer with on-device recognition required, so audio is never sent to Apple or anyone else, keeps no audio, and passes back only the text heard. macOS asks for microphone and speech recognition access the first time, under the app's name.
 
 ## Read aloud
 

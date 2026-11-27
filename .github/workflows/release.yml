@@ -5,7 +5,8 @@ name: Release
 # checksums; publish it after checking it. Run by hand, it builds the same
 # files as workflow artifacts and makes no release.
 #
-# The app is signed and notarized when these repository secrets exist:
+# The app is signed and notarized when these secrets exist (repository or
+# release environment secrets):
 #   APPLE_CERTIFICATE           Developer ID Application certificate, .p12, base64
 #   APPLE_CERTIFICATE_PASSWORD  its password
 #   APPLE_SIGNING_IDENTITY      "Developer ID Application: Name (TEAMID)"
@@ -23,26 +24,51 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # test runs the suite, and with it the test tools' third-party code, in a
+  # job that holds no secrets and cannot write to the repository.
+  test:
     runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Test
+        run: make test
+
+  # release builds, signs and publishes from the same commit once the tests
+  # pass. It runs in the release environment, whose required reviewer makes
+  # a release wait for approval before any step can read a secret.
+  release:
+    needs: test
+    runs-on: macos-latest
+    environment: release
     permissions:
       contents: write
+    # The signing secrets reach only the steps that sign, never the tool
+    # installs. The job knows only whether they are set.
     env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      SIGNED: ${{ secrets.APPLE_SIGNING_IDENTITY != '' }}
+      NOTARIZED: ${{ secrets.APPLE_API_KEY_P8 != '' }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version comes from git describe, which needs the tags.
           fetch-depth: 0
-      - uses: actions/setup-go@v7.0.0
+          # Keep the job's token out of .git/config, where build scripts
+          # could read it.
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -50,19 +76,27 @@ jobs:
       - name: Rust targets and Tauri CLI
         run: |
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
-          cargo install tauri-cli --version "^2" --locked
-      - name: Test
-        run: make test
+          # Pinned: a new CLI release changes the build only when bumped here.
+          cargo install tauri-cli --version "=2.12.6" --locked
       - name: Command for macOS and Linux
         run: make release-cli
       - name: Notarization key
-        if: env.APPLE_API_KEY_P8 != ''
+        if: env.NOTARIZED == 'true'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           key="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
           printf '%s' "$APPLE_API_KEY_P8" > "$key"
           chmod 600 "$key"
           echo "APPLE_API_KEY_PATH=$key" >> "$GITHUB_ENV"
       - name: Universal macOS app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
           # A missing secret arrives as an empty value, which the Tauri CLI
           # would take as a request to sign; unset those.
@@ -71,18 +105,18 @@ jobs:
           done
           make desktop-universal
       - name: Check the signature
-        if: env.APPLE_SIGNING_IDENTITY != ''
+        if: env.SIGNED == 'true'
         run: |
           app="desktop/target/universal-apple-darwin/release/bundle/macos/Agent Desk.app"
           codesign --verify --deep --strict --verbose=2 "$app"
           spctl --assess --type execute --verbose=2 "$app"
       - name: Note an unsigned build
-        if: env.APPLE_SIGNING_IDENTITY == ''
+        if: env.SIGNED != 'true'
         run: echo "The macOS app is unsigned; the Apple signing secrets are not set." >> "$GITHUB_STEP_SUMMARY"
       - name: Checksums
         run: make checksums
       - name: Keep the files
-        uses: actions/upload-artifact@v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: agent-desk-${{ github.ref_name }}
           path: |

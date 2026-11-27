@@ -40,7 +40,7 @@ testdata/              anonymized JSONL samples, each with its Claude Code versi
 - `GET /api/sessions/{id}/transcript?before=<seq>&limit=<n>`
 - `POST /api/sessions/{id}/send` `{text, clientId}`
 - `GET /api/sessions/{id}/pane` (M4)
-- `POST /api/sessions/{id}/keys` `{key}` from a fixed allow list (M4)
+- `POST /api/sessions/{id}/answer` `{action, ...}`: choose an option, type an answer, or press a key from a fixed allow list, checked against a fresh read of the screen (M4; first planned as `/keys`)
 - `POST /api/manager/start`
 - `WS /api/ws`: server pushes `sessions` and `transcript.append`. Client sends `subscribe` and `unsubscribe` for transcripts.
 
@@ -77,11 +77,11 @@ Each step is one conventional commit. Each milestone is a feature branch merged 
 
 Prior art read in step 3 and 6: VibeDeck (Apache 2.0) and claude-code-log (MIT) for parsing and tool or diff rendering. CloudCLI for UX ideas only. Any ported logic is credited in `NOTICE` and file headers.
 
-**M2: Talk back.** Composer (Enter newline, Cmd+Enter send), drafts per session in `localStorage`, send gate with a clear reason when blocked, optimistic bubble reconciled against the next human `user` record, exit 3 shown as "may have been sent".
+**M2: Talk back.** Composer (as built: Enter sends, Shift or Cmd+Enter adds a line), drafts per session in `localStorage`, send gate with a clear reason when blocked, optimistic bubble reconciled against the next human `user` record, exit 3 shown as "may have been sent".
 
 **M3: Waiting for me.** Attention = `waiting`, `errored`, or `finished` not yet seen. Filter and badge, count in the tab title. Notifications on flips to waiting (see open question 3). Cmd+K switcher. j/k through attention sessions.
 
-**M4: Live pane.** Monospace pane from `read`, refreshed while open. Buttons for allow-listed keys (1 to 4, Up, Down, Enter, Esc). Shown automatically when a session is `waiting` or a dialog is detected.
+**M4: Live pane.** Monospace pane from `read`, refreshed while open. Buttons for the dialog's options, read from the screen, answered with allow-listed keys (Up, Down, Enter, Esc). Shown automatically when a session is `waiting` or a dialog is detected.
 
 **M5: Quality of life.** Transcript search, `code -g path:line` links, per-type collapse defaults, light and dark themes, font size and reading width.
 
