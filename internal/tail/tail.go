@@ -52,6 +52,14 @@ func (f *Follower) Read() (lines [][]byte, reset bool, err error) {
 		return nil, reset, err
 	}
 	defer file.Close()
+	// The file may have been replaced since the Stat; what was opened
+	// decides.
+	if opened, err := file.Stat(); err == nil {
+		if !os.SameFile(opened, info) || opened.Size() < f.offset {
+			f.offset, f.partial, reset = 0, nil, true
+		}
+		f.info, info = opened, opened
+	}
 	if _, err := file.Seek(f.offset, io.SeekStart); err != nil {
 		return nil, reset, err
 	}

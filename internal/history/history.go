@@ -325,6 +325,9 @@ func (x *Index) parse(ctx context.Context, path string) (parsed, error) {
 	defer f.Close()
 	p := transcript.NewParser()
 	var items []transcript.Item
+	// unfinished is a last line still being written; the result is not
+	// kept, so the next read sees the line once it is done.
+	unfinished := false
 	r := bufio.NewReaderSize(f, 1<<20)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -332,7 +335,11 @@ func (x *Index) parse(ctx context.Context, path string) (parsed, error) {
 		}
 		line, err := r.ReadBytes('\n')
 		if len(bytes.TrimSpace(line)) > 0 {
-			items = append(items, p.Line(line)...)
+			if transcript.Unfinished(line, info.ModTime(), time.Now()) {
+				unfinished = true
+			} else {
+				items = append(items, p.Line(line)...)
+			}
 		}
 		if err == io.EOF {
 			break
@@ -342,6 +349,9 @@ func (x *Index) parse(ctx context.Context, path string) (parsed, error) {
 		}
 	}
 	d := parsed{path: path, size: info.Size(), modTime: info.ModTime(), items: items, stats: p.Stats()}
+	if unfinished {
+		return d, nil
+	}
 	x.mu.Lock()
 	x.docs = append([]parsed{d}, x.docs...)
 	if len(x.docs) > keptDocs {

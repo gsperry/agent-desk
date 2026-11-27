@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func parseOne(t *testing.T, line string) []Item {
@@ -539,5 +540,51 @@ func TestSamples(t *testing.T) {
 				t.Fatalf("no conversation parsed: %v", counts)
 			}
 		})
+	}
+}
+
+// A message with nothing to show is counted, and a null content is raw.
+func TestEmptyMessagesAreCounted(t *testing.T) {
+	p := NewParser()
+	lines := []string{
+		`{"type":"user","uuid":"e1","message":{"content":[]}}`,
+		`{"type":"assistant","uuid":"e2","message":{"id":"m","content":[{"type":"text","text":"(no content)"}]}}`,
+	}
+	for _, l := range lines {
+		if items := p.Line([]byte(l)); len(items) != 0 {
+			t.Fatalf("%s: items = %+v", l, items)
+		}
+	}
+	if st := p.Stats(); st.Skipped["empty user"] != 1 || st.Skipped["empty assistant"] != 1 {
+		t.Fatalf("skipped = %v", st.Skipped)
+	}
+	for _, l := range []string{
+		`{"type":"user","uuid":"n1","message":{"content":null}}`,
+		`{"type":"assistant","uuid":"n2","message":{"id":"m2"}}`,
+	} {
+		items := p.Line([]byte(l))
+		if len(items) != 1 || items[0].Kind != KindRaw {
+			t.Fatalf("%s: items = %+v", l, items)
+		}
+	}
+}
+
+func TestUnfinished(t *testing.T) {
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		line string
+		mod  time.Time
+		want bool
+	}{
+		{"being written", `{"type":"user","mess`, now.Add(-time.Second), true},
+		{"complete without a newline", `{"type":"user"}`, now.Add(-time.Second), false},
+		{"ended with a newline", "{\"type\":\n", now.Add(-time.Second), false},
+		{"left unfinished long ago", `{"type":"user","mess`, now.Add(-time.Hour), false},
+	}
+	for _, tt := range tests {
+		if got := Unfinished([]byte(tt.line), tt.mod, now); got != tt.want {
+			t.Errorf("%s: got %v", tt.name, got)
+		}
 	}
 }

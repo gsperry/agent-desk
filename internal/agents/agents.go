@@ -293,12 +293,16 @@ func Transcript(conversationPath, id string) ([]transcript.Item, error) {
 		return nil, err
 	}
 	defer f.Close()
+	var modTime time.Time
+	if info, err := f.Stat(); err == nil {
+		modTime = info.ModTime()
+	}
 	p := transcript.NewParser()
 	var items []transcript.Item
 	r := bufio.NewReaderSize(f, 1<<20)
 	for {
 		line, err := r.ReadBytes('\n')
-		if len(line) > 0 {
+		if len(line) > 0 && !transcript.Unfinished(line, modTime, time.Now()) {
 			items = append(items, p.Line(line)...)
 		}
 		if err != nil {

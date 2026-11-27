@@ -88,3 +88,55 @@ func TestFindPrefersNewest(t *testing.T) {
 		t.Fatalf("got %q, want newest", got)
 	}
 }
+
+// A conversation that later appears under a second project directory is
+// found there once the cached path is rechecked.
+func TestFindRechecksForANewerCopy(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "projects", "a", id+".jsonl")
+	write(t, first)
+	past := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(first, past, past); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	l := &Locator{DefaultRoot: root, now: func() time.Time { return now }}
+	if got, _ := l.Find(context.Background(), id, ""); got != first {
+		t.Fatalf("got %q", got)
+	}
+	second := filepath.Join(root, "projects", "b", id+".jsonl")
+	write(t, second)
+	if got, _ := l.Find(context.Background(), id, ""); got != first {
+		t.Fatalf("cache not used: got %q", got)
+	}
+	now = now.Add(recheck)
+	if got, _ := l.Find(context.Background(), id, ""); got != second {
+		t.Fatalf("newer copy not found: got %q", got)
+	}
+}
+
+// A profile that cannot be read is not asked about again on every lookup.
+func TestFailedProfileIsRetriedLater(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "projects", "a", id+".jsonl"))
+	calls := 0
+	now := time.Now()
+	l := &Locator{DefaultRoot: root, now: func() time.Time { return now }, Profile: func(context.Context, string, string) (string, error) {
+		calls++
+		return "", errors.New("agent-manager env show failed")
+	}}
+	for range 5 {
+		l.found = nil
+		if _, err := l.Find(context.Background(), id, "broken"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("profile asked %d times", calls)
+	}
+	now = now.Add(profileRetry)
+	l.found = nil
+	if _, err := l.Find(context.Background(), id, "broken"); err != nil || calls != 2 {
+		t.Fatalf("calls = %d, err = %v", calls, err)
+	}
+}

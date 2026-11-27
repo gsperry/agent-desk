@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,5 +198,89 @@ func TestAround(t *testing.T) {
 		if got := texts(tr.Around(context.Background(), "s1", tt.uuid, 2).Items); got != tt.want {
 			t.Errorf("Around(%s) = %q, want %q", tt.uuid, got, tt.want)
 		}
+	}
+}
+
+// Callers that open the same transcript at once all get it read: none gets
+// the empty doc before the first caller has read the file.
+func TestConcurrentOpenReadsOnce(t *testing.T) {
+	root := t.TempDir()
+	sessions := &staticSessions{ch: make(chan State)}
+	var views []SessionView
+	for i := range 50 {
+		conv := strings.Replace(convA, "aaaaaaaa", fmt.Sprintf("%08d", i), 1)
+		appendTo(t, filepath.Join(root, "projects", "p", conv+".jsonl"), userLine("u1", "hello"))
+		views = append(views, SessionView{ID: fmt.Sprintf("s%d", i), Tool: "claude", AgentSessionID: conv})
+	}
+	sessions.set(views...)
+	tr := &Transcripts{Locator: &locate.Locator{DefaultRoot: root}, Sessions: sessions}
+	var wg sync.WaitGroup
+	empty := make(chan string, 200)
+	for _, v := range views {
+		for range 4 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				page, _, cancel := tr.Subscribe(context.Background(), v.ID)
+				defer cancel()
+				if page.Status != DocOK || len(page.Items) != 1 {
+					empty <- v.ID
+				}
+			}()
+		}
+	}
+	wg.Wait()
+	close(empty)
+	for id := range empty {
+		t.Fatalf("%s: a subscriber got an unread page", id)
+	}
+}
+
+// Reads for ids agent-manager does not list keep nothing.
+func TestUnknownIDsAreNotKept(t *testing.T) {
+	sessions := &staticSessions{ch: make(chan State)}
+	tr := &Transcripts{Locator: &locate.Locator{DefaultRoot: t.TempDir()}, Sessions: sessions}
+	for i := range 100 {
+		id := fmt.Sprintf("made-up-%d", i)
+		tr.Window(context.Background(), id, -1, 10)
+		tr.Around(context.Background(), id, "u1", 5)
+	}
+	tr.mu.Lock()
+	n := len(tr.docs)
+	tr.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d docs kept for unknown ids", n)
+	}
+	// A subscriber to a session not listed yet, as right after a spawn,
+	// keeps its doc so the session list can fill it in.
+	_, _, cancel := tr.Subscribe(context.Background(), "new-session")
+	defer cancel()
+	tr.mu.Lock()
+	_, kept := tr.docs["new-session"]
+	tr.mu.Unlock()
+	if !kept {
+		t.Fatal("a subscriber's doc was not kept")
+	}
+}
+
+// A subscriber never attaches to a doc that eviction has dropped.
+func TestEvictedDocIsReopened(t *testing.T) {
+	root := t.TempDir()
+	appendTo(t, filepath.Join(root, "projects", "p", convA+".jsonl"), userLine("u1", "hello"))
+	sessions := &staticSessions{ch: make(chan State)}
+	sessions.set(SessionView{ID: "s1", Tool: "claude", AgentSessionID: convA})
+	tr := &Transcripts{Locator: &locate.Locator{DefaultRoot: root}, Sessions: sessions}
+	tr.Window(context.Background(), "s1", -1, 10)
+	tr.mu.Lock()
+	old := tr.docs["s1"]
+	tr.mu.Unlock()
+	tr.evict(-time.Second)
+	_, _, cancel := tr.Subscribe(context.Background(), "s1")
+	defer cancel()
+	tr.mu.Lock()
+	cur := tr.docs["s1"]
+	tr.mu.Unlock()
+	if cur == old || cur == nil || len(cur.subs) != 1 {
+		t.Fatal("subscribed to the evicted doc")
 	}
 }

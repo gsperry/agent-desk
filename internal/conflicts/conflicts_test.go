@@ -71,3 +71,33 @@ func TestFind(t *testing.T) {
 		}
 	}
 }
+
+// A write the user denied, or that failed, changed nothing.
+func TestDeniedWriteIsNotAConflict(t *testing.T) {
+	root := t.TempDir()
+	conv := func(n int) string { return fmt.Sprintf("%08d-0000-4000-8000-000000000000", n) }
+	write := func(n int, lines ...string) {
+		p := filepath.Join(root, "projects", "p", conv(n)+".jsonl")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recent := "2026-11-10T11:00:00Z"
+	denied := `{"type":"user","uuid":"r1","timestamp":"2026-11-10T11:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"ta1","is_error":true,"content":"The user doesn't want to proceed with this tool use."}]}}`
+	write(1, edit("a1", "Edit", "/src/api/main.go", recent), denied)
+	write(2, edit("b1", "Edit", "/src/api/main.go", recent))
+	f := &Finder{
+		Sessions: sessions{
+			{ID: "s1", Tool: "claude", Running: true, AgentSessionID: conv(1)},
+			{ID: "s2", Tool: "claude", Running: true, AgentSessionID: conv(2)},
+		},
+		Locator: &locate.Locator{DefaultRoot: root},
+		Now:     func() time.Time { return time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC) },
+	}
+	if got := f.Find(context.Background()); len(got) != 0 {
+		t.Fatalf("conflicts = %+v", got)
+	}
+}

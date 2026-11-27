@@ -153,11 +153,19 @@ func scan(path string) []write {
 	}
 	p := transcript.NewParser()
 	var ws []write
+	// ids holds each write's tool call id, so a write the user denied or
+	// that failed, whose result is an error, is not counted.
+	var ids []string
+	failed := map[string]bool{}
 	for _, l := range lines {
-		if !strings.Contains(l, `"tool_use"`) {
+		if !strings.Contains(l, `"tool_use"`) && !strings.Contains(l, `"tool_result"`) {
 			continue
 		}
 		for _, it := range p.Line([]byte(l)) {
+			if it.Kind == transcript.KindToolResult && it.Result != nil && it.Result.IsError {
+				failed[it.Result.ToolUseID] = true
+				continue
+			}
 			if it.Kind != transcript.KindToolUse || it.Tool == nil || !writeTools[it.Tool.Name] {
 				continue
 			}
@@ -175,7 +183,14 @@ func scan(path string) []write {
 			}
 			at, _ := time.Parse(time.RFC3339Nano, it.Time)
 			ws = append(ws, write{path: filepath.Clean(target), at: at})
+			ids = append(ids, it.Tool.ID)
 		}
 	}
-	return ws
+	kept := ws[:0]
+	for i, w := range ws {
+		if !failed[ids[i]] {
+			kept = append(kept, w)
+		}
+	}
+	return kept
 }

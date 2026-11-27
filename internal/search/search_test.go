@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,4 +126,54 @@ func TestSnippet(t *testing.T) {
 
 func hubProject(name string) grouping.Project {
 	return grouping.Project{Key: name, Name: name, Kind: grouping.KindRepo}
+}
+
+// Lowercasing can change a rune's length; the match is still found in the
+// original text, and its snippet shows it.
+func TestIndexAcrossCaseLengthChanges(t *testing.T) {
+	tests := []struct {
+		text, query, want string
+	}{
+		{strings.Repeat("Ⱦ", 50) + " flaky test", "flaky", "flaky"},
+		{"İstanbul flaky test", "flaky", "flaky"},
+		{"KELVIN K then flaky", "flaky", "flaky"},
+		{"Ⱥbc", "ⱥb", "Ⱥb"},
+		{"plain ASCII Flaky", "flaky", "Flaky"},
+		{"no match here", "flaky", ""},
+	}
+	for _, tt := range tests {
+		m := newMatcher(tt.query)
+		i, j := m.index(tt.text)
+		got := ""
+		if i >= 0 {
+			got = tt.text[i:j]
+			if s := snippet(tt.text, i, j-i); !strings.Contains(strings.ToLower(s), strings.ToLower(tt.want)) {
+				t.Errorf("%q: snippet %q lacks the match", tt.text, s)
+			}
+		}
+		if got != tt.want {
+			t.Errorf("%q in %q = %q, want %q", tt.query, tt.text, got, tt.want)
+		}
+	}
+}
+
+// A session with more matches than it may return keeps its newest.
+func TestSearchKeepsNewestHits(t *testing.T) {
+	root := t.TempDir()
+	var lines []string
+	for i := range perSession + 10 {
+		lines = append(lines, fmt.Sprintf(`{"type":"user","uuid":"u%02d","timestamp":"2026-11-10T10:%02d:00Z","origin":{"kind":"human"},"message":{"content":"needle %d"}}`, i, i, i))
+	}
+	write(t, root, convA, lines...)
+	s := &Searcher{
+		Sessions: sessions{{ID: "s1", Name: "one", Tool: "claude", AgentSessionID: convA, Project: hubProject("api")}},
+		Locator:  &locate.Locator{DefaultRoot: root},
+	}
+	res, err := s.Search(context.Background(), "needle", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Hits) != perSession || res.Hits[0].UUID != fmt.Sprintf("u%02d", perSession+9) {
+		t.Fatalf("hits = %d, newest = %q", len(res.Hits), res.Hits[0].UUID)
+	}
 }

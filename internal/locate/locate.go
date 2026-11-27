@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"time"
 )
 
 var ErrNotFound = errors.New("transcript not found")
@@ -28,8 +29,35 @@ type Locator struct {
 	Profile     ProfileVar
 
 	mu       sync.Mutex
-	found    map[string]string
-	profiles map[string]string
+	found    map[string]cached
+	profiles map[string]cached
+	// now is the clock; tests set it.
+	now func() time.Time
+}
+
+// cached is a path or root, trusted until a time.
+type cached struct {
+	value string
+	until time.Time
+}
+
+const (
+	// recheck is how long a found transcript is trusted before the
+	// project directories are searched again, in case the conversation
+	// has since appeared under a second one.
+	recheck = 30 * time.Second
+	// profileTTL is how long a profile's config directory is kept, and
+	// profileRetry how long a failed lookup waits before it is tried
+	// again, so a broken profile does not run agent-manager every poll.
+	profileTTL   = 10 * time.Minute
+	profileRetry = time.Minute
+)
+
+func (l *Locator) clock() time.Time {
+	if l.now != nil {
+		return l.now()
+	}
+	return time.Now()
 }
 
 // DefaultRoot is $CLAUDE_CONFIG_DIR, else ~/.claude.
@@ -50,12 +78,13 @@ func (l *Locator) Find(ctx context.Context, id, environment string) (string, err
 	if !validID.MatchString(id) {
 		return "", ErrNotFound
 	}
+	now := l.clock()
 	l.mu.Lock()
-	cached, ok := l.found[id]
+	hit, ok := l.found[id]
 	l.mu.Unlock()
-	if ok {
-		if _, err := os.Stat(cached); err == nil {
-			return cached, nil
+	if ok && now.Before(hit.until) {
+		if _, err := os.Stat(hit.value); err == nil {
+			return hit.value, nil
 		}
 	}
 	matches, err := filepath.Glob(filepath.Join(l.root(ctx, environment), "projects", "*", id+".jsonl"))
@@ -68,9 +97,9 @@ func (l *Locator) Find(ctx context.Context, id, environment string) (string, err
 	path := newest(matches)
 	l.mu.Lock()
 	if l.found == nil {
-		l.found = map[string]string{}
+		l.found = map[string]cached{}
 	}
-	l.found[id] = path
+	l.found[id] = cached{path, now.Add(recheck)}
 	l.mu.Unlock()
 	return path, nil
 }
@@ -79,25 +108,30 @@ func (l *Locator) root(ctx context.Context, environment string) string {
 	if environment == "" || l.Profile == nil {
 		return l.DefaultRoot
 	}
+	now := l.clock()
 	l.mu.Lock()
-	root, ok := l.profiles[environment]
+	hit, ok := l.profiles[environment]
 	l.mu.Unlock()
-	if ok {
-		return root
+	if ok && now.Before(hit.until) {
+		return hit.value
 	}
-	root = l.DefaultRoot
+	root := l.DefaultRoot
+	until := now.Add(profileTTL)
 	v, err := l.Profile(ctx, environment, "CLAUDE_CONFIG_DIR")
-	if err != nil {
+	switch {
+	case err != nil && ctx.Err() != nil:
+		// A cancelled lookup says nothing about the profile.
 		return root
-	}
-	if v != "" {
+	case err != nil:
+		until = now.Add(profileRetry)
+	case v != "":
 		root = v
 	}
 	l.mu.Lock()
 	if l.profiles == nil {
-		l.profiles = map[string]string{}
+		l.profiles = map[string]cached{}
 	}
-	l.profiles[environment] = root
+	l.profiles[environment] = cached{root, until}
 	l.mu.Unlock()
 	return root
 }
