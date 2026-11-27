@@ -39,8 +39,10 @@ test('j and k step through sessions that need you', async ({ page }) => {
   await expect(page).toHaveURL(/\/s\/a0000003$/)
   await page.keyboard.press('j')
   await expect(page).toHaveURL(/\/s\/a0000008$/)
+  // Viewing probe marked it seen, so it no longer needs you: k from the first
+  // wraps to the last that does.
   await page.keyboard.press('k')
-  await expect(page).toHaveURL(/\/s\/a0000003$/)
+  await expect(page).toHaveURL(/\/s\/a0000002$/)
 })
 
 test('j does nothing while typing in the composer', async ({ page }) => {
