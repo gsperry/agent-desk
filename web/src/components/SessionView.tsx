@@ -21,7 +21,7 @@ import { blockedReason } from '../model/compose'
 import { conflictTitle, type Conflict } from '../model/conflicts'
 import { Composer } from './Composer'
 import { can, useRemote } from '../remote-context'
-import { ContextMeter } from './ContextMeter'
+import { ContextMeter, ModelBadge } from './ContextMeter'
 import { LiveActivity } from './LiveActivity'
 import { LivePane } from './LivePane'
 import { PendingReplies } from './PendingReplies'
@@ -202,6 +202,7 @@ export function SessionView(props: Props) {
               </span>
               <span className="session-info">
                 {header.permissionMode && <span>{header.permissionMode}</span>}
+                <ModelBadge items={d.items} />
                 <ContextMeter items={d.items} />
               </span>
             {props.conflicts.length > 0 && (

@@ -11,6 +11,7 @@ type KV = Pick<Storage, 'getItem' | 'setItem'>
 
 interface Usage {
   model?: string
+  effort?: string
   contextTokens?: number
 }
 
@@ -77,4 +78,30 @@ export function loadThresholds(store: KV): Thresholds {
 
 export function saveThresholds(store: KV, th: Thresholds): void {
   store.setItem(key, JSON.stringify(th))
+}
+
+export interface ModelState {
+  // model is Claude Code's id for it, such as claude-opus-5-5.
+  model: string
+  // effort is the level the latest turn ran at, when the version records it.
+  effort?: string
+}
+
+// modelState is the model and effort of the latest turn that ran on a
+// real model. Unlike the context size, it survives a compaction.
+export function modelState(items: Item[]): ModelState | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i]
+    if (!it) continue
+    const u = usageOf(it)
+    // <synthetic> marks records Claude Code writes itself, such as errors.
+    if (!u?.model || u.model.startsWith('<')) continue
+    return u.effort ? { model: u.model, effort: u.effort } : { model: u.model }
+  }
+  return null
+}
+
+// modelLabel is a model id without its claude- prefix, for a chip.
+export function modelLabel(model: string): string {
+  return model.replace(/^claude-/, '')
 }

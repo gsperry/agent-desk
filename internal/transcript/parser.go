@@ -96,6 +96,8 @@ type record struct {
 		Trigger   string   `json:"trigger"`
 	} `json:"compactMetadata"`
 	ThinkingMs *float64 `json:"thinkingDurationMs"`
+	// Effort is the effort level the turn ran at, on assistant records.
+	Effort string `json:"effort"`
 }
 
 type message struct {
@@ -486,14 +488,14 @@ func (p *Parser) assistant(base Item, r record, line []byte) []Item {
 		}
 		items = append(items, it)
 	}
-	attachUsage(items, m)
+	attachUsage(items, m, r.Effort)
 	return items
 }
 
 // attachUsage puts the turn's token usage on the record's last item, once.
 // Context tokens are what the model read for this turn: fresh input plus
 // cache reads and writes.
-func attachUsage(items []Item, m message) {
+func attachUsage(items []Item, m message, effort string) {
 	if m.Usage == nil || len(items) == 0 {
 		return
 	}
@@ -501,11 +503,15 @@ func attachUsage(items []Item, m message) {
 	if last.Meta == nil {
 		last.Meta = map[string]any{}
 	}
-	last.Meta["usage"] = map[string]any{
+	u := map[string]any{
 		"model":         m.Model,
 		"contextTokens": m.Usage.Input + m.Usage.CacheRead + m.Usage.CacheCreation,
 		"outputTokens":  m.Usage.Output,
 	}
+	if effort != "" {
+		u["effort"] = effort
+	}
+	last.Meta["usage"] = u
 }
 
 func toolResult(b block, detail json.RawMessage) *ToolResult {

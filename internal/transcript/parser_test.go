@@ -392,6 +392,23 @@ func TestPastedContentIsUnwrapped(t *testing.T) {
 	}
 }
 
+func TestAssistantEffortIsOnUsage(t *testing.T) {
+	line := `{"type":"assistant","uuid":"a1","effort":"high","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"Done."}],"usage":{"input_tokens":10,"cache_read_input_tokens":5,"output_tokens":3}}}`
+	items := NewParser().Line([]byte(line))
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", items)
+	}
+	u, _ := items[0].Meta["usage"].(map[string]any)
+	if u["model"] != "claude-opus-5-5" || u["effort"] != "high" {
+		t.Fatalf("usage = %v", u)
+	}
+	// Records from versions that do not write it carry no effort.
+	items = NewParser().Line([]byte(strings.Replace(line, `"effort":"high",`, "", 1)))
+	if u, _ := items[0].Meta["usage"].(map[string]any); u["model"] != "claude-opus-5-5" || u["effort"] != nil {
+		t.Fatalf("usage without effort = %v", u)
+	}
+}
+
 func TestVersionStutterIsDeduped(t *testing.T) {
 	p := NewParser()
 	a := p.Line([]byte(`{"type":"assistant","uuid":"x1","message":{"id":"msg_s","content":[{"type":"text","text":"hello"}]}}`))
