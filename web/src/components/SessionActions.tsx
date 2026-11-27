@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GroupView, SessionAction, SessionView } from '../types'
 import { ConfirmDialog, RenameDialog } from './Dialog'
+import { ModelDialog, type ModelControl } from './ModelDialog'
 
 interface Props {
   session: SessionView
@@ -9,16 +10,19 @@ interface Props {
   // manage allows the lifecycle actions; without it only Export shows.
   manage: boolean
   onExport?: () => void
+  // model, when given, adds Model and effort… for a Claude Code session.
+  model?: ModelControl
 }
 
 // SessionActions is the session header's actions menu. Revive stays out of
 // it as a button, since a stopped session has nothing else to do; stopping
 // asks first, since it interrupts whatever the agent is doing.
-export function SessionActions({ session, groups, act, manage, onExport }: Props) {
+export function SessionActions({ session, groups, act, manage, onExport, model }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmStop, setConfirmStop] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [choosingModel, setChoosingModel] = useState(false)
   const [open, setOpen] = useState(false)
   const menu = useRef<HTMLDivElement>(null)
 
@@ -49,7 +53,7 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
     })
   }
 
-  if (!manage && !onExport) return null
+  if (!manage && !onExport && !model) return null
   return (
     <div className="session-actions" ref={menu}>
       {manage && !session.running && (
@@ -105,6 +109,19 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
               Rename…
             </button>
           )}
+          {model && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false)
+                setChoosingModel(true)
+              }}
+            >
+              Model and effort…
+            </button>
+          )}
           {manage && (
             <button
               type="button"
@@ -157,6 +174,14 @@ export function SessionActions({ session, groups, act, manage, onExport }: Props
         </div>
       )}
       {error && !confirmStop && !renaming && <span className="form-error">{error}</span>}
+      {choosingModel && model && (
+        <ModelDialog
+          control={model}
+          onClose={() => {
+            setChoosingModel(false)
+          }}
+        />
+      )}
       {renaming && (
         <RenameDialog
           current={session.name}
