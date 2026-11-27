@@ -1,24 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { costLine, defaultSummaries, loadSummaries, saveSummaries } from './summaries'
+import { costLine, defaultSummaries, parseSummaries, takeLegacySummaries } from './summaries'
 
-function memory() {
-  const m = new Map<string, string>()
-  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) }
+function memory(init: Record<string, string> = {}) {
+  const m = new Map<string, string>(Object.entries(init))
+  return { m, getItem: (k: string) => m.get(k) ?? null, removeItem: (k: string) => void m.delete(k) }
 }
 
 describe('summary settings', () => {
   it('start off', () => {
-    expect(loadSummaries(memory())).toEqual({ enabled: false, model: 'haiku' })
-    expect(defaultSummaries.enabled).toBe(false)
+    expect(defaultSummaries).toEqual({ enabled: false, model: 'haiku' })
   })
-  it('round-trip and tolerate junk', () => {
-    const kv = memory()
-    saveSummaries(kv, { enabled: true, model: 'sonnet' })
-    expect(loadSummaries(kv)).toEqual({ enabled: true, model: 'sonnet' })
-    kv.setItem('agent-desk:summaries', JSON.stringify({ enabled: 'yes', model: '  ' }))
-    expect(loadSummaries(kv)).toEqual({ enabled: false, model: 'haiku' })
-    kv.setItem('agent-desk:summaries', '{')
-    expect(loadSummaries(kv)).toEqual(defaultSummaries)
+  it('tolerate junk', () => {
+    expect(parseSummaries(JSON.stringify({ enabled: true, model: ' sonnet ' }))).toEqual({ enabled: true, model: 'sonnet' })
+    expect(parseSummaries(JSON.stringify({ enabled: 'yes', model: '  ' }))).toEqual({ enabled: false, model: 'haiku' })
+    expect(parseSummaries('{')).toEqual(defaultSummaries)
+  })
+  it('take the settings this browser kept once, then forget them', () => {
+    const kv = memory({ 'agent-desk:summaries': JSON.stringify({ enabled: true, model: 'sonnet' }) })
+    expect(takeLegacySummaries(kv)).toEqual({ enabled: true, model: 'sonnet' })
+    expect(kv.m.size).toBe(0)
+    expect(takeLegacySummaries(kv)).toBeNull()
   })
 })
 

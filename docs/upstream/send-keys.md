@@ -2,7 +2,7 @@
 
 ## Problem
 
-`terminal send --keys` presses tmux key names in a managed terminal. There is no equivalent for agent sessions, so a client that answers a dialog (move the selection, confirm, cancel) has to call `tmux -L agentmgr send-keys -t am_<id>.0` itself. That duplicates the socket and pane conventions AGENTS.md says every caller must get right, and it skips the per-pane send gate that keeps a key press from interleaving with a paste.
+`terminal send --keys` presses tmux key names in a managed terminal. There is no equivalent for agent sessions, so a client that answers a dialog (move the selection, confirm, cancel) has to call `tmux -L agentmgr send-keys -t =am_<id>:.0` itself. That duplicates the socket and pane conventions AGENTS.md says every caller must get right, and it skips the per-pane send gate that keeps a key press from interleaving with a paste.
 
 ## Proposal
 

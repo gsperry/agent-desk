@@ -1,3 +1,4 @@
+import { useModal } from './useModal'
 import { useState, type ReactNode } from 'react'
 import { renameProblem } from '../model/rename'
 
@@ -10,11 +11,14 @@ interface Props {
 
 // Dialog is a modal panel. Escape and a click outside close it.
 export function Dialog({ title, onClose, children, footer }: Props) {
+  const panel = useModal<HTMLDivElement>()
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div
+        ref={panel}
         className="settings dialog"
         role="dialog"
+        aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => {
           e.stopPropagation()

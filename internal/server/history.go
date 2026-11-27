@@ -10,6 +10,8 @@ import (
 
 	"github.com/gsperry/agent-desk/internal/commands"
 	"github.com/gsperry/agent-desk/internal/history"
+	"github.com/gsperry/agent-desk/internal/send"
+	"github.com/gsperry/agent-desk/internal/summary"
 )
 
 func (s *Server) conversations(w http.ResponseWriter, r *http.Request) {
@@ -100,23 +102,54 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rep)
 }
 
-// summarize writes a catch-up summary. It spends tokens on the user's
-// provider, so the web app only offers it once the user turns it on.
+// summarize writes a catch-up summary with the model in the summary
+// settings. It spends tokens on the user's provider, so it is refused
+// until the user turns summaries on in Settings.
 func (s *Server) summarize(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Since int    `json:"since"`
-		Model string `json:"model"`
+		Since int `json:"since"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON with since and model"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be JSON with since"})
 		return
 	}
+	if s.cfg.SummarySettings == nil || !s.cfg.SummarySettings.Get().Enabled {
+		writeRefusal(w, &send.Refused{Reason: "summaries_off", Message: "Catch-up summaries are off. Turn them on in Settings; each one spends tokens."})
+		return
+	}
+	model := s.cfg.SummarySettings.Get().Model
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 	defer cancel()
-	res, err := s.cfg.Summaries.Summarize(ctx, r.PathValue("id"), req.Since, req.Model)
-	logOutcome("summary", r.PathValue("id"), "model="+req.Model, "ok", err)
+	res, err := s.cfg.Summaries.Summarize(ctx, r.PathValue("id"), req.Since, model)
+	logOutcome("summary", r.PathValue("id"), "model="+model, "ok", err)
 	if writeRefusal(w, err) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// summarySettings reports whether summaries are on and their model.
+func (s *Server) summarySettings(w http.ResponseWriter, _ *http.Request) {
+	st := summary.Settings{Model: summary.DefaultModel}
+	if s.cfg.SummarySettings != nil {
+		st = s.cfg.SummarySettings.Get()
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+// saveSummarySettings turns summaries on or off and sets their model.
+func (s *Server) saveSummarySettings(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.SummarySettings == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "summary settings are not available"})
+		return
+	}
+	var req summary.Settings
+	if !decode(w, r, 4096, &req) {
+		return
+	}
+	saved, err := s.cfg.SummarySettings.Set(req)
+	if writeRefusal(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
 }

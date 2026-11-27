@@ -20,7 +20,7 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -143,6 +143,9 @@ fn dictation_event(line: &str) -> Option<serde_json::Value> {
     Some(v)
 }
 
+/// DICTATION_LIMIT is the longest one dictation run lasts.
+const DICTATION_LIMIT: Duration = Duration::from_secs(5 * 60);
+
 /// stop_dictation asks the running helper to stop; it sends its last words
 /// and exits on its own.
 fn stop_dictation(state: &Dictation) {
@@ -190,6 +193,16 @@ fn dictate_start(app: AppHandle, events: Channel<serde_json::Value>) -> Result<(
         guard.1 = Some((child, stdin));
         guard.0
     };
+    // A run that is never stopped from the page ends on its own.
+    let limit = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(DICTATION_LIMIT);
+        let state = limit.state::<Dictation>();
+        let current = state.0.lock().unwrap().0 == run;
+        if current {
+            stop_dictation(&state);
+        }
+    });
     let handle = app.clone();
     std::thread::spawn(move || {
         let mut done = false;
@@ -333,6 +346,37 @@ fn start() -> Result<(Child, String), String> {
     }
 }
 
+/// stop_server closes the server's stdin, which it takes as the signal to
+/// shut down cleanly, and kills it only if it is still running two seconds
+/// later.
+fn stop_server(mut child: Child) {
+    drop(child.stdin.take());
+    for _ in 0..20 {
+        if let Ok(Some(_)) = child.try_wait() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// alert_failed_start tells the user the server did not start, since the
+/// app then quits and would otherwise just vanish. osascript shows the
+/// message; it is passed as an argument, never as script text.
+fn alert_failed_start(err: &str) {
+    let detail = format!("{err}\n\nThe server's log is in ~/Library/Logs/Agent Desk/server.log.");
+    let _ = Command::new("/usr/bin/osascript")
+        .arg("-e")
+        .arg("on run argv")
+        .arg("-e")
+        .arg("display alert \"Agent Desk could not start\" message (item 1 of argv) as critical")
+        .arg("-e")
+        .arg("end run")
+        .arg(detail)
+        .status();
+}
+
 /// server_log opens the server's log, owner-only, starting it afresh past
 /// 1 MB so it cannot grow without bound.
 fn server_log() -> std::io::Result<std::fs::File> {
@@ -420,10 +464,12 @@ fn main() {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
+                // Nobody sees the mic button of a hidden window.
+                stop_dictation(&window.state::<Dictation>());
             }
         })
         .setup(move |app| {
-            let (child, url) = start().map_err(Box::<dyn std::error::Error>::from)?;
+            let (child, url) = start().inspect_err(|e| alert_failed_start(e))?;
             *app.state::<Server>().0.lock().unwrap() = Some(child);
             let url: tauri::Url = url.parse()?;
             if url.host_str() != Some("127.0.0.1") {
@@ -437,6 +483,13 @@ fn main() {
                 .on_new_window(|target, _| {
                     open_in_browser(&target);
                     NewWindowResponse::Deny
+                })
+                // A reload or navigation runs none of the page's cleanup, so
+                // dictation it started stops here.
+                .on_page_load(|window, payload| {
+                    if payload.event() == PageLoadEvent::Started {
+                        stop_dictation(&window.state::<Dictation>());
+                    }
                 })
                 .on_navigation(move |target| {
                     if target.origin() == origin {
@@ -482,8 +535,8 @@ fn main() {
         RunEvent::Reopen { .. } => show(handle),
         RunEvent::Exit => {
             stop_dictation(&handle.state::<Dictation>());
-            if let Some(mut child) = handle.state::<Server>().0.lock().unwrap().take() {
-                let _ = child.kill();
+            if let Some(child) = handle.state::<Server>().0.lock().unwrap().take() {
+                stop_server(child);
             }
         }
         _ => {}

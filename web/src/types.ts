@@ -111,6 +111,8 @@ export interface Dialog {
   question?: string
   options: DialogOption[]
   footer: string
+  // fingerprint identifies the dialog as drawn, apart from its cursor.
+  fingerprint: string
   /** Several answers: Enter ticks a checkbox and Next moves on. */
   multi?: boolean
   /** The tabs of a prompt with several questions. */
@@ -123,7 +125,11 @@ export interface Screen {
   dialog?: Dialog
 }
 
-export type Answer =
+// An answer carries the fingerprint of the dialog it was given for; the
+// server refuses it on any other.
+export type Answer = AnswerAction & { fingerprint?: string }
+
+type AnswerAction =
   | { action: 'choose'; index: number; label: string }
   | { action: 'text'; index: number; label: string; text: string }
   | { action: 'key'; key: 'Up' | 'Down' | 'Enter' | 'Escape' }

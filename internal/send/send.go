@@ -40,9 +40,11 @@ const (
 type Sender struct {
 	Sessions Sessions
 	Pane     Pane
+	// Locks is shared with every other flow that drives a session's
+	// terminal; nil keeps one of its own.
+	Locks *Locks
 
-	mu       sync.Mutex
-	inFlight map[string]bool
+	once sync.Once
 }
 
 // Send checks the session and its screen, then types the text. A *Refused
@@ -52,10 +54,11 @@ func (s *Sender) Send(ctx context.Context, id, text string) (Result, error) {
 	if refused != nil {
 		return Result{}, refused
 	}
-	if !s.claim(id) {
-		return Result{}, &Refused{ReasonBusy, "A message to this session is still being sent."}
+	locks := s.locks()
+	if !locks.Claim(id) {
+		return Result{}, &Refused{ReasonBusy, "A message to this session is still being sent, or Agent Desk is answering it. Try again in a moment."}
 	}
-	defer s.release(id)
+	defer locks.Release(id)
 
 	st := s.Sessions.State()
 	var session *hub.SessionView
@@ -102,21 +105,11 @@ func (s *Sender) standIn(ctx context.Context, id string, refused *Refused) bool 
 	return err == nil && StandIn(styled)
 }
 
-func (s *Sender) claim(id string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.inFlight == nil {
-		s.inFlight = map[string]bool{}
-	}
-	if s.inFlight[id] {
-		return false
-	}
-	s.inFlight[id] = true
-	return true
-}
-
-func (s *Sender) release(id string) {
-	s.mu.Lock()
-	delete(s.inFlight, id)
-	s.mu.Unlock()
+func (s *Sender) locks() *Locks {
+	s.once.Do(func() {
+		if s.Locks == nil {
+			s.Locks = &Locks{}
+		}
+	})
+	return s.Locks
 }

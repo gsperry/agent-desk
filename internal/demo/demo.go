@@ -195,9 +195,15 @@ const WaitingPane = `● Reproduced on run 7. The test session has a 300 ms TTL 
 // Write fills dir with the demo: snapshot.json, transcripts under claude/,
 // the waiting session's screen under panes/, made-up system stats, and a
 // small git repository with uncommitted work for the Changes view. Times
-// are relative to now. dir is emptied first.
+// are relative to now. dir is emptied first, so it must be empty, missing,
+// or an earlier demo (it holds snapshot.json).
 func Write(dir string, now time.Time) error {
 	now = now.UTC().Truncate(time.Second)
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
+		if _, err := os.Stat(filepath.Join(dir, "snapshot.json")); err != nil {
+			return fmt.Errorf("%s is not empty and holds no earlier demo, so it was left alone", dir)
+		}
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}

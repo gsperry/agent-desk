@@ -13,8 +13,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -125,16 +127,21 @@ type fileState struct {
 	parser   *transcript.Parser
 	messages map[string]*message
 	prompts  map[string]*prompt
-	costs    map[string]float64
-	first    time.Time
-	last     time.Time
+	// costs is cost counted per day for records with no process start.
+	costs map[string]float64
+	// procCosts is, per Claude Code process (its start time), the highest
+	// running total the file shows on each day. One process can write its
+	// total into several files, as after /clear, so totals are merged
+	// across files before they are counted.
+	procCosts map[string]map[string]float64
+	first     time.Time
+	last      time.Time
 	// Turn timing for main transcripts.
 	lastPrompt    time.Time
 	lastEvent     time.Time
 	lastAssistant time.Time
-	// Claude Code's cost counter restarts with each process.
-	lastCost  float64
-	costStart string
+	// lastCost is the last total seen in a record with no process start.
+	lastCost float64
 }
 
 // message is one model reply. Claude Code writes a reply as a record per
@@ -153,10 +160,11 @@ type prompt struct {
 func newFileState(t target) *fileState {
 	return &fileState{
 		path: t.path, conv: t.conv, subagent: t.subagent,
-		parser:   transcript.NewParser(),
-		messages: map[string]*message{},
-		prompts:  map[string]*prompt{},
-		costs:    map[string]float64{},
+		parser:    transcript.NewParser(),
+		messages:  map[string]*message{},
+		prompts:   map[string]*prompt{},
+		costs:     map[string]float64{},
+		procCosts: map[string]map[string]float64{},
 	}
 }
 
@@ -178,6 +186,10 @@ func (f *fileState) clone() *fileState {
 	c.costs = make(map[string]float64, len(f.costs))
 	for k, v := range f.costs {
 		c.costs[k] = v
+	}
+	c.procCosts = make(map[string]map[string]float64, len(f.procCosts))
+	for start, days := range f.procCosts {
+		c.procCosts[start] = maps.Clone(days)
 	}
 	return &c
 }
@@ -284,6 +296,11 @@ func (s *Scanner) Report(ctx context.Context, days int) (Report, error) {
 			if inRange(day) && usd != 0 {
 				add(f, day, Bucket{CostUSD: usd})
 			}
+		}
+	}
+	for _, c := range processCosts(files) {
+		if inRange(c.day) && c.usd != 0 {
+			add(c.file, c.day, Bucket{CostUSD: c.usd})
 		}
 	}
 	for day := from; day <= to; day = nextDay(day) {
@@ -616,12 +633,66 @@ func (s *Scanner) cost(f *fileState, line []byte) {
 		return
 	}
 	v := *rec.TotalCostUSD
+	day := s.day(f.last)
+	if start := string(rec.StartTime); start != "" && start != "null" {
+		days := f.procCosts[start]
+		if days == nil {
+			days = map[string]float64{}
+			f.procCosts[start] = days
+		}
+		days[day] = max(days[day], v)
+		return
+	}
 	delta := v - f.lastCost
-	if start := string(rec.StartTime); start != f.costStart || delta < 0 {
+	if delta < 0 {
 		// A new Claude Code process counts from zero.
 		delta = v
-		f.costStart = start
 	}
 	f.lastCost = v
-	f.costs[s.day(f.last)] += delta
+	f.costs[day] += delta
+}
+
+// dayCost is what one process spent on one day, counted for the file
+// that showed it.
+type dayCost struct {
+	file *fileState
+	day  string
+	usd  float64
+}
+
+// processCosts merges each process's running totals across files, in the
+// order Report counts files, and turns them into what it spent each day:
+// the day's highest total less the highest before it.
+func processCosts(files []*fileState) []dayCost {
+	type seen struct {
+		file  *fileState
+		total float64
+	}
+	byProc := map[string]map[string]seen{}
+	for _, f := range files {
+		for start, days := range f.procCosts {
+			merged := byProc[start]
+			if merged == nil {
+				merged = map[string]seen{}
+				byProc[start] = merged
+			}
+			for day, v := range days {
+				if cur, ok := merged[day]; !ok || v > cur.total {
+					merged[day] = seen{f, v}
+				}
+			}
+		}
+	}
+	var out []dayCost
+	for _, merged := range byProc {
+		days := slices.Sorted(maps.Keys(merged))
+		high := 0.0
+		for _, day := range days {
+			if v := merged[day]; v.total > high {
+				out = append(out, dayCost{v.file, day, v.total - high})
+				high = v.total
+			}
+		}
+	}
+	return out
 }

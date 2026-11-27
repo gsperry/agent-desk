@@ -169,3 +169,56 @@ func TestEnv(t *testing.T) {
 		t.Fatalf("env = %s", got)
 	}
 }
+
+// A submodule's own config is out of filterGuard's reach, so its filters
+// and diff drivers must not run either: checking a submodule for local
+// changes would run git inside it.
+func TestCollectSubmoduleConfig(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, outer := filepath.Join(base, "inner"), filepath.Join(base, "outer")
+	for _, d := range []string{inner, outer} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		git(t, d, "init", "-q")
+	}
+	if err := os.WriteFile(filepath.Join(inner, "f.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inner, ".gitattributes"), []byte("*.txt diff=evil filter=evil\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, inner, "add", ".")
+	git(t, inner, "commit", "-q", "-m", "inner")
+	if err := os.WriteFile(filepath.Join(outer, "a.txt"), []byte("a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, outer, "add", ".")
+	git(t, outer, "commit", "-q", "-m", "outer")
+	git(t, outer, "-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "sub")
+	git(t, outer, "commit", "-q", "-m", "add sub")
+	sub := filepath.Join(outer, "sub")
+	git(t, sub, "config", "filter.evil.clean", "touch "+filepath.Join(base, "PWNED-FILTER")+"; cat")
+	git(t, sub, "config", "diff.evil.command", "touch "+filepath.Join(base, "PWNED-DIFF"))
+	if err := os.WriteFile(filepath.Join(sub, "f.txt"), []byte("jello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// diff.submodule=diff makes git diff inside each submodule.
+	git(t, outer, "config", "diff.submodule", "diff")
+
+	r := Reader{Runner: run.Exec{Env: Env(run.Environ())}}
+	if _, err := r.Collect(context.Background(), outer, ModeUncommitted); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []string{"PWNED-FILTER", "PWNED-DIFF"} {
+		if _, err := os.Stat(filepath.Join(base, m)); err == nil {
+			t.Fatalf("a submodule's own config ran a command (%s)", m)
+		}
+	}
+}

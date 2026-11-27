@@ -57,7 +57,7 @@ func TestSummarize(t *testing.T) {
 	if got != want {
 		t.Fatalf("got %+v\nwant %+v", got, want)
 	}
-	if r.name != "claude" || strings.Join(r.args, " ") != "-p --output-format=json --model=haiku --no-session-persistence --tools= --strict-mcp-config --system-prompt=You write short catch-up notes about coding agent sessions." {
+	if r.name != "claude" || strings.Join(r.args, " ") != "-p --output-format=json --model=haiku --no-session-persistence --tools= --strict-mcp-config --settings={\"disableAllHooks\":true} --disable-slash-commands --system-prompt=You write short catch-up notes about coding agent sessions." {
 		t.Fatalf("argv = %s %v", r.name, r.args)
 	}
 	if !strings.Contains(r.input, "Fix the flaky login test") || strings.Contains(r.input, "old prompt") {

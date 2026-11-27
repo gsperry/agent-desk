@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -82,6 +83,9 @@ type doc struct {
 	items      []transcript.Item
 	subs       map[chan Event]struct{}
 	lastActive time.Time
+	// closed is set, under mu, when evict drops the doc; a subscriber
+	// that finds it set opens a fresh one.
+	closed atomic.Bool
 }
 
 const defaultWindow = 300
@@ -98,7 +102,7 @@ func (t *Transcripts) init() {
 // Window returns up to limit items older than before (a Seq), or the newest
 // items when before is negative.
 func (t *Transcripts) Window(ctx context.Context, sessionID string, before, limit int) Page {
-	d := t.open(ctx, sessionID)
+	d := t.open(ctx, sessionID, false)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.lastActive = time.Now()
@@ -125,7 +129,7 @@ func (d *doc) window(before, limit int) Page {
 // uuid, for showing a search hit in context. Items is empty when the uuid
 // is not in the transcript.
 func (t *Transcripts) Around(ctx context.Context, sessionID, uuid string, radius int) Page {
-	d := t.open(ctx, sessionID)
+	d := t.open(ctx, sessionID, false)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.lastActive = time.Now()
@@ -144,7 +148,7 @@ func (t *Transcripts) Around(ctx context.Context, sessionID, uuid string, radius
 
 // Agents lists the subagents the session's conversation spawned.
 func (t *Transcripts) Agents(ctx context.Context, sessionID string) ([]agents.Agent, error) {
-	d := t.open(ctx, sessionID)
+	d := t.open(ctx, sessionID, false)
 	d.mu.Lock()
 	path := d.path
 	items := append([]transcript.Item(nil), d.items...)
@@ -158,7 +162,7 @@ func (t *Transcripts) Agents(ctx context.Context, sessionID string) ([]agents.Ag
 
 // AgentTranscript reads one subagent's transcript.
 func (t *Transcripts) AgentTranscript(ctx context.Context, sessionID, agentID string) ([]transcript.Item, error) {
-	d := t.open(ctx, sessionID)
+	d := t.open(ctx, sessionID, false)
 	d.mu.Lock()
 	path := d.path
 	d.mu.Unlock()
@@ -171,9 +175,16 @@ func (t *Transcripts) AgentTranscript(ctx context.Context, sessionID, agentID st
 // Subscribe opens the transcript and returns a channel of changes after the
 // returned first page.
 func (t *Transcripts) Subscribe(ctx context.Context, sessionID string) (Page, <-chan Event, func()) {
-	d := t.open(ctx, sessionID)
 	ch := make(chan Event, 64)
-	d.mu.Lock()
+	var d *doc
+	for {
+		d = t.open(ctx, sessionID, true)
+		d.mu.Lock()
+		if !d.closed.Load() {
+			break
+		}
+		d.mu.Unlock()
+	}
 	d.subs[ch] = struct{}{}
 	d.lastActive = time.Now()
 	page := d.window(-1, defaultWindow)
@@ -186,20 +197,29 @@ func (t *Transcripts) Subscribe(ctx context.Context, sessionID string) (Page, <-
 	}
 }
 
-func (t *Transcripts) open(ctx context.Context, sessionID string) *doc {
+// open returns the session's doc, reading it on first use. A new doc is
+// locked before it is published, so another caller waits for it to be read
+// instead of getting an empty first page. An id agent-manager does not list
+// gets a doc that is not kept, so made-up ids cost no memory, unless keep
+// is set: a subscriber to a session spawned a moment ago waits for the
+// session list to show it.
+func (t *Transcripts) open(ctx context.Context, sessionID string, keep bool) *doc {
 	t.init()
+	s := t.session(sessionID)
 	t.mu.Lock()
 	d, ok := t.docs[sessionID]
-	if !ok {
-		d = &doc{sessionID: sessionID, subs: map[chan Event]struct{}{}, lastActive: time.Now()}
+	if ok && !d.closed.Load() {
+		t.mu.Unlock()
+		return d
+	}
+	d = &doc{sessionID: sessionID, subs: map[chan Event]struct{}{}, lastActive: time.Now()}
+	d.mu.Lock()
+	if s != nil || keep {
 		t.docs[sessionID] = d
 	}
 	t.mu.Unlock()
-	if !ok {
-		d.mu.Lock()
-		t.resolve(ctx, d, t.session(sessionID))
-		d.mu.Unlock()
-	}
+	t.resolve(ctx, d, s)
+	d.mu.Unlock()
 	return d
 }
 
@@ -371,13 +391,17 @@ func (t *Transcripts) Run(ctx context.Context) {
 	sessions, unsubscribe := t.Sessions.Subscribe()
 	defer unsubscribe()
 	var events chan fsnotify.Event
+	var errs chan error
 	if t.watcher != nil {
-		events = t.watcher.Events
+		events, errs = t.watcher.Events, t.watcher.Errors
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-errs:
+			// The watcher blocks until its errors are read. A missed
+			// event is caught up by the ticker.
 		case ev := <-events:
 			for _, d := range t.snapshot() {
 				d.mu.Lock()
@@ -406,6 +430,9 @@ func (t *Transcripts) evict(idle time.Duration) {
 	for _, d := range t.snapshot() {
 		d.mu.Lock()
 		stale := len(d.subs) == 0 && time.Since(d.lastActive) > idle
+		if stale {
+			d.closed.Store(true)
+		}
 		path := d.path
 		d.mu.Unlock()
 		if !stale {

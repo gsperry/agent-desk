@@ -45,10 +45,11 @@ export function SubagentPage({ sessionId, session, agentId, agents, readTranscri
     void readTranscript(sessionId, agentId).then((r) => {
       if (live) setItems(r)
     })
-    if (!running) return
-    const t = setTimeout(() => {
-      setTick((n) => n + 1)
-    }, refreshMs)
+    const t = running
+      ? setTimeout(() => {
+          setTick((n) => n + 1)
+        }, refreshMs)
+      : undefined
     return () => {
       live = false
       clearTimeout(t)

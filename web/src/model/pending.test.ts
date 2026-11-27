@@ -71,3 +71,32 @@ describe('expire', () => {
     expect(expire(p, t0 + 1)).toBe(p)
   })
 })
+
+describe('commands and shell lines', () => {
+  const notice = (seq: number, label: string, text: string): Item => ({ seq, kind: 'notice', label, text, time: '2026-11-10T18:00:02Z' })
+
+  it('confirms a slash command against its command notice', () => {
+    expect(reconcile([pending('/review PR 12')], [notice(1, 'command', '/review PR 12')])).toEqual([])
+  })
+
+  it('confirms a shell line against its bash-input notice', () => {
+    expect(reconcile([pending('!git status')], [notice(1, 'bash-input', 'git status')])).toEqual([])
+  })
+
+  it('does not confirm a reply against other notices', () => {
+    const p = [pending('/compact')]
+    expect(reconcile(p, [notice(1, 'command-output', '/compact')])).toBe(p)
+  })
+
+  it('drops an accepted command that left no record', () => {
+    expect(expire([pending('/model')], t0 + confirmWithinMs + 1)).toEqual([])
+  })
+
+  it('still flags a command whose delivery was uncertain', () => {
+    expect(expire([pending('/model', 'maybe')], t0 + confirmWithinMs + 1)[0]?.state).toBe('unconfirmed')
+  })
+
+  it('flags a prose reply that starts with a slash path', () => {
+    expect(expire([pending('/ is the root')], t0 + confirmWithinMs + 1)[0]?.state).toBe('unconfirmed')
+  })
+})

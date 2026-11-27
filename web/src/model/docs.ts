@@ -35,10 +35,14 @@ export function applyMessage(data: AppData, msg: ServerMessage): AppData {
   }
 }
 
-// prependOlder merges an older page fetched for scrollback.
-export function prependOlder(data: AppData, page: Page): AppData {
+// prependOlder merges an older page fetched for scrollback, asked for with
+// before set to the doc's first seq. A doc replaced meanwhile (a reconnect
+// or a reset sends a fresh page) no longer starts there, so the page could
+// leave a gap and is dropped.
+export function prependOlder(data: AppData, page: Page, before: number): AppData {
   return withDoc(data, page.sessionId, (doc) => {
     const first = doc.items[0]?.seq ?? Infinity
+    if (first !== before) return doc.loadingOlder ? { ...doc, loadingOlder: false } : doc
     const older = page.items.filter((it) => it.seq < first)
     return { ...doc, items: [...older, ...doc.items], hasMore: page.hasMore, loadingOlder: false }
   })

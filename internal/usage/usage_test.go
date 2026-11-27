@@ -280,3 +280,41 @@ func TestReportSpacedJSONAndEmptyLists(t *testing.T) {
 		t.Fatalf("spaced JSON was dropped: %+v", rep.Totals)
 	}
 }
+
+// One Claude Code process can write its running total into several files,
+// as after /clear; it counts once, each day's growth for the file that
+// showed it.
+func TestProcessCostAcrossFiles(t *testing.T) {
+	root := t.TempDir()
+	start := "2026-11-01T08:00:00Z"
+	writeLines(t, filepath.Join(root, "projects", "-p", "conv-before-clear.jsonl"),
+		promptLine("p1", "2026-11-01T09:00:00Z"),
+		reply("m1", "2026-11-01T09:00:10Z", 1, 1),
+		cost(start, 2),
+	)
+	writeLines(t, filepath.Join(root, "projects", "-p", "conv-after-clear.jsonl"),
+		promptLine("p2", "2026-11-02T09:00:00Z"),
+		reply("m2", "2026-11-02T09:00:10Z", 1, 1),
+		cost(start, 5),
+		cost(start, 7),
+	)
+	// Another process in the same file counts from zero.
+	appendLines(t, filepath.Join(root, "projects", "-p", "conv-after-clear.jsonl"), cost("2026-11-02T10:00:00Z", 1))
+	rep, err := scanner(root).Report(context.Background(), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Totals.CostUSD != 8 {
+		t.Fatalf("total cost = %v, want 8", rep.Totals.CostUSD)
+	}
+	byConv := map[string]float64{}
+	for _, c := range rep.Conversations {
+		byConv[c.ID] = c.CostUSD
+	}
+	if byConv["conv-before-clear"] != 2 || byConv["conv-after-clear"] != 6 {
+		t.Fatalf("by conversation = %v", byConv)
+	}
+	if rep.Days[0].CostUSD != 2 || rep.Days[1].CostUSD != 6 {
+		t.Fatalf("by day = %v, %v", rep.Days[0].CostUSD, rep.Days[1].CostUSD)
+	}
+}

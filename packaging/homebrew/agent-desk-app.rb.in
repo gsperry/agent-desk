@@ -16,6 +16,10 @@ cask "agent-desk-app" do
 
   app "Agent Desk.app"
 
+  # Start at login is a LaunchAgent that names the app; it goes with it.
+  uninstall quit:   "app.agent-desk.desktop",
+            delete: "~/Library/LaunchAgents/Agent Desk.plist"
+
   zap trash: [
     "~/Library/Application Support/agent-desk",
     "~/Library/Caches/app.agent-desk.desktop",

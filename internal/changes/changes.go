@@ -56,6 +56,10 @@ var ErrNotRepo = errors.New("not a git repository")
 // maxDiffBytes caps the diff read from git.
 const maxDiffBytes = 4 << 20
 
+// MaxOutput is the most git output a Reader's runner needs to keep: a
+// diff past maxDiffBytes is cut there anyway.
+const MaxOutput = maxDiffBytes
+
 type Reader struct {
 	Runner run.Runner
 }
@@ -137,7 +141,10 @@ func (r Reader) Collect(ctx context.Context, dir, mode string) (Changes, error) 
 	} else {
 		c.Mode = ModeUncommitted
 	}
-	args := append(r.filterGuard(ctx, root), "diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M", against, "--")
+	// Submodules are compared by commit only. Checking one for local
+	// changes runs git inside it, with its own config, which filterGuard
+	// cannot see: a filter set there would run.
+	args := append(r.filterGuard(ctx, root), "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty", "--submodule=short", "-M", against, "--")
 	diff, err := r.git(ctx, root, args...)
 	if err != nil {
 		return Changes{}, err

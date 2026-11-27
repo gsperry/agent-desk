@@ -165,7 +165,7 @@ Whichever proxy you use, choose what remote devices may do: **Read and answer** 
 
 ## Catch-up summaries
 
-Off by default. Settings → Catch-up summaries adds a "Catch me up" button to sessions: it runs your own Claude Code CLI (`claude -p`) on what happened since you last looked, with no tools, no MCP servers and nothing saved, and shows the summary with the tokens and cost it used. **Each summary spends tokens on your Claude Code provider**, about $0.002 of fixed overhead on the default `haiku` model plus the excerpt. Nothing runs until you press the button; repeating the same request is answered from cache.
+Off by default, and refused by the server until you turn it on. Settings → Catch-up summaries adds a "Catch me up" button to sessions: it runs your own Claude Code CLI (`claude -p`) on what happened since you last looked, with no tools, no MCP servers and nothing saved, and shows the summary with the tokens and cost it used. **Each summary spends tokens on your Claude Code provider**, about $0.002 of fixed overhead on the default `haiku` model plus the excerpt. Nothing runs until you press the button; repeating the same request is answered from cache.
 
 ## Voice input (Mac app)
 
@@ -202,7 +202,7 @@ A session needs you when it is waiting on a question or permission prompt, has e
 ## Development
 
 ```sh
-make dev     # backend on :7318 under air plus Vite on :5173, with hot reload on both
+make dev     # backend on :7319 under air plus Vite on :5173, with hot reload on both
 make test    # Go and Vitest
 make lint    # gofmt, go vet, staticcheck, ESLint, tsc
 make e2e     # Playwright smoke test against fixture sessions

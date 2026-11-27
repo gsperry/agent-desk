@@ -275,24 +275,35 @@ func (s *Speaker) allow(now time.Time) bool {
 }
 
 var (
-	fence      = regexp.MustCompile("(?s)```.*?(```|$)")
+	fenceOpen  = regexp.MustCompile("^[ \t]*(`{3,}|~{3,})")
+	preBlock   = regexp.MustCompile(`(?is)<pre[\s>].*?(</pre>|$)`)
+	indent     = regexp.MustCompile(`(?m)^[ \t]+`)
+	listItem   = regexp.MustCompile(`^[ \t]*([-*+]|\d+[.)])[ \t]`)
 	inlineCode = regexp.MustCompile("`([^`]*)`")
-	mdLink     = regexp.MustCompile(`\[([^\]]+)\]\([^)]*\)`)
-	mdMarks    = regexp.MustCompile(`(?m)^[ \t]{0,3}(#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+[.)][ \t]+)`)
-	emphasis   = regexp.MustCompile(`(\*\*|__|\*|_|~~)(\S[^*_~]*?\S|\S)(\*\*|__|\*|_|~~)`)
-	tableRow   = regexp.MustCompile(`(?m)^\s*\|.*\|\s*$`)
-	spaces     = regexp.MustCompile(`[ \t]+`)
-	blankLines = regexp.MustCompile(`\n{3,}`)
+	plainWord  = regexp.MustCompile(`^\pL{1,24}$`)
+	// spaceBeforeMark is spaces before punctuation, on one line.
+	spaceBeforeMark = regexp.MustCompile(`[ \t]+([.,;:!?])`)
+	mdLink          = regexp.MustCompile(`\[([^\]]+)\]\([^)]*\)`)
+	mdMarks         = regexp.MustCompile(`(?m)^[ \t]{0,3}(#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+[.)][ \t]+)`)
+	emphasis        = regexp.MustCompile(`(\*\*|__|\*|_|~~)(\S[^*_~]*?\S|\S)(\*\*|__|\*|_|~~)`)
+	tableRow        = regexp.MustCompile(`(?m)^\s*\|.*\|\s*$`)
+	spaces          = regexp.MustCompile(`[ \t]+`)
+	blankLines      = regexp.MustCompile(`\n{3,}`)
 )
 
-// Prepare turns a reply's Markdown into text to read: code blocks become
-// "Code omitted.", tables are left out, inline code, links and emphasis
-// keep only their words, and the result is cut at a sentence end within
-// MaxChars.
+// Prepare turns a reply's Markdown into text to read: code blocks (fenced
+// with backticks or tildes, indented, or in <pre>) become "Code omitted.",
+// tables are left out, inline code is read only when it is one plain word
+// (see spokenCode), links and emphasis keep only their words, and the
+// result is cut at a sentence end within MaxChars.
 func Prepare(md string) string {
-	t := fence.ReplaceAllString(md, "\nCode omitted.\n")
+	t := withoutCode(md)
+	// With code gone, indentation only nests lists.
+	t = indent.ReplaceAllString(t, "")
 	t = tableRow.ReplaceAllString(t, "")
-	t = inlineCode.ReplaceAllString(t, "$1")
+	t = inlineCode.ReplaceAllStringFunc(t, spokenCode)
+	// A span left out leaves a space before the punctuation after it.
+	t = spaceBeforeMark.ReplaceAllString(t, "$1")
 	t = mdLink.ReplaceAllString(t, "$1")
 	t = mdMarks.ReplaceAllString(t, "")
 	for range 3 {
@@ -309,6 +320,68 @@ func Prepare(md string) string {
 		cut = cut[:i+1]
 	}
 	return strings.TrimSpace(cut)
+}
+
+// spokenCode reads an inline code span as its word when it is one plain
+// word of letters, such as `parser`, and leaves it out otherwise: a span
+// with digits, symbols, a path, a command or a key never leaves the desk.
+func spokenCode(span string) string {
+	word := strings.Trim(span, "`")
+	if plainWord.MatchString(word) {
+		return word
+	}
+	return ""
+}
+
+// withoutCode replaces each code block with "Code omitted.": fenced blocks
+// at any indent, closed by a fence of the same kind at least as long or
+// left open to the end; indented blocks after a blank line, unless they
+// continue a list; and HTML <pre> blocks.
+func withoutCode(md string) string {
+	md = preBlock.ReplaceAllString(md, "\nCode omitted.\n")
+	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+	var out []string
+	omit := func() {
+		if n := len(out); n < 2 || out[n-2] != "Code omitted." {
+			out = append(out, "", "Code omitted.", "")
+		}
+	}
+	inList := false
+	for i := 0; i < len(lines); i++ {
+		l := lines[i]
+		if m := fenceOpen.FindStringSubmatch(l); m != nil {
+			mark := m[1]
+			for i++; i < len(lines); i++ {
+				c := strings.TrimLeft(lines[i], " \t")
+				if strings.HasPrefix(c, mark) && strings.Trim(c, mark[:1]+" \t") == "" {
+					break
+				}
+			}
+			omit()
+			continue
+		}
+		blankBefore := i == 0 || strings.TrimSpace(lines[i-1]) == ""
+		if blankBefore && indented(l) && !inList && !listItem.MatchString(l) {
+			for i+1 < len(lines) && (indented(lines[i+1]) || strings.TrimSpace(lines[i+1]) == "") {
+				i++
+			}
+			omit()
+			continue
+		}
+		switch {
+		case listItem.MatchString(l):
+			inList = true
+		case strings.TrimSpace(l) != "" && !indented(l):
+			inList = false
+		}
+		out = append(out, l)
+	}
+	return strings.Join(out, "\n")
+}
+
+// indented is a line that starts with four spaces or a tab and has text.
+func indented(l string) bool {
+	return strings.TrimSpace(l) != "" && (strings.HasPrefix(l, "    ") || strings.HasPrefix(l, "\t"))
 }
 
 //go:embed silence.mp3

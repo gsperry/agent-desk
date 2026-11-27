@@ -151,6 +151,10 @@ func scanSkills(dir, prefix, source string) []Command {
 // are read.
 func frontMatter(path string) map[string]string {
 	out := map[string]string{}
+	// Only a regular file: opening a named pipe would wait forever.
+	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
+		return out
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return out

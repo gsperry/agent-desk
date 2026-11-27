@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Component, memo, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { pinKey } from '../model/pins'
 import { riskyCommand } from '../model/filter'
 import { bashFiles } from '../model/diff'
@@ -20,6 +20,43 @@ function time(item: Item): string {
 }
 
 export const BlockView = memo(function BlockView({ block, live }: { block: Block; live: boolean }) {
+  return (
+    <BlockBoundary block={block}>
+      <BlockBody block={block} live={live} />
+    </BlockBoundary>
+  )
+})
+
+// BlockBoundary shows a block that fails to draw as an unrecognized event,
+// so one odd record never blanks the whole transcript.
+class BlockBoundary extends Component<{ block: Block; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('Agent Desk could not draw a transcript block', error)
+  }
+
+  componentDidUpdate(prev: { block: Block }) {
+    if (this.state.failed && prev.block !== this.props.block) this.setState({ failed: false })
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    let raw: string
+    try {
+      raw = JSON.stringify(this.props.block, null, 2)
+    } catch {
+      raw = this.props.block.kind
+    }
+    return <RawEvent item={{ seq: -1, kind: 'raw', label: `could not draw a ${this.props.block.kind} block`, raw }} />
+  }
+}
+
+function BlockBody({ block, live }: { block: Block; live: boolean }) {
   switch (block.kind) {
     case 'user':
       return <UserPrompt item={block.item} />
@@ -44,7 +81,7 @@ export const BlockView = memo(function BlockView({ block, live }: { block: Block
     case 'raw':
       return <RawEvent item={block.item} />
   }
-})
+}
 
 // PinButton pins a prompt or reply when the view keeps pins.
 function PinButton({ item }: { item: Item }) {

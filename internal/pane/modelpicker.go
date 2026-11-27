@@ -254,9 +254,15 @@ func (a *Answerer) openPicker(ctx context.Context, id string) (*ModelPicker, err
 	return nil, &send.Refused{Reason: reasonPicker, Message: "Claude Code's model picker did not open."}
 }
 
+// closeTimeout bounds closing the picker after a flow ends.
+const closeTimeout = 15 * time.Second
+
 // closePicker presses Escape if, and only if, the picker is showing, which
 // leaves the model as it was.
 func (a *Answerer) closePicker(ctx context.Context, id string) {
+	// The flow's own deadline may be what ended it; closing gets its own.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
+	defer cancel()
 	p, _, err := a.readPicker(ctx, id)
 	if err != nil || p == nil {
 		return
@@ -273,6 +279,11 @@ func (a *Answerer) closePicker(ctx context.Context, id string) {
 // ModelOptions opens the picker, walks every model and its effort slider,
 // and closes it again with Escape, so nothing changes.
 func (a *Answerer) ModelOptions(ctx context.Context, id string) (ModelOptions, error) {
+	release, busy := a.lock(id)
+	if busy != nil {
+		return ModelOptions{}, busy
+	}
+	defer release()
 	p, err := a.openPicker(ctx, id)
 	if err != nil {
 		return ModelOptions{}, err
@@ -348,6 +359,11 @@ func (a *Answerer) sweepEffort(ctx context.Context, id string, p *ModelPicker) (
 // default. If Claude Code asks to confirm a switch, the question is left
 // for the user.
 func (a *Answerer) SetModel(ctx context.Context, id, model, effort string) (ModelResult, error) {
+	release, busy := a.lock(id)
+	if busy != nil {
+		return ModelResult{}, busy
+	}
+	defer release()
 	p, err := a.openPicker(ctx, id)
 	if err != nil {
 		return ModelResult{}, err
@@ -364,7 +380,7 @@ func (a *Answerer) SetModel(ctx context.Context, id, model, effort string) (Mode
 			return fail(err)
 		}
 		if p, err = a.steady(ctx, id); err != nil {
-			return ModelResult{}, err
+			return fail(err)
 		}
 	}
 	if effort != "" {
@@ -382,7 +398,7 @@ func (a *Answerer) SetModel(ctx context.Context, id, model, effort string) (Mode
 			}
 			next, err := a.steady(ctx, id)
 			if err != nil {
-				return ModelResult{}, err
+				return fail(err)
 			}
 			if next.Effort == p.Effort {
 				return fail(&send.Refused{Reason: reasonNoEffort, Message: fmt.Sprintf("%s does not offer %s effort.", model, effort)})

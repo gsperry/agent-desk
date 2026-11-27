@@ -6,7 +6,11 @@
 // Nothing returns an error and nothing is dropped without being counted.
 package transcript
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"time"
+)
 
 type Kind string
 
@@ -78,4 +82,15 @@ type Stats struct {
 	Raw        int            `json:"raw"`
 	Duplicates int            `json:"duplicates"`
 	Skipped    map[string]int `json:"skipped,omitempty"`
+}
+
+// settleTime is how long after its file last changed an unfinished last
+// line is taken as final.
+const settleTime = time.Minute
+
+// Unfinished reports a last line with no newline that is still being
+// written: not valid JSON, in a file changed within the last minute. Such
+// a line is left for the next read; an old one is parsed, and shows raw.
+func Unfinished(line []byte, modTime, now time.Time) bool {
+	return !bytes.HasSuffix(line, []byte("\n")) && !json.Valid(bytes.TrimSpace(line)) && now.Sub(modTime) < settleTime
 }

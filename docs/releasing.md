@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a version tag. `.github/workflows/release.yml` builds, on macOS:
+A release is a version tag. `.github/workflows/release.yml` first runs the tests in a job with no secrets, then, in the `release` environment, builds on macOS:
 
 - the `agent-desk` command for macOS and Linux, arm64 and amd64, as `agent-desk_<version>_<os>_<arch>.tar.gz` (`make release-cli`);
 - the universal macOS app as `Agent-Desk_<version>_macos.zip` (`make desktop-universal`);
@@ -16,7 +16,9 @@ Run by hand from the Actions tab, the workflow builds the same files as artifact
 
 ## Signing and notarization
 
-The app is signed with a Developer ID Application certificate and notarized when these repository secrets exist. Without them the build is unsigned and the run says so.
+The app is signed with a Developer ID Application certificate and notarized when these secrets exist. Without them the build is unsigned and the run says so.
+
+They are repository secrets. The signing job runs in the `release` environment (Settings → Environments → release) with you as its required reviewer, so a release waits for your approval before that job starts and before any step can read them; within the job, only the steps that sign get them. Moving them into the environment as well would keep every other workflow from reading them; that means entering each value again, so do it when the certificate or API key is next replaced, and keep the new `.p12`, its password and the `.p8` in a password manager. Actions are pinned to commit SHAs and the Tauri CLI to an exact version; bump them on purpose.
 
 | Secret | Value |
 | --- | --- |

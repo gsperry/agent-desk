@@ -170,6 +170,12 @@ func (p *Parser) Line(line []byte) []Item {
 	default:
 		items = []Item{withBase(base, rawItem(line, "unknown record type "+r.Type))}
 	}
+	if len(items) == 0 {
+		// A message with no content to show, such as an empty block list
+		// or only a streaming placeholder, is counted, never dropped
+		// unseen.
+		p.stats.Skipped["empty "+r.Type]++
+	}
 	return p.emit(items...)
 }
 
@@ -217,6 +223,10 @@ func decodeMessage(raw json.RawMessage) (message, bool) {
 // contentBlocks reads message content, which is either a string or a list
 // of blocks.
 func contentBlocks(raw json.RawMessage) (text string, blocks []json.RawMessage, ok bool) {
+	// A missing or null content is not an empty message; it is shown raw.
+	if t := bytes.TrimSpace(raw); len(t) == 0 || bytes.Equal(t, []byte("null")) {
+		return "", nil, false
+	}
 	if json.Unmarshal(raw, &text) == nil {
 		return text, nil, true
 	}

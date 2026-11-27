@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -343,5 +344,53 @@ func TestAccessKeysTeamChange(t *testing.T) {
 	}
 	if n := ks.hits.Load(); n != 2 {
 		t.Fatalf("team change did not refetch: %d fetches", n)
+	}
+}
+
+// Requests that arrive together on a cold cache, as a page and its assets
+// do, share one fetch and all pass.
+func TestAccessKeysConcurrentColdStart(t *testing.T) {
+	ks := newKeyServer(t, "k1")
+	v := ks.verifier()
+	good := sign(t, ks.keys["k1"], map[string]any{"alg": "RS256", "kid": "k1"}, goodClaims())
+	var wg sync.WaitGroup
+	var failed atomic.Int32
+	for range 30 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := v.Verify(good, "team", testAUD); err != nil {
+				failed.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := failed.Load(); n != 0 {
+		t.Fatalf("%d of 30 requests failed", n)
+	}
+	if n := ks.hits.Load(); n != 1 {
+		t.Fatalf("%d fetches, want 1", n)
+	}
+}
+
+// A verified token's expiry travels with the identity, so a WebSocket it
+// opened can close when it runs out.
+func TestIdentityCarriesTokenExpiry(t *testing.T) {
+	ks := newKeyServer(t, "k1")
+	token := sign(t, ks.keys["k1"], map[string]any{"alg": "RS256", "kid": "k1"}, goodClaims())
+	if got := TokenExpiry(token); !got.Equal(testNow.Add(time.Hour)) {
+		t.Fatalf("expiry = %v", got)
+	}
+	s := Settings{Enabled: true, Host: "desk.example.com", Via: ViaCloudflare, CloudflareTeam: "team", CloudflareAUD: testAUD, CloudflareEmails: []string{"dev@example.com"}}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set(AccessHeader, token)
+	id, ok := Identify(r, s, ks.verifier())
+	if !ok || !id.Expires.Equal(testNow.Add(time.Hour)) {
+		t.Fatalf("identity = %+v, %v", id, ok)
+	}
+	for _, bad := range []string{"", "a.b", "a.!!!.c"} {
+		if !TokenExpiry(bad).IsZero() {
+			t.Fatalf("%q has an expiry", bad)
+		}
 	}
 }

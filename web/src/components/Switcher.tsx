@@ -1,3 +1,4 @@
+import { useModal } from './useModal'
 import { useMemo, useState } from 'react'
 import { filterSessions, needsAttention, type Acks } from '../model/attention'
 import type { SessionView } from '../types'
@@ -12,6 +13,7 @@ interface Props {
 
 // Switcher is the Cmd+K session picker.
 export function Switcher({ sessions, acks, onPick, onClose }: Props) {
+  const panel = useModal<HTMLDivElement>()
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
   const results = useMemo(() => filterSessions(sessions.filter((s) => !s.archived), query, acks).slice(0, 12), [sessions, query, acks])
@@ -26,8 +28,10 @@ export function Switcher({ sessions, acks, onPick, onClose }: Props) {
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div
+        ref={panel}
         className="switcher"
         role="dialog"
+        aria-modal="true"
         aria-label="Switch session"
         onMouseDown={(e) => {
           e.stopPropagation()

@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,5 +76,59 @@ func TestEnvironDropsSessionVariables(t *testing.T) {
 	}
 	if !strings.Contains(env, "AGENT_DESK_KEEP=yes") {
 		t.Error("unrelated variable dropped")
+	}
+}
+
+// A command's own background children are killed with it at the deadline,
+// and do not stretch the wait.
+func TestTimeoutKillsTheGroup(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "survived")
+	start := time.Now()
+	_, err := Exec{Timeout: 300 * time.Millisecond}.Run(context.Background(), "sh", "-c", "(sleep 1; touch "+marker+") & sleep 30")
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("err = %v", err)
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Fatalf("returned after %s", d)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a background child outlived the timeout")
+	}
+}
+
+func TestLimit(t *testing.T) {
+	long, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	defer cancel()
+	if got := (Exec{}).limit(long); got < 149*time.Second {
+		t.Fatalf("caller's 150s deadline gave %s", got)
+	}
+	if got := (Exec{}).limit(context.Background()); got != defaultTimeout {
+		t.Fatalf("no deadline gave %s", got)
+	}
+	if got := (Exec{Timeout: time.Second}).limit(long); got != time.Second {
+		t.Fatalf("explicit timeout gave %s", got)
+	}
+}
+
+// With no Timeout, the caller's deadline is the limit.
+func TestCallerDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if _, err := (Exec{}).Run(ctx, "sleep", "2"); !errors.Is(err, ErrTimeout) {
+		t.Fatalf("short deadline: err = %v", err)
+	}
+}
+
+// A clean exit that leaves a background process holding the output still
+// returns once the process itself is done.
+func TestBackgroundChildHoldingOutput(t *testing.T) {
+	start := time.Now()
+	out, err := Exec{Timeout: 10 * time.Second}.Run(context.Background(), "sh", "-c", "echo hi; sleep 6 &")
+	if err != nil || string(out) != "hi\n" {
+		t.Fatalf("out = %q, err = %v", out, err)
+	}
+	if d := time.Since(start); d > 4*time.Second {
+		t.Fatalf("returned after %s", d)
 	}
 }

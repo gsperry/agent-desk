@@ -13,11 +13,11 @@ The hard rules in `CLAUDE.md` say Agent Desk runs only `agent-manager`, `tmux` a
 ## Design
 
 - Runs `claude -p` through `internal/run` (argv only, timeout), never a shell. The user's provider setup is inherited from the environment, as for every other CLI Agent Desk runs. No API key is read or asked for.
-- Flags: `--output-format json` for the result and its token use, `--model` from a setting (default: the smallest model the user's provider offers, chosen in Settings), `--no-session-persistence` so no transcript is written under `~/.claude`, no tools (`--disallowedTools` for every tool, or `--tools ""` if available), `--strict-mcp-config` with no MCP servers, and a working directory of an empty temp dir so no `CLAUDE.md` is loaded.
+- Flags: `--output-format json` for the result and its token use, `--model` from a setting (default: the smallest model the user's provider offers, chosen in Settings), `--no-session-persistence` so no transcript is written under `~/.claude`, no tools (`--disallowedTools` for every tool, or `--tools ""` if available), `--strict-mcp-config` with no MCP servers, `--settings` turning off the user's hooks (`disableAllHooks`), `--disable-slash-commands`, and a working directory of an empty temp dir so no `CLAUDE.md` is loaded.
 - Input: the session's items since the "since you last looked" mark, rendered with `internal/export` (prompts and replies, tool calls one line each), capped at about 40k characters, newest kept. Passed on stdin, not argv.
 - Runs only when asked: one click, one summary. Never on a timer, never from a rule.
 - Shows the result with the tokens it used and the model, and caches it by session and transcript size, so asking twice costs nothing.
-- Off by default. Settings has "Allow catch-up summaries (spends tokens on your Claude Code provider)".
+- Off by default. Settings has "Allow catch-up summaries (spends tokens on your Claude Code provider)". The server keeps the setting and the model in `summaries.json` in Agent Desk's config folder (owner-only) and refuses a summary while it is off, whoever asks.
 
 ## Decisions needed
 

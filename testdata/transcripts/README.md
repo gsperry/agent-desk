@@ -1,6 +1,6 @@
 # Transcript samples
 
-Real Claude Code transcripts, anonymized with `go run ./tools/anonymize`. Structure, keys, ids, timestamps, versions, tool names and parser markers are kept. Other letters are replaced with filler of the same case. Request payload records (`api-request*`) are cut to the first three.
+Real Claude Code transcripts, anonymized with `go run ./tools/anonymize`. Structure, keys, ids, timestamps, versions, built-in tool names and the tags the parser reads are kept; MCP tool names keep only their `mcp__server__tool` shape. Other letters are replaced with filler of the same case. Request payload records (`api-request*`) are cut to the first three.
 
 | File | Claude Code versions | Records | Source |
 | --- | --- | --- | --- |

@@ -301,6 +301,8 @@ func TestRouteNeeds(t *testing.T) {
 		"GET /api/conversations/{id}/transcript":           remote.NeedRead,
 		"GET /api/conversations/{id}/export":               remote.NeedRead,
 		"POST /api/sessions/{id}/summary":                  remote.NeedLocal,
+		"GET /api/summaries":                               remote.NeedLocal,
+		"POST /api/summaries":                              remote.NeedLocal,
 		"GET /api/usage":                                   remote.NeedRead,
 		"GET /api/overview":                                remote.NeedRead,
 		"GET /api/spawn-options":                           remote.NeedManage,
@@ -607,6 +609,27 @@ func TestSpeakRoutes(t *testing.T) {
 			}
 		})
 	}
+	t.Run("remote below the reply level", func(t *testing.T) {
+		rc := remoteOn(remote.LevelAnswer)
+		rc.cur.SpeakRemote = true
+		s := newTestServer(t, Config{Remote: rc, Speech: &fakeSpeech{status: ready}})
+		status := doRemote(t, s, remoteReq{"GET", "/api/speak", "", remoteHost, "", "dev@example.com"})
+		var st tts.Status
+		_ = json.Unmarshal(status.Body.Bytes(), &st)
+		if st.Available {
+			t.Fatalf("offered at a level that cannot use it: %+v", st)
+		}
+	})
+	t.Run("remote error hides the desk's paths", func(t *testing.T) {
+		rc := remoteOn(remote.LevelReply)
+		rc.cur.SpeakRemote = true
+		sp := &fakeSpeech{status: ready, err: fmt.Errorf("%w: chmod 600 /Users/someone/tts.json", tts.ErrNotConfigured)}
+		s := newTestServer(t, Config{Remote: rc, Speech: sp})
+		rec := doRemote(t, s, remoteReq{"POST", "/api/speak", `{"text":"hi"}`, remoteHost, "https://" + remoteHost, "dev@example.com"})
+		if rec.Code != 404 || strings.Contains(rec.Body.String(), "/Users/") {
+			t.Fatalf("status %d %s", rec.Code, rec.Body.String())
+		}
+	})
 	t.Run("absent", func(t *testing.T) {
 		s := newTestServer(t, Config{})
 		req := httptest.NewRequest("GET", "/api/speak", nil)
@@ -618,4 +641,38 @@ func TestSpeakRoutes(t *testing.T) {
 			t.Fatalf("status %d %s", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+// Another site's page cannot make a remote device's browser call the API;
+// following a link to a page still works.
+func TestRemoteRefusesCrossSiteRequests(t *testing.T) {
+	tests := []struct {
+		name, path, site, mode string
+		want                   int
+	}{
+		{"same origin read", "/api/sessions", "same-origin", "cors", 200},
+		{"typed address", "/", "none", "navigate", 200},
+		{"no fetch metadata", "/api/sessions", "", "", 200},
+		{"cross-site image or fetch", "/api/sessions/x/transcript", "cross-site", "no-cors", 403},
+		{"same-site fetch", "/api/sessions", "same-site", "cors", 403},
+		{"cross-site link to a page", "/s/a1", "cross-site", "navigate", 200},
+		{"cross-site link to the API", "/api/sessions", "cross-site", "navigate", 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t, Config{Remote: remoteOn(remote.LevelAnswer)})
+			req := httptest.NewRequest("GET", tt.path, nil)
+			req.Host = remoteHost
+			req.Header.Set(remote.TailscaleHeader, "dev@example.com")
+			if tt.site != "" {
+				req.Header.Set("Sec-Fetch-Site", tt.site)
+				req.Header.Set("Sec-Fetch-Mode", tt.mode)
+			}
+			rec := httptest.NewRecorder()
+			s.RemoteHandler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d", rec.Code, tt.want)
+			}
+		})
+	}
 }

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gsperry/agent-desk/internal/hub"
@@ -93,7 +94,7 @@ func (s *Searcher) Search(ctx context.Context, query string, opts Options) (Resu
 		go func() {
 			defer wg.Done()
 			for sess := range jobs {
-				found, ok := s.searchSession(ctx, sess, m)
+				found, ok := s.searchSafely(ctx, sess, m)
 				mu.Lock()
 				if ok {
 					searched++
@@ -125,6 +126,17 @@ func (s *Searcher) Search(ctx context.Context, query string, opts Options) (Resu
 	return res, nil
 }
 
+// searchSafely searches one session; a panic on odd input skips the
+// session instead of taking the server down.
+func (s *Searcher) searchSafely(ctx context.Context, sess hub.SessionView, m matcher) (hits []Hit, ok bool) {
+	defer func() {
+		if recover() != nil {
+			hits, ok = nil, false
+		}
+	}()
+	return s.searchSession(ctx, sess, m)
+}
+
 func (s *Searcher) searchSession(ctx context.Context, sess hub.SessionView, m matcher) ([]Hit, bool) {
 	path, err := s.Locator.Find(ctx, sess.AgentSessionID, sess.Environment)
 	if err != nil {
@@ -146,7 +158,12 @@ func (s *Searcher) searchSession(ctx context.Context, sess hub.SessionView, m ma
 		if len(line) > 0 && m.maybe(line) {
 			for _, it := range p.Line(line) {
 				text := searchable(it)
-				if i := m.index(text); i >= 0 {
+				if i, j := m.index(text); i >= 0 {
+					// The newest matches are kept: a long session's
+					// oldest ones are dropped as newer ones arrive.
+					if len(hits) == perSession {
+						hits = append(hits[:0], hits[1:]...)
+					}
 					hits = append(hits, Hit{
 						SessionID:   sess.ID,
 						SessionName: sess.Name,
@@ -156,11 +173,8 @@ func (s *Searcher) searchSession(ctx context.Context, sess hub.SessionView, m ma
 						Kind:        it.Kind,
 						Tool:        toolName(it),
 						Time:        it.Time,
-						Snippet:     snippet(text, i, len(m.lower)),
+						Snippet:     snippet(text, i, j-i),
 					})
-					if len(hits) >= perSession {
-						return hits, true
-					}
 				}
 			}
 		}
@@ -201,11 +215,49 @@ func (m matcher) maybe(line []byte) bool {
 	return bytes.Contains(bytes.ToLower(line), m.token)
 }
 
-func (m matcher) index(text string) int {
+// index finds the query in text, ignoring case, and returns where the match
+// starts and ends in text, or -1. Lowercasing can change a rune's length
+// in UTF-8 (Ⱥ is two bytes, ⱥ three), so offsets found in the lowered text
+// are mapped back to the original.
+func (m matcher) index(text string) (int, int) {
 	if text == "" {
-		return -1
+		return -1, -1
 	}
-	return strings.Index(strings.ToLower(text), m.lower)
+	ascii := true
+	for i := 0; i < len(text); i++ {
+		if text[i] >= utf8.RuneSelf {
+			ascii = false
+			break
+		}
+	}
+	if ascii {
+		i := strings.Index(strings.ToLower(text), m.lower)
+		if i < 0 {
+			return -1, -1
+		}
+		return i, i + len(m.lower)
+	}
+	var lower strings.Builder
+	// from[k] is the offset in text of the rune that lowered byte k came
+	// from; one more entry marks the end.
+	from := make([]int, 0, len(text)+1)
+	for at, r := range text {
+		n, _ := lower.WriteRune(unicode.ToLower(r))
+		for range n {
+			from = append(from, at)
+		}
+	}
+	from = append(from, len(text))
+	i := strings.Index(lower.String(), m.lower)
+	if i < 0 {
+		return -1, -1
+	}
+	end := i + len(m.lower)
+	// A match that ends inside a lowered rune ends after that rune.
+	for end < len(from)-1 && from[end] == from[end-1] {
+		end++
+	}
+	return from[i], from[end]
 }
 
 // searchable is the text of an item a reader would search for.

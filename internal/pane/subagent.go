@@ -37,6 +37,11 @@ func (a *Answerer) MessageAgent(ctx context.Context, id string, t AgentTarget, t
 	if refused := a.check(id); refused != nil {
 		return refused
 	}
+	release, busy := a.lock(id)
+	if busy != nil {
+		return busy
+	}
+	defer release()
 	if a.Typer == nil {
 		return &send.Refused{Reason: reasonBadText, Message: "Typed messages are not available."}
 	}
@@ -239,6 +244,11 @@ func (a *Answerer) StopAgent(ctx context.Context, id string, t AgentTarget) erro
 	if refused := a.check(id); refused != nil {
 		return refused
 	}
+	release, busy := a.lock(id)
+	if busy != nil {
+		return busy
+	}
+	defer release()
 	l, err := a.agentList(ctx, id)
 	if err != nil {
 		return err

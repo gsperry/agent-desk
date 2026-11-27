@@ -37,7 +37,8 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
     let live = true
     void read(sessionId).then((r) => {
       if (!live) return
-      if (r.screen) setScreen(r.screen)
+      // A read that failed keeps no buttons from a screen that may be gone.
+      setScreen(r.screen ?? null)
       setMessage(r.message ?? null)
     })
     const t = setTimeout(() => {
@@ -62,12 +63,18 @@ export function LivePane({ sessionId, read, answer, readStyled, onClose, screenO
     box.style.height = `${String(box.scrollHeight)}px`
   }, [answerText])
 
+  // send answers, then reads the screen again before the buttons come back,
+  // so a second click cannot land on the next prompt through the old ones.
   const send = (a: Answer) => {
     setBusy(true)
-    void answer(sessionId, a).then((err) => {
+    void answer(sessionId, { ...a, fingerprint: screen?.dialog?.fingerprint }).then(async (err) => {
+      if (!err) {
+        setTyping(null)
+        const r = await read(sessionId)
+        setScreen(r.screen ?? null)
+      }
       setBusy(false)
       setMessage(err)
-      if (!err) setTyping(null)
       setTick((n) => n + 1)
     })
   }

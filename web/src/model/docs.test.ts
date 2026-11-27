@@ -22,9 +22,18 @@ describe('docs', () => {
 
   it('prepends older pages without duplicates', () => {
     let d = applyMessage(emptyData, { type: 'transcript.page', page: page([5, 6], true) })
-    d = prependOlder(d, page([3, 4, 5], false))
+    d = prependOlder(d, page([3, 4, 5], false), 5)
     expect(seqs(d)).toEqual([3, 4, 5, 6])
     expect(d.docs.s?.hasMore).toBe(false)
+  })
+
+  it('drops an older page when the doc was replaced while it loaded', () => {
+    let d = applyMessage(emptyData, { type: 'transcript.page', page: page([700, 701], true) })
+    // A reconnect sends a fresh page that starts later.
+    d = applyMessage(d, { type: 'transcript.page', page: page([750, 751], true) })
+    d = prependOlder(d, page([400, 699], true), 700)
+    expect(seqs(d)).toEqual([750, 751])
+    expect(d.docs.s?.loadingOlder).toBe(false)
   })
 
   it('stores session state', () => {

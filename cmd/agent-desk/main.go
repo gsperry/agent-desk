@@ -154,6 +154,9 @@ func run(o options) error {
 		return err
 	}
 	addr := l.Addr().String()
+	// One flow at a time drives a session's terminal: replies and answers
+	// share these.
+	locks := &send.Locks{}
 	s, err := server.New(server.Config{
 		Addr:        addr,
 		Token:       token,
@@ -163,8 +166,8 @@ func run(o options) error {
 		Sessions:    poller,
 		Manager:     client,
 		Transcripts: transcripts,
-		Sender:      &send.Sender{Sessions: poller, Pane: client},
-		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures), Typer: client},
+		Sender:      &send.Sender{Sessions: poller, Pane: client, Locks: locks},
+		Panes:       &pane.Answerer{Sessions: poller, Reader: client, Keys: keys(o.fixtures), Typer: client, Locks: locks},
 		Opener:      opener(o.fixtures, poller),
 		Searcher:    searcher,
 		Lifecycle:   &manage.Manager{Sessions: poller, Backend: client},
@@ -174,24 +177,27 @@ func run(o options) error {
 		History:     &history.Index{Root: transcripts.Locator.DefaultRoot},
 		Usage:       &usage.Scanner{Root: transcripts.Locator.DefaultRoot},
 		Summaries:   &summary.Summarizer{Runner: summaryRunner(o.fixtures), Transcripts: transcripts},
-		Remote:      remoteControl,
-		Demo:        o.demo,
-		Access:      &remote.AccessKeys{},
-		Commands:    commands.Lister{Root: transcripts.Locator.DefaultRoot},
-		Setup:       &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
-		Stats:       statsSource(o.fixtures, sampler),
-		Speech:      speechSource(o.fixtures, remoteStore.Path),
+		// Beside remote.json: Agent Desk's config folder, or the fixtures.
+		SummarySettings: &summary.SettingsStore{Path: filepath.Join(filepath.Dir(remoteStore.Path), "summaries.json")},
+		Remote:          remoteControl,
+		Demo:            o.demo,
+		Access:          &remote.AccessKeys{},
+		Commands:        commands.Lister{Root: transcripts.Locator.DefaultRoot},
+		Setup:           &setup.Checker{Backend: client, LookPath: lookPath(o.fixtures)},
+		Stats:           statsSource(o.fixtures, sampler),
+		Speech:          speechSource(o.fixtures, remoteStore.Path),
 		// Browser tests reach the remote listener over plain HTTP.
 		RemoteHTTPOrigin: o.fixtures != "",
 		Changes: &changes.Service{Sessions: poller, Reader: changes.Reader{Runner: procrun.Exec{
-			Timeout: 15 * time.Second,
-			Env:     changes.Env(procrun.Environ()),
+			Timeout:   15 * time.Second,
+			Env:       changes.Env(procrun.Environ()),
+			MaxOutput: changes.MaxOutput,
 		}}},
 	})
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	remoteAccess.handler = s.RemoteHandler()
 	remoteAccess.onChange = s.DropRemote
 	if o.demo {
@@ -323,7 +329,7 @@ func lookPath(fixtures string) func(string) (string, error) {
 
 func newPoller(fixtures string) (*hub.Poller, backend, error) {
 	home, _ := os.UserHomeDir()
-	p := &hub.Poller{Resolver: &grouping.Resolver{Runner: procrun.Exec{Timeout: 3 * time.Second}, Home: home}}
+	p := &hub.Poller{Resolver: &grouping.Resolver{Runner: procrun.Exec{Timeout: 3 * time.Second, Env: changes.Env(procrun.Environ())}, Home: home}}
 	if fixtures != "" {
 		f := am.Fixture{Path: filepath.Join(fixtures, "snapshot.json")}
 		p.Client = f
@@ -494,7 +500,7 @@ func (r *remoteListener) apply(s remote.Settings) error {
 		}
 		return err
 	}
-	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second}
+	r.srv = &http.Server{Handler: r.handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	if !r.tcp {
 		r.srv.ConnContext = func(ctx context.Context, _ net.Conn) context.Context { return server.OnSocket(ctx) }
 	}

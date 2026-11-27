@@ -30,7 +30,8 @@ type Verifier interface {
 // AccessKeys verifies Access tokens against the team's public signing keys.
 // The keys are fetched from https://<team>.cloudflareaccess.com, only when
 // a token names a key not yet held or the held set is a day old, and at
-// most once a minute. This is the only network call Agent Desk makes.
+// most once a minute. It is one of the two opt-in network calls in CLAUDE.md;
+// the other is read aloud (internal/tts).
 type AccessKeys struct {
 	// Client fetches the keys. Nil uses a client with a 10 second timeout
 	// that does not follow redirects.
@@ -40,13 +41,19 @@ type AccessKeys struct {
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 
-	mu       sync.Mutex
-	team     string
-	keys     map[string]*rsa.PublicKey
-	fetched  time.Time
-	lastTry  time.Time
-	inflight bool
+	mu      sync.Mutex
+	team    string
+	keys    map[string]*rsa.PublicKey
+	fetched time.Time
+	lastTry time.Time
+	// inflight is closed when the fetch running now ends; nil when none
+	// runs.
+	inflight chan struct{}
 }
+
+// fetchWait bounds how long a request waits for a fetch another request
+// started.
+const fetchWait = 15 * time.Second
 
 // refetchEvery bounds key fetches, so tokens naming unknown keys cannot
 // make Agent Desk call Cloudflare in a loop.
@@ -59,11 +66,31 @@ const maxAge = 24 * time.Hour
 // leeway allows for clock drift between Cloudflare and the desk.
 const leeway = time.Minute
 
+// Leeway is the clock drift allowed past a token's expiry.
+const Leeway = leeway
+
 func (a *AccessKeys) now() time.Time {
 	if a.Now != nil {
 		return a.Now()
 	}
 	return time.Now()
+}
+
+// TokenExpiry reads the expiry of a token Verify has accepted, or zero.
+func TokenExpiry(token string) time.Time {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return time.Time{}
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return time.Time{}
+	}
+	var c jwtClaims
+	if json.Unmarshal(payload, &c) != nil || c.Exp == 0 {
+		return time.Time{}
+	}
+	return time.Unix(c.Exp, 0)
 }
 
 // Issuer is the issuer Access puts in a team's tokens.
@@ -162,7 +189,8 @@ func audienceHas(raw json.RawMessage, aud string) bool {
 // key returns the signing key with id kid. It fetches the team's keys when
 // kid is not held or the set is older than maxAge, at most once a minute
 // and one fetch at a time; the fetch runs outside the lock, so requests
-// with held keys never wait on it. A held key stays usable while a refresh
+// with held keys never wait on it, and requests whose key is not held wait
+// for it rather than fail. A held key stays usable while a refresh
 // is not allowed yet or fails.
 func (a *AccessKeys) key(team, kid string) (*rsa.PublicKey, error) {
 	a.mu.Lock()
@@ -175,21 +203,38 @@ func (a *AccessKeys) key(team, kid string) (*rsa.PublicKey, error) {
 		a.mu.Unlock()
 		return held, nil
 	}
-	if a.inflight || (!a.lastTry.IsZero() && now.Sub(a.lastTry) < refetchEvery) {
+	if wait := a.inflight; wait != nil && !ok {
+		// Requests that arrive together, as a page and its assets do,
+		// all wait for the one fetch instead of failing.
+		a.mu.Unlock()
+		select {
+		case <-wait:
+		case <-time.After(fetchWait):
+		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if k, found := a.keys[kid]; found && a.team == team {
+			return k, nil
+		}
+		return nil, errors.New("unknown signing key")
+	}
+	if a.inflight != nil || (!a.lastTry.IsZero() && now.Sub(a.lastTry) < refetchEvery) {
 		a.mu.Unlock()
 		if ok {
 			return held, nil
 		}
 		return nil, errors.New("unknown signing key")
 	}
-	a.lastTry, a.inflight = now, true
+	done := make(chan struct{})
+	a.lastTry, a.inflight = now, done
 	a.mu.Unlock()
 
 	keys, err := a.fetch(team)
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.inflight = false
+	a.inflight = nil
+	defer close(done)
 	if a.team != team {
 		return nil, errors.New("cloudflare access settings changed")
 	}

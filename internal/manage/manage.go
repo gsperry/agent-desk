@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/gsperry/agent-desk/internal/am"
@@ -37,6 +38,32 @@ type Sessions interface {
 type Manager struct {
 	Sessions Sessions
 	Backend  Backend
+
+	mu sync.Mutex
+	// resuming holds conversations being reopened, which the session list
+	// shows only once agent-manager has started them.
+	resuming map[string]bool
+}
+
+// claimResume marks a conversation as being reopened, or reports false
+// when another request already is.
+func (m *Manager) claimResume(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.resuming[id] {
+		return false
+	}
+	if m.resuming == nil {
+		m.resuming = map[string]bool{}
+	}
+	m.resuming[id] = true
+	return true
+}
+
+func (m *Manager) releaseResume(id string) {
+	m.mu.Lock()
+	delete(m.resuming, id)
+	m.mu.Unlock()
 }
 
 // Options is what the new session form offers.
@@ -70,8 +97,9 @@ const (
 var (
 	groupPath = regexp.MustCompile(`^[\pL\pN _.-]+(/[\pL\pN _.-]+)*$`)
 	// modelValue covers model ids such as claude-opus-4-1, gpt-5.1 or
-	// opus[1m]; anything else is refused before it reaches a CLI.
-	modelValue = regexp.MustCompile(`^[A-Za-z0-9._:\[\]-]{1,100}$`)
+	// opus[1m]; anything else, such as a value starting with a dash that a
+	// CLI could read as a flag, is refused before it reaches one.
+	modelValue = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:\[\]-]{0,99}$`)
 	// conversationID matches Claude Code's conversation ids (UUIDs).
 	conversationID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,127}$`)
 )
@@ -101,7 +129,7 @@ func (m *Manager) Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, err
 	}
 	for _, v := range []string{r.Model, r.Effort} {
 		if v != "" && !modelValue.MatchString(v) {
-			return am.Session{}, refuse("Model and effort take letters, digits and . _ : - [ ] only.")
+			return am.Session{}, refuse("Model and effort start with a letter or digit and take letters, digits and . _ : - [ ] only.")
 		}
 	}
 	if len(r.Prompt) > maxPrompt || hasControl(r.Prompt) {
@@ -117,6 +145,12 @@ func (m *Manager) Spawn(ctx context.Context, r am.SpawnRequest) (am.Session, err
 	r.Directory = dir
 	if r.Group != "" && !hasGroup(opts.Groups, r.Group) {
 		return am.Session{}, refuse("Group %q does not exist.", r.Group)
+	}
+	if r.Resume != "" {
+		if !m.claimResume(r.Resume) {
+			return am.Session{}, refuse("This conversation is already being reopened.")
+		}
+		defer m.releaseResume(r.Resume)
 	}
 	s, err := m.Backend.Spawn(ctx, r)
 	m.Sessions.Trigger()

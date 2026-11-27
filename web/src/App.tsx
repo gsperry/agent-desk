@@ -24,7 +24,7 @@ import { conversationTitle, sessionsByConversation } from './model/history'
 import type { PathRef } from './model/paths'
 import { loadSnippets, saveSnippets, type Snippet } from './model/snippets'
 import { loadTemplates, saveTemplates, upsertTemplate, type Template } from './model/templates'
-import { loadSummaries, saveSummaries, type SummarySettings } from './model/summaries'
+import { defaultSummaries, takeLegacySummaries, type SummarySettings } from './model/summaries'
 import { directorySuggestions, resumeDefaults, spawnDefaults } from './model/spawn'
 import { loadViewPrefs, saveViewPrefs, widths, type ViewPrefs } from './model/viewprefs'
 import { Store, useStore } from './store'
@@ -151,10 +151,34 @@ function Desk({ token }: { token: string }) {
   useEffect(() => {
     saveSnippets(localStorage, snippets)
   }, [snippets])
-  const [summaries, setSummaries] = useState<SummarySettings>(() => loadSummaries(localStorage))
+  // The server keeps the summary settings and refuses summaries while they
+  // are off. Settings this browser kept before are carried over once.
+  const [summaries, setSummariesState] = useState<SummarySettings>(defaultSummaries)
   useEffect(() => {
-    saveSummaries(localStorage, summaries)
-  }, [summaries])
+    if (remoteInfo.remote) return
+    let live = true
+    void store.summarySettings().then(async (saved) => {
+      const legacy = takeLegacySummaries(localStorage)
+      let current = saved ?? defaultSummaries
+      if (legacy?.enabled && !current.enabled) {
+        current = legacy
+        await store.saveSummarySettings(legacy)
+      }
+      if (live) setSummariesState(current)
+    })
+    return () => {
+      live = false
+    }
+  }, [store, remoteInfo.remote])
+  const setSummaries = useCallback(
+    (s: SummarySettings) => {
+      setSummariesState(s)
+      void store.saveSummarySettings(s).then((error) => {
+        if (error) store.showToast(`Summary settings were not saved: ${error}`)
+      })
+    },
+    [store],
+  )
   const [templates, setTemplates] = useState<Template[]>(() => loadTemplates(localStorage))
   useEffect(() => {
     saveTemplates(localStorage, templates)
@@ -264,12 +288,16 @@ function Desk({ token }: { token: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Shortcuts act on the page, so none runs behind an open dialog; the
+      // switcher's own Cmd+K closes it.
+      const dialog = document.querySelector('[role="dialog"]') !== null
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        if (dialog && !switcher) return
         e.preventDefault()
         setSwitcher((open) => !open)
         return
       }
-      if (switcher || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
+      if (dialog || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === '/') {
         e.preventDefault()
         document.getElementById('search-box')?.focus()
@@ -369,7 +397,7 @@ function Desk({ token }: { token: string }) {
   }, [store])
   const loadRemote = useCallback(() => store.remoteSettings(), [store])
   const saveRemote = useCallback((s: RemoteSettings) => store.setRemoteSettings(s), [store])
-  const catchUp = useCallback((id: string, since: number) => store.catchUp(id, since, summaries.model), [store, summaries.model])
+  const catchUp = useCallback((id: string, since: number) => store.catchUp(id, since), [store])
   const loadCommands = useCallback((id: string) => store.commands(id), [store])
   const dismissSuggestion = useCallback((id: string) => {
     store.dismissSuggestion(id)
