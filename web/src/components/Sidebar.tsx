@@ -1,10 +1,11 @@
 import { can, levelLabels, useRemote } from '../remote-context'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ConnectionState } from '../api'
 import { needsAttention, type Acks } from '../model/attention'
 import { conflictTitle, type Conflicts } from '../model/conflicts'
 import { hasNew, type Seen } from '../model/seen'
 import { archivedCount, type SidebarGroup } from '../model/sidebar'
+import { loadCollapsed, saveCollapsed, toggled, visibleSessions } from '../model/collapse'
 import type { Permission } from '../notify'
 import type { Prefs } from '../store'
 import type { Project, State, SubAgent } from '../types'
@@ -61,6 +62,12 @@ export function Sidebar(props: Props) {
   const { state, conn, groups, acks, attention, view, onView, selected, onSelect, onStartManager } = props
   const sessions = state?.sessions ?? []
   const archived = archivedCount(sessions)
+  // Folded groups are remembered. The Needs you filter shows everything it
+  // finds, so it ignores them.
+  const [collapsed, setCollapsed] = useState(() => loadCollapsed(localStorage))
+  useEffect(() => {
+    saveCollapsed(localStorage, collapsed)
+  }, [collapsed])
 
   return (
     <nav className="sidebar" aria-label="Sessions">
@@ -124,10 +131,28 @@ export function Sidebar(props: Props) {
         {state && groups.length === 0 && (
           <p className="muted pad">{view.onlyAttention ? 'Nothing needs you right now.' : 'No sessions. Start one in agent-manager.'}</p>
         )}
-        {groups.map((g) => (
-          <section key={g.project.key} className="group">
+        {groups.map((g) => {
+          const folded = !view.onlyAttention && collapsed.has(g.project.key)
+          const shown = visibleSessions(g.sessions, folded, selected)
+          return (
+          <section key={g.project.key} className={folded ? 'group folded' : 'group'}>
             <h2 className="group-head" title={g.project.root ?? g.project.name}>
-              <span className="group-name">{g.project.name}</span>
+              <button
+                type="button"
+                className="group-toggle"
+                aria-expanded={!folded}
+                aria-label={`${folded ? 'Show' : 'Hide'} sessions in ${g.project.name}`}
+                title={folded ? 'Show sessions' : 'Hide sessions'}
+                onClick={() => {
+                  setCollapsed(toggled(collapsed, g.project.key))
+                }}
+              >
+                <span className="group-chevron" aria-hidden>
+                  {folded ? '▸' : '▾'}
+                </span>
+                <span className="group-name">{g.project.name}</span>
+              </button>
+              {folded && g.sessions.length > 0 && <span className="group-count">{g.sessions.length}</span>}
               {g.attention > 0 && <span className="badge">{g.attention}</span>}
               <span className="group-actions">
                 {can(remoteInfo, 'manage') && (
@@ -160,7 +185,7 @@ export function Sidebar(props: Props) {
             </h2>
             {g.sessions.length === 0 && <p className="muted pad empty-group">No sessions yet.</p>}
             <ul>
-              {g.sessions.map((s) => (
+              {shown.map((s) => (
                 <li key={s.id}>
                   <button
                     type="button"
@@ -192,7 +217,8 @@ export function Sidebar(props: Props) {
               ))}
             </ul>
           </section>
-        ))}
+          )
+        })}
       </div>
       {props.stats && <SystemStats subscribe={props.stats.subscribe} get={props.stats.get} />}
       <footer className="sidebar-foot">

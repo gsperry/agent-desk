@@ -1,3 +1,5 @@
+import type { Order } from './sidebar'
+
 export type Theme = 'system' | 'light' | 'dark'
 export type Width = 'narrow' | 'medium' | 'wide' | 'full'
 export type Open = 'open' | 'closed'
@@ -13,6 +15,8 @@ export interface ViewPrefs {
   stats: boolean
   // dictation shows the mic button in the Mac app.
   dictation: boolean
+  // order is how the sidebar arranges sessions and groups.
+  order: Order
   collapse: {
     edits: EditsOpen
     bash: Open
@@ -29,6 +33,7 @@ export const defaultViewPrefs: ViewPrefs = {
   width: 'full',
   stats: true,
   dictation: true,
+  order: 'manager',
   collapse: { edits: 'auto', bash: 'closed', read: 'closed', agents: 'closed', other: 'closed', thinking: 'closed' },
 }
 
@@ -67,6 +72,7 @@ export function sanitize(raw: unknown): ViewPrefs {
     fontSize: Math.min(fontSizes.max, Math.max(fontSizes.min, size)),
     width: r.v === savedVersion ? oneOf(r.width, ['narrow', 'medium', 'wide', 'full'] as const, d.width) : d.width,
     stats: typeof r.stats === 'boolean' ? r.stats : d.stats,
+    order: oneOf(r.order, ['manager', 'attention'] as const, d.order),
     dictation: typeof r.dictation === 'boolean' ? r.dictation : d.dictation,
     collapse: {
       edits: oneOf(c.edits, ['open', 'closed', 'auto'] as const, d.collapse.edits),

@@ -23,7 +23,15 @@ export interface SidebarGroup {
   attention: number
 }
 
+// Order is how the sidebar arranges sessions and groups. manager keeps the
+// order agent-manager lists them in, which is the one the user sets there
+// with its reorder keys, and which stays put when a status changes.
+// attention puts what needs the human first, so rows move as statuses do.
+export type Order = 'manager' | 'attention'
+
 export interface SidebarOptions {
+  // order defaults to attention.
+  order?: Order
   showArchived: boolean
   acks?: Acks
   // onlyAttention keeps just the sessions that need the human.
@@ -33,8 +41,11 @@ export interface SidebarOptions {
   groups?: GroupView[]
 }
 
-// groupSessions files sessions under their project. Groups that need
-// attention come first, then groups with live sessions, then by name.
+// groupSessions files sessions under their project. By default groups that
+// need attention come first, then groups with live sessions, then by name;
+// with order manager they follow agent-manager's order instead: its groups
+// in its group order, then the other projects by where their first session
+// stands in its list. sessions arrive in agent-manager's order.
 export function groupSessions(sessions: SessionView[], opts: SidebarOptions): SidebarGroup[] {
   const byKey = new Map<string, SidebarGroup>()
   const acks = opts.acks ?? {}
@@ -57,6 +68,16 @@ export function groupSessions(sessions: SessionView[], opts: SidebarOptions): Si
     }
   }
   const groups = [...byKey.values()]
+  if (opts.order === 'manager') {
+    const managerOrder = new Map((opts.groups ?? []).map((g, i) => ['group:' + g.path, i]))
+    const firstAt = new Map<string, number>()
+    sessions.forEach((x, i) => {
+      if (!firstAt.has(x.project.key)) firstAt.set(x.project.key, i)
+    })
+    // Projects that are not agent-manager groups follow all of its groups.
+    const place = (g: SidebarGroup) => managerOrder.get(g.project.key) ?? managerOrder.size + (firstAt.get(g.project.key) ?? sessions.length)
+    return groups.sort((a, b) => place(a) - place(b) || a.project.name.localeCompare(b.project.name))
+  }
   for (const g of groups) {
     g.sessions.sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name))
   }

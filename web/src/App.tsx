@@ -206,10 +206,10 @@ function Desk({ token }: { token: string }) {
 
   const sessions = useMemo(() => data.sessions?.sessions ?? [], [data.sessions])
   const amGroups = useMemo(() => data.sessions?.groups ?? [], [data.sessions])
-  const groups = useMemo(() => groupSessions(sessions, { ...view, acks, groups: amGroups }), [sessions, view, acks, amGroups])
+  const groups = useMemo(() => groupSessions(sessions, { ...view, acks, groups: amGroups, order: viewPrefs.order }), [sessions, view, acks, amGroups, viewPrefs.order])
   const directories = useMemo(() => directorySuggestions(sessions, amGroups), [sessions, amGroups])
   // j/k walk every session that needs the human, even when filters hide some.
-  const walkOrder = useMemo(() => ordered(groupSessions(sessions, { showArchived: false, acks })), [sessions, acks])
+  const walkOrder = useMemo(() => ordered(groupSessions(sessions, { showArchived: false, acks, groups: amGroups, order: viewPrefs.order })), [sessions, acks, amGroups, viewPrefs.order])
   const attention = attentionCount(sessions, acks)
 
   const select = useCallback((id: string) => {
