@@ -16,9 +16,10 @@ cask "agent-desk-app" do
 
   app "Agent Desk.app"
 
-  # Start at login is a LaunchAgent that names the app; it goes with it.
-  uninstall quit:   "app.agent-desk.desktop",
-            delete: "~/Library/LaunchAgents/Agent Desk.plist"
+  # Quit before an upgrade or uninstall; Homebrew reopens it after an
+  # upgrade. The start-at-login item stays (upgrades run uninstall too, and
+  # it names the same app); zap removes it.
+  uninstall quit: "app.agent-desk.desktop"
 
   zap trash: [
     "~/Library/Application Support/agent-desk",
